@@ -8,7 +8,8 @@
   },
   "scripts": {
     "test": "node --test",
-    "validate": "node scripts/validate-post.mjs"
+    "validate": "node scripts/validate-post.mjs",
+    "verify:ghost-live": "node scripts/verify-ghost-live.mjs"
   },
   "dependencies": {
     "marked": "18.0.11"
