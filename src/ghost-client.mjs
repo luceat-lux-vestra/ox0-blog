@@ -156,6 +156,7 @@ export class GhostAdminClient {
   async createPost(post) {
     const payload = await this.request('posts/', {
       method: 'POST',
+      query: { formats: 'lexical' },
       body: { posts: [post] }
     });
     return payload.posts[0];
@@ -164,7 +165,7 @@ export class GhostAdminClient {
   async updatePost(id, post) {
     const payload = await this.request(`posts/${encodeURIComponent(id)}/`, {
       method: 'PUT',
-      query: { save_revision: 'true' },
+      query: { save_revision: 'true', formats: 'lexical' },
       body: { posts: [post] }
     });
     return payload.posts[0];
@@ -173,6 +174,7 @@ export class GhostAdminClient {
   async updatePostMetadata(id, post) {
     const payload = await this.request(`posts/${encodeURIComponent(id)}/`, {
       method: 'PUT',
+      query: { formats: 'lexical' },
       body: { posts: [post] }
     });
     return payload.posts[0];
