@@ -107,9 +107,9 @@ export function validateMetadata(raw, { postPath, repoRoot }) {
     throw new Error('tags must be a list of non-empty strings');
   }
   const normalizedTags = tags.map((tag) => requireMaxLength(tag.trim(), 'tag', MAX_TAG_LENGTH));
-  const normalizedTagKeys = normalizedTags.map((tag) => tag.toLocaleLowerCase('en-US'));
+  const normalizedTagKeys = normalizedTags.map((tag) => tag.normalize('NFC').toLocaleLowerCase('en-US'));
   if (new Set(normalizedTagKeys).size !== normalizedTagKeys.length) {
-    throw new Error('tags must not contain duplicates (case-insensitive after trimming)');
+    throw new Error('tags must not contain duplicates (case-insensitive after trimming and Unicode normalization)');
   }
   if (normalizedTags.some((tag) => tag.toLowerCase().startsWith('#ox0-'))) {
     throw new Error('tags starting with #ox0- are reserved for publisher state');

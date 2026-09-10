@@ -100,6 +100,14 @@ test('author tags reject duplicates after trimming and case folding', () => {
   }), /must not contain duplicates/);
 });
 
+test('author tags reject canonically equivalent Unicode duplicates before Ghost mutation', () => {
+  assert.throws(() => validateMetadata({
+    title: 'Example', slug: 'example', status: 'draft', tags: ['Café', 'Cafe\u0301']
+  }, {
+    postPath: '/repo/posts/example.md', repoRoot: '/repo'
+  }), /must not contain duplicates/);
+});
+
 test('local feature image must use a repository-portable relative path', () => {
   for (const featureImage of ['/repo/assets/cover.png', 'C:\\repo\\assets\\cover.png']) {
     assert.throws(() => validateMetadata({
