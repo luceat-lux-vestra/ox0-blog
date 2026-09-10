@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT = fileURLToPath(new URL('../scripts/verify-ghost-live.mjs', import.meta.url));
@@ -35,4 +36,22 @@ test('live Ghost verifier requires credentials after explicit opt-in', () => {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /GHOST_ADMIN_URL and GHOST_ADMIN_API_KEY are required/);
   assert.doesNotMatch(result.stderr, /fetch failed|ENOTFOUND|timed out/);
+});
+
+test('live Ghost verifier claims cleanup ownership only after namespace preflight', () => {
+  const source = readFileSync(SCRIPT, 'utf8');
+  const cleanupGuard = 'if (!ownsTemporaryNamespace) return [];';
+  const preflight = 'await assertTemporaryNamespaceUnused();';
+  const claim = 'ownsTemporaryNamespace = true;';
+  const firstMutation = 'const first = await synchronizePost({';
+
+  assert.match(source, /let ownsTemporaryNamespace = false;/);
+  assert.ok(source.includes(cleanupGuard), 'cleanup must be disabled until namespace ownership is established');
+
+  const preflightIndex = source.indexOf(preflight);
+  const claimIndex = source.indexOf(claim);
+  const mutationIndex = source.indexOf(firstMutation);
+  assert.ok(preflightIndex >= 0, 'namespace preflight must exist');
+  assert.ok(claimIndex > preflightIndex, 'ownership must be claimed only after preflight succeeds');
+  assert.ok(mutationIndex > claimIndex, 'ownership must be claimed before the first Ghost mutation');
 });
