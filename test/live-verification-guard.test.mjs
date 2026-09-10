@@ -80,19 +80,18 @@ test('live Ghost verifier never recovers cleanup ownership from slug alone', () 
   );
 });
 
-test('live Ghost verifier retains publisher tags unless post cleanup is safe', () => {
+test('live Ghost verifier retains publisher tags unless post cleanup is proven complete', () => {
   const source = readFileSync(SCRIPT, 'utf8');
+  const postDelete = source.indexOf('await ignoreMissingDelete(`posts/${encodeURIComponent(knownPostId)}/`);');
+  const postAbsence = source.indexOf("await assertResourceMissingById('posts', knownPostId);", postDelete);
+  const safeFlag = source.indexOf('postCleanupSafeForTags = true;', postAbsence);
+  const tagCleanup = source.indexOf('if (postCleanupSafeForTags) {', safeFlag);
+
   assert.match(source, /let postCleanupSafeForTags = false;/);
-  assert.match(
-    source,
-    /await ignoreMissingDelete\(`posts\/\$\{encodeURIComponent\(knownPostId\)\}\/`\);\s*postCleanupSafeForTags = true;/,
-    'successful or already-missing post deletion must establish tag-cleanup safety'
-  );
-  assert.match(
-    source,
-    /if \(postCleanupSafeForTags\) \{\s*for \(const name of cleanupTagNames\)/,
-    'temporary tags must not be deleted when post cleanup failed or ownership could not be resolved'
-  );
+  assert.ok(postDelete >= 0, 'post cleanup must issue an ID-bound delete');
+  assert.ok(postAbsence > postDelete, 'post cleanup must prove persisted absence after delete');
+  assert.ok(safeFlag > postAbsence, 'tag cleanup may become safe only after post absence is proven');
+  assert.ok(tagCleanup > safeFlag, 'tag deletion must remain gated by proven post cleanup');
 });
 
 test('live Ghost verifier proves exact page persistence before collision check', () => {
@@ -124,4 +123,26 @@ test('live Ghost verifier proves the source tag slug actually drifted before ide
   assert.ok(slugCheck > persistedTagRead, 'persisted source-tag slug must equal the requested drift slug');
   assert.ok(identityLookup > slugCheck, 'canonical source identity lookup must run only after drift is proven');
   assert.match(source, /assert\.equal\(driftedSourceIdentityTag\?\.id, sourceIdentityTag\.id/);
+});
+
+test('live Ghost verifier deletes only ID-bound unreferenced tags and proves absence', () => {
+  const source = readFileSync(SCRIPT, 'utf8');
+  assert.match(source, /const cleanupTagIds = new Map\(\);/);
+  assert.match(source, /cleanupTagIds\.set\(name, id\);/);
+
+  const tagIdRead = source.indexOf('const tagId = cleanupTagIds.get(name);');
+  const exactTagRead = source.indexOf('const tag = await getTagById(tagId);', tagIdRead);
+  const nameCheck = source.indexOf('if (tag.name !== name)', exactTagRead);
+  const refCheck = source.indexOf('await assertTagUnreferenced(tag);', nameCheck);
+  const tagDelete = source.indexOf('await ignoreMissingDelete(`tags/${encodeURIComponent(tagId)}/`);', refCheck);
+  const absenceCheck = source.indexOf("await assertResourceMissingById('tags', tagId);", tagDelete);
+
+  assert.ok(tagIdRead >= 0, 'tag cleanup must use an observed owned tag id');
+  assert.ok(exactTagRead > tagIdRead, 'tag cleanup must refetch the exact id');
+  assert.ok(nameCheck > exactTagRead, 'tag cleanup must reject an externally renamed tag');
+  assert.ok(refCheck > nameCheck, 'post/page references must be checked before tag deletion');
+  assert.ok(tagDelete > refCheck, 'tag deletion must occur only after reference checks');
+  assert.ok(absenceCheck > tagDelete, 'tag deletion must be followed by an ID-based absence check');
+  assert.match(source, /client\.getPostsByTagSlug\(tag\.slug\)/);
+  assert.match(source, /client\.request\('pages\/', \{ query: \{ filter: `tag:\$\{tag\.slug\}`, limit: 2 \} \}\)/);
 });
