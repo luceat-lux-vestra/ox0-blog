@@ -40,12 +40,42 @@ function payload(overrides = {}) {
   };
 }
 
-test('slug preflight skips reads when existing post already owns desired slug', async () => {
+test('same-slug preflight rechecks managed post ownership and page availability', async () => {
+  const calls = [];
   const client = {
-    getPostBySlug() { throw new Error('must not read'); },
-    getPageBySlug() { throw new Error('must not read'); }
+    async getPostBySlug() { calls.push('post'); return { id: 'post-1', slug: 'example' }; },
+    async getPageBySlug() { calls.push('page'); return null; }
   };
   await assert.doesNotReject(assertDesiredSlugAvailable(client, 'example', { id: 'post-1', slug: 'example' }));
+  assert.deepEqual(calls, ['post', 'page']);
+});
+
+test('same-slug preflight rejects when slug no longer resolves to expected managed post', async () => {
+  for (const occupyingPost of [null, { id: 'other', slug: 'example' }]) {
+    const calls = [];
+    const client = {
+      async getPostBySlug() { calls.push('post'); return occupyingPost; },
+      async getPageBySlug() { calls.push('page'); return null; }
+    };
+    await assert.rejects(
+      assertDesiredSlugAvailable(client, 'example', { id: 'post-1', slug: 'example' }),
+      /no longer resolves to the expected managed post/
+    );
+    assert.deepEqual(calls, ['post']);
+  }
+});
+
+test('same-slug preflight still rejects a page collision', async () => {
+  const calls = [];
+  const client = {
+    async getPostBySlug() { calls.push('post'); return { id: 'post-1', slug: 'example' }; },
+    async getPageBySlug() { calls.push('page'); return { id: 'page-1', slug: 'example' }; }
+  };
+  await assert.rejects(
+    assertDesiredSlugAvailable(client, 'example', { id: 'post-1', slug: 'example' }),
+    /occupied by a page/
+  );
+  assert.deepEqual(calls, ['post', 'page']);
 });
 
 test('slug preflight rejects an occupied post slug', async () => {
