@@ -77,6 +77,7 @@ export class GhostAdminClient {
 
     const signal = AbortSignal.timeout(this.timeoutMs);
     let response;
+    let text;
     try {
       response = await this.fetchImpl(url, {
         method,
@@ -84,6 +85,7 @@ export class GhostAdminClient {
         body: body == null ? undefined : body instanceof FormData ? body : JSON.stringify(body),
         signal
       });
+      text = await response.text();
     } catch (error) {
       if (signal.aborted) {
         const timeoutError = new Error(`Ghost Admin API ${method} ${url.pathname} timed out after ${this.timeoutMs}ms`);
@@ -93,7 +95,6 @@ export class GhostAdminClient {
       throw error;
     }
 
-    const text = await response.text();
     let payload = null;
     if (text) {
       try { payload = JSON.parse(text); } catch { payload = { raw: text }; }
