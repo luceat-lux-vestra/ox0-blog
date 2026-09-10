@@ -21,6 +21,8 @@ const suffix = `${Date.now()}-${randomBytes(4).toString('hex')}`;
 const slug = `ox0-live-verify-${suffix}`;
 const renamedSlug = `${slug}-renamed`;
 const pageSlug = `${slug}-page-collision`;
+const postTitle = `ox0 live verification ${suffix}`;
+const pageTitle = `ox0 live page collision ${suffix}`;
 const sourcePath = path.join(repoRoot, 'posts', `.ox0-live-verify-${suffix}.md`);
 const collisionSourcePath = path.join(repoRoot, 'posts', `.ox0-live-verify-page-${suffix}.md`);
 const sourceTag = sourceTagForPath(sourcePath, repoRoot);
@@ -41,7 +43,7 @@ function source(postPath, publicSlug) {
     postPath,
     markdown: sourceMarkdown,
     metadata: {
-      title: `ox0 live verification ${suffix}`,
+      title: postTitle,
       slug: publicSlug,
       status: 'draft',
       excerpt: null,
@@ -90,12 +92,12 @@ async function assertTemporaryNamespaceUnused() {
 async function recoverPost() {
   const byIdentity = await client.getPostsBySourceTag(sourceTag);
   if (byIdentity.length > 1) throw new Error('multiple live-verification posts claim the temporary source identity');
-  if (byIdentity[0]) return byIdentity[0];
-  for (const candidateSlug of [renamedSlug, slug]) {
-    const post = await client.getPostBySlug(candidateSlug);
-    if (post) return post;
+  const post = byIdentity[0] ?? null;
+  if (!post) return null;
+  if (post.title !== postTitle || post.lexical !== lexical || post.status !== 'draft') {
+    throw new Error('temporary source identity resolves to unexpected post state; refusing cleanup');
   }
-  return null;
+  return post;
 }
 
 async function ignoreMissingDelete(resource) {
@@ -113,7 +115,12 @@ async function cleanup() {
   try {
     if (!knownPageId) {
       const recoveredPage = await client.getPageBySlug(pageSlug);
-      if (recoveredPage?.id) knownPageId = recoveredPage.id;
+      if (recoveredPage?.id) {
+        if (recoveredPage.title !== pageTitle || recoveredPage.lexical !== lexical || recoveredPage.status !== 'draft') {
+          throw new Error('temporary page slug resolves to unexpected page state; refusing cleanup');
+        }
+        knownPageId = recoveredPage.id;
+      }
     }
   } catch (error) {
     errors.push(error);
@@ -127,7 +134,7 @@ async function cleanup() {
         rememberTags(recovered);
       }
     } else {
-      const recovered = await client.getPostBySlug(renamedSlug) ?? await client.getPostBySlug(slug);
+      const recovered = await client.getPostById(knownPostId);
       if (recovered) rememberTags(recovered);
     }
   } catch (error) {
@@ -207,7 +214,7 @@ try {
     query: { formats: 'lexical' },
     body: {
       pages: [{
-        title: `ox0 live page collision ${suffix}`,
+        title: pageTitle,
         slug: pageSlug,
         lexical,
         status: 'draft'
