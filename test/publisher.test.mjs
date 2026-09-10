@@ -39,7 +39,7 @@ function seal(post, sourceTag = sourceTagForPath(POST_PATH, ROOT)) {
 }
 
 class FakeClient {
-  constructor({ identity = [], slug = null, page = null, updateError = null, stampTransform = null, identityAfterMutation = null, mutationTransform = null, finalReadTransform = null } = {}) {
+  constructor({ identity = [], slug = undefined, page = null, updateError = null, stampTransform = null, identityAfterMutation = null, mutationTransform = null, finalReadTransform = null } = {}) {
     this.identity = identity;
     this.slug = slug;
     this.page = page;
@@ -64,7 +64,11 @@ class FakeClient {
     if (this.identityAfterMutation) return this.identityAfterMutation(this.current);
     return this.current ? [this.current] : [];
   }
-  async getPostBySlug() { this.calls.push('slug'); return this.slug; }
+  async getPostBySlug(requestedSlug) {
+    this.calls.push('slug');
+    if (this.slug !== undefined) return this.slug;
+    return this.current?.slug === requestedSlug ? this.current : null;
+  }
   async getPageBySlug() { this.calls.push('page'); return this.page; }
   async uploadImage() { this.calls.push('upload'); return { url: 'https://img.example/cover.png' }; }
   async createPost(payload) {
@@ -127,6 +131,18 @@ test('page slug collision fails before any write', async () => {
   assert.deepEqual(client.calls, ['identity', 'slug', 'page']);
 });
 
+test('same-slug managed update rechecks page collision before image upload or write', async () => {
+  const existing = seal(ghostPost());
+  const client = new FakeClient({ identity: [existing], page: { id: 'page-1', slug: 'example' } });
+  await assert.rejects(
+    synchronizePost({ source: source({ featureImage: '/repo/assets/cover.png' }), action: 'draft', client, repoRoot: ROOT, renderMarkdown: render }),
+    /occupied by a page/
+  );
+  assert.deepEqual(client.calls, ['identity', 'slug', 'page']);
+  assert.ok(!client.calls.includes('upload'));
+  assert.ok(!client.calls.includes('update'));
+});
+
 test('draft action refuses to unpublish an existing published post', async () => {
   const existing = seal(ghostPost({ status: 'published' }));
   const client = new FakeClient({ identity: [existing] });
@@ -180,7 +196,7 @@ test('changed Ghost HTML-card body fails before identity recheck or sync stampin
     /HTML card content differs/
   );
   assert.equal(client.identityReads, 1);
-  assert.deepEqual(client.calls, ['identity', 'update', 'fresh']);
+  assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update', 'fresh']);
   assert.ok(!client.calls.includes('stamp'));
 });
 
@@ -195,7 +211,7 @@ test('source identity race after mutation fails before sync stamping', async () 
     /source identity ownership changed/
   );
   assert.equal(client.identityReads, 2);
-  assert.deepEqual(client.calls, ['identity', 'update', 'fresh']);
+  assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update', 'fresh']);
   assert.ok(!client.calls.includes('stamp'));
 });
 
@@ -210,7 +226,7 @@ test('final persisted sync stamp is re-read and managed drift fails closed', asy
     /changed outside ox0-blog/
   );
   assert.equal(client.identityReads, 2);
-  assert.deepEqual(client.calls, ['identity', 'update', 'fresh', 'stamp', 'fresh']);
+  assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update', 'fresh', 'stamp', 'fresh']);
 });
 
 test('source identity race after sync stamping fails before returning success', async () => {
@@ -228,7 +244,7 @@ test('source identity race after sync stamping fails before returning success', 
     /source identity ownership changed/
   );
   assert.equal(client.identityReads, 3);
-  assert.deepEqual(client.calls, ['identity', 'update', 'fresh', 'stamp', 'fresh']);
+  assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update', 'fresh', 'stamp', 'fresh']);
 });
 
 test('source-tag slug drift plus public slug drift still updates the existing post without source=html conversion', async () => {
@@ -308,7 +324,7 @@ test('final sync stamp is verified and fails closed on publisher tag reordering'
     synchronizePost({ source: source(), action: 'draft', client, repoRoot: ROOT, renderMarkdown: render }),
     /invalid ox0 publisher tag ordering/
   );
-  assert.deepEqual(client.calls, ['identity', 'update', 'fresh', 'stamp']);
+  assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update', 'fresh', 'stamp']);
 });
 
 test('Ghost optimistic-concurrency failure stops before sync stamping', async () => {
@@ -316,7 +332,7 @@ test('Ghost optimistic-concurrency failure stops before sync stamping', async ()
   const error = new Error('Update collision');
   const client = new FakeClient({ identity: [existing], updateError: error });
   await assert.rejects(synchronizePost({ source: source(), action: 'draft', client, repoRoot: ROOT, renderMarkdown: render }), /Update collision/);
-  assert.deepEqual(client.calls, ['identity', 'update']);
+  assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update']);
 });
 
 test('frontmatter/action disagreement fails before Ghost access', async () => {
