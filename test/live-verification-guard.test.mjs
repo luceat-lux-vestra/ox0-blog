@@ -55,3 +55,27 @@ test('live Ghost verifier claims cleanup ownership only after namespace prefligh
   assert.ok(claimIndex > preflightIndex, 'ownership must be claimed only after preflight succeeds');
   assert.ok(mutationIndex > claimIndex, 'ownership must be claimed before the first Ghost mutation');
 });
+
+test('live Ghost verifier never recovers cleanup ownership from slug alone', () => {
+  const source = readFileSync(SCRIPT, 'utf8');
+  const recoverStart = source.indexOf('async function recoverPost()');
+  const recoverEnd = source.indexOf('async function ignoreMissingDelete', recoverStart);
+  assert.ok(recoverStart >= 0 && recoverEnd > recoverStart, 'recoverPost must remain inspectable');
+
+  const recoverPost = source.slice(recoverStart, recoverEnd);
+  assert.doesNotMatch(recoverPost, /getPostBySlug/, 'post cleanup recovery must not adopt a slug-only match');
+  assert.match(recoverPost, /post\.title !== postTitle/);
+  assert.match(recoverPost, /post\.lexical !== lexical/);
+  assert.match(recoverPost, /post\.status !== 'draft'/);
+
+  assert.match(
+    source,
+    /recoveredPage\.title !== pageTitle \|\| recoveredPage\.lexical !== lexical \|\| recoveredPage\.status !== 'draft'/,
+    'page cleanup recovery must verify the exact temporary marker state'
+  );
+  assert.match(
+    source,
+    /const recovered = await client\.getPostById\(knownPostId\);/,
+    'once a post ID is known, cleanup metadata recovery must stay bound to that ID'
+  );
+});
