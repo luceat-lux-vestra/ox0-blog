@@ -194,7 +194,7 @@ export async function loadPost(postPath, repoRoot = process.cwd()) {
 
 export function sourceTagForPath(postPath, repoRoot = process.cwd()) {
   const root = path.resolve(repoRoot);
-  const absolutePostPath = path.resolve(postPath);
+  const absolutePostPath = path.resolve(root, postPath);
   const postRoot = path.resolve(root, 'posts');
   const withinPosts = path.relative(postRoot, absolutePostPath);
   if (withinPosts === '..' || withinPosts.startsWith(`..${path.sep}`) || path.isAbsolute(withinPosts)) {

@@ -83,6 +83,7 @@ test('source identity hashes the repository-relative Markdown path', () => {
   const expected = `${SOURCE_TAG_PREFIX}${createHash('sha256').update(canonicalPath).digest('hex')}`;
   const tag = sourceTagForPath('/repo/posts/nested/example.md', '/repo');
   assert.equal(tag, expected);
+  assert.equal(tag, sourceTagForPath('posts/nested/example.md', '/repo'));
   assert.equal(tag, sourceTagForPath('/other/posts/nested/example.md', '/other'));
   assert.equal(sourceTagSlug(tag), `hash-${tag.slice(1)}`);
 });
