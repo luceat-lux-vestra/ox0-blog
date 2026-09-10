@@ -7,6 +7,18 @@ function decode(part) {
   return JSON.parse(Buffer.from(part, 'base64url').toString('utf8'));
 }
 
+function rejectWhenAborted(signal) {
+  return new Promise((_resolve, reject) => {
+    const guard = setTimeout(() => reject(new Error('timeout signal did not abort')), 1000);
+    const onAbort = () => {
+      clearTimeout(guard);
+      reject(signal.reason);
+    };
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 test('creates Ghost-compatible five-minute HS256 token', () => {
   const key = `abc123:${'11'.repeat(32)}`;
   const token = createAdminToken(key, 1_700_000_000);
@@ -42,39 +54,27 @@ test('Ghost Admin requests fail closed when the request timeout expires', async 
   const client = new GhostAdminClient({
     url: 'https://blog.example',
     key: `abc:${'77'.repeat(32)}`,
-    timeoutMs: 10,
-    fetchImpl: async (_url, options) => new Promise((_resolve, reject) => {
-      if (options.signal.aborted) {
-        reject(options.signal.reason);
-        return;
-      }
-      options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
-    })
+    timeoutMs: 20,
+    fetchImpl: async (_url, options) => rejectWhenAborted(options.signal)
   });
 
-  await assert.rejects(client.getPostBySlug('slow-post'), /timed out after 10ms/);
+  await assert.rejects(client.getPostBySlug('slow-post'), /timed out after 20ms/);
 });
 
 test('Ghost Admin response-body reads use the same request timeout contract', async () => {
   const client = new GhostAdminClient({
     url: 'https://blog.example',
     key: `abc:${'99'.repeat(32)}`,
-    timeoutMs: 10,
+    timeoutMs: 20,
     fetchImpl: async (_url, options) => ({
       ok: true,
       status: 200,
       statusText: 'OK',
-      text: async () => new Promise((_resolve, reject) => {
-        if (options.signal.aborted) {
-          reject(options.signal.reason);
-          return;
-        }
-        options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
-      })
+      text: async () => rejectWhenAborted(options.signal)
     })
   });
 
-  await assert.rejects(client.request('slow-body/'), /timed out after 10ms/);
+  await assert.rejects(client.request('slow-body/'), /timed out after 20ms/);
 });
 
 test('Ghost Admin request timeout must be a positive integer', () => {
