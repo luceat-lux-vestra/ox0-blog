@@ -5,10 +5,12 @@ function tagNames(tags) {
 }
 
 export async function assertDesiredSlugAvailable(client, desiredSlug, existing) {
-  if (existing?.slug === desiredSlug) return;
-
   const occupyingPost = await client.getPostBySlug(desiredSlug);
-  if (occupyingPost) {
+  if (existing?.slug === desiredSlug) {
+    if (!occupyingPost || occupyingPost.id !== existing.id) {
+      throw new Error(`Ghost slug ${desiredSlug} no longer resolves to the expected managed post; refusing mutation`);
+    }
+  } else if (occupyingPost) {
     throw new Error(`Ghost slug ${desiredSlug} is already occupied by a post; refusing mutation`);
   }
 
