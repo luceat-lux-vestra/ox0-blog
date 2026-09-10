@@ -241,8 +241,24 @@ try {
       }]
     }
   });
-  knownPageId = pagePayload?.pages?.[0]?.id ?? null;
+  const createdPage = pagePayload?.pages?.[0] ?? null;
+  knownPageId = createdPage?.id ?? null;
   assert.ok(knownPageId, 'temporary Ghost page was not created');
+  assert.equal(createdPage.title, pageTitle, 'Ghost changed temporary page title on create');
+  assert.equal(createdPage.slug, pageSlug, 'Ghost changed temporary page slug on create');
+  assert.equal(createdPage.lexical, lexical, 'Ghost changed temporary page Lexical body on create');
+  assert.equal(createdPage.status, 'draft', 'Ghost changed temporary page status on create');
+
+  const persistedPagePayload = await client.request(`pages/${encodeURIComponent(knownPageId)}/`, {
+    query: { formats: 'lexical' }
+  });
+  const persistedPage = persistedPagePayload?.pages?.[0] ?? null;
+  assert.ok(persistedPage, 'temporary Ghost page could not be read back by id');
+  assert.equal(persistedPage.id, knownPageId);
+  assert.equal(persistedPage.title, pageTitle, 'persisted temporary page title changed');
+  assert.equal(persistedPage.slug, pageSlug, 'persisted temporary page slug changed');
+  assert.equal(persistedPage.lexical, lexical, 'persisted temporary page Lexical body changed');
+  assert.equal(persistedPage.status, 'draft', 'persisted temporary page status changed');
 
   await assert.rejects(
     synchronizePost({
@@ -283,7 +299,7 @@ try {
       'author/publisher tag ordering and sync stamp',
       'source-tag slug drift resolved by canonical source-tag name',
       'managed public-slug rename',
-      'page slug collision rejected before post creation',
+      'exact page create/fresh-read state + page slug collision rejection',
       'manual managed-field drift rejected before overwrite'
     ]
   };
