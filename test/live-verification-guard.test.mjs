@@ -94,3 +94,20 @@ test('live Ghost verifier retains publisher tags unless post cleanup is safe', (
     'temporary tags must not be deleted when post cleanup failed or ownership could not be resolved'
   );
 });
+
+test('live Ghost verifier proves exact page persistence before collision check', () => {
+  const source = readFileSync(SCRIPT, 'utf8');
+  const createPage = source.indexOf("const pagePayload = await client.request('pages/'");
+  const createSlugCheck = source.indexOf("assert.equal(createdPage.slug, pageSlug, 'Ghost changed temporary page slug on create');");
+  const freshRead = source.indexOf('const persistedPagePayload = await client.request(`pages/${encodeURIComponent(knownPageId)}/`');
+  const persistedSlugCheck = source.indexOf("assert.equal(persistedPage.slug, pageSlug, 'persisted temporary page slug changed');");
+  const collisionCheck = source.indexOf('await assert.rejects(', persistedSlugCheck);
+
+  assert.ok(createPage >= 0, 'temporary page creation must remain present');
+  assert.ok(createSlugCheck > createPage, 'create response must prove the requested page slug was preserved');
+  assert.ok(freshRead > createSlugCheck, 'page must be fetched again by id after creation');
+  assert.ok(persistedSlugCheck > freshRead, 'fresh persisted page slug must be verified');
+  assert.ok(collisionCheck > persistedSlugCheck, 'page persistence must be proven before the collision assertion');
+  assert.match(source, /assert\.equal\(persistedPage\.lexical, lexical/);
+  assert.match(source, /assert\.equal\(persistedPage\.status, 'draft'/);
+});
