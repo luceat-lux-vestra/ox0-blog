@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const API_VERSION = 'v6.0';
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
 function base64url(input) {
   return Buffer.from(input).toString('base64url');
@@ -50,11 +51,13 @@ function mimeType(filePath) {
 }
 
 export class GhostAdminClient {
-  constructor({ url, key, fetchImpl = globalThis.fetch }) {
+  constructor({ url, key, fetchImpl = globalThis.fetch, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS }) {
     if (typeof fetchImpl !== 'function') throw new Error('fetch implementation is required');
+    if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) throw new Error('Ghost request timeout must be a positive integer');
     this.adminUrl = normalizeAdminUrl(url);
     this.key = key;
     this.fetchImpl = fetchImpl;
+    this.timeoutMs = timeoutMs;
   }
 
   async request(resource, { method = 'GET', body, query, headers = {} } = {}) {
@@ -72,11 +75,23 @@ export class GhostAdminClient {
     };
     if (body != null && !(body instanceof FormData)) requestHeaders['Content-Type'] = 'application/json';
 
-    const response = await this.fetchImpl(url, {
-      method,
-      headers: requestHeaders,
-      body: body == null ? undefined : body instanceof FormData ? body : JSON.stringify(body)
-    });
+    const signal = AbortSignal.timeout(this.timeoutMs);
+    let response;
+    try {
+      response = await this.fetchImpl(url, {
+        method,
+        headers: requestHeaders,
+        body: body == null ? undefined : body instanceof FormData ? body : JSON.stringify(body),
+        signal
+      });
+    } catch (error) {
+      if (signal.aborted) {
+        const timeoutError = new Error(`Ghost Admin API ${method} ${url.pathname} timed out after ${this.timeoutMs}ms`);
+        timeoutError.cause = error;
+        throw timeoutError;
+      }
+      throw error;
+    }
 
     const text = await response.text();
     let payload = null;
