@@ -71,7 +71,7 @@ The publisher calls the Ghost Admin REST API directly and generates the short-li
 
 GitHub only dispatches a `workflow_dispatch` workflow after that workflow file exists on the repository's default branch. Before the publishing workflow has merged, use the checked-out candidate itself for controlled live verification instead of weakening the merge gate.
 
-Prefer a dedicated staging Ghost instance. The verifier is intentionally mutating: it creates uniquely named temporary **draft** content, exercises the publisher, and then deletes the temporary post/page/tags. It refuses to start unless the explicit opt-in variable is set, and cleanup failure makes the command fail rather than reporting a false PASS. Cleanup-only DELETE calls in this verification harness do not constitute delete support in the publishing product.
+Prefer a dedicated staging Ghost instance. The verifier is intentionally mutating: it creates uniquely named temporary **draft** content, exercises the publisher, and then deletes the temporary post/page/tags. It refuses to start unless the explicit opt-in variable is set. It also checks that its temporary slugs/tags are unused before mutation, and cleanup failure makes the command fail rather than reporting a false PASS. Cleanup-only DELETE calls in this verification harness do not constitute delete support in the publishing product.
 
 Run it from the exact candidate commit with Node 24:
 
@@ -85,13 +85,15 @@ npm run verify:ghost-live
 
 The harness verifies live Ghost behavior for:
 
-- direct Lexical draft creation and fresh-read equality;
+- pinned Markdown rendering followed by direct Lexical draft creation and fresh-read equality;
 - author-tag order plus canonical source/sync publisher tail state;
 - source identity lookup after the Ghost tag slug is changed;
 - managed public-slug rename without duplicate creation;
 - page-slug collision rejection before post creation;
 - manual managed-field drift rejection before overwrite;
 - cleanup of the temporary verification artifacts.
+
+The presence of this harness is **not** live-integration evidence by itself. The merge gate still requires a PASS from the exact candidate against an authorized Ghost instance.
 
 Do not paste the Admin API key into shell history, logs, issues, pull requests, or repository files. Use an ephemeral environment injection mechanism where available.
 
