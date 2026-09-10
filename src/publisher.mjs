@@ -82,5 +82,9 @@ export async function synchronizePost({ source, action, client, repoRoot, render
     updated_at: fresh.updated_at
   });
   assertManagedAndUnchanged(stamped, sourceTag);
-  return stamped;
+
+  const final = await client.getPostById(fresh.id);
+  assertManagedAndUnchanged(final, sourceTag);
+  await assertExclusiveSourceIdentity(client, sourceTag, final.id);
+  return final;
 }
