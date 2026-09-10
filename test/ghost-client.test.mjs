@@ -35,6 +35,35 @@ test('GET by slug turns 404 into null and pins API version header', async () => 
   assert.match(seen.url, /\/ghost\/api\/admin\/posts\/slug\/some-post\//);
   assert.equal(seen.options.headers['Accept-Version'], 'v6.0');
   assert.match(seen.options.headers.Authorization, /^Ghost /);
+  assert.ok(seen.options.signal instanceof AbortSignal);
+});
+
+test('Ghost Admin requests fail closed when the request timeout expires', async () => {
+  const client = new GhostAdminClient({
+    url: 'https://blog.example',
+    key: `abc:${'77'.repeat(32)}`,
+    timeoutMs: 10,
+    fetchImpl: async (_url, options) => new Promise((_resolve, reject) => {
+      if (options.signal.aborted) {
+        reject(options.signal.reason);
+        return;
+      }
+      options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
+    })
+  });
+
+  await assert.rejects(client.getPostBySlug('slow-post'), /timed out after 10ms/);
+});
+
+test('Ghost Admin request timeout must be a positive integer', () => {
+  for (const timeoutMs of [0, -1, 1.5, Number.NaN]) {
+    assert.throws(() => new GhostAdminClient({
+      url: 'https://blog.example',
+      key: `abc:${'88'.repeat(32)}`,
+      timeoutMs,
+      fetchImpl: async () => new Response('{}')
+    }), /request timeout must be a positive integer/);
+  }
 });
 
 test('browse by internal source tag uses a bounded exact tag filter', async () => {
