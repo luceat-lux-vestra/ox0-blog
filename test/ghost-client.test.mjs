@@ -55,6 +55,28 @@ test('Ghost Admin requests fail closed when the request timeout expires', async 
   await assert.rejects(client.getPostBySlug('slow-post'), /timed out after 10ms/);
 });
 
+test('Ghost Admin response-body reads use the same request timeout contract', async () => {
+  const client = new GhostAdminClient({
+    url: 'https://blog.example',
+    key: `abc:${'99'.repeat(32)}`,
+    timeoutMs: 10,
+    fetchImpl: async (_url, options) => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: async () => new Promise((_resolve, reject) => {
+        if (options.signal.aborted) {
+          reject(options.signal.reason);
+          return;
+        }
+        options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
+      })
+    })
+  });
+
+  await assert.rejects(client.request('slow-body/'), /timed out after 10ms/);
+});
+
 test('Ghost Admin request timeout must be a positive integer', () => {
   for (const timeoutMs of [0, -1, 1.5, Number.NaN]) {
     assert.throws(() => new GhostAdminClient({
