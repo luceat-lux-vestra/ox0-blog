@@ -79,3 +79,18 @@ test('live Ghost verifier never recovers cleanup ownership from slug alone', () 
     'once a post ID is known, cleanup metadata recovery must stay bound to that ID'
   );
 });
+
+test('live Ghost verifier retains publisher tags unless post cleanup is safe', () => {
+  const source = readFileSync(SCRIPT, 'utf8');
+  assert.match(source, /let postCleanupSafeForTags = false;/);
+  assert.match(
+    source,
+    /await ignoreMissingDelete\(`posts\/\$\{encodeURIComponent\(knownPostId\)\}\/`\);\s*postCleanupSafeForTags = true;/,
+    'successful or already-missing post deletion must establish tag-cleanup safety'
+  );
+  assert.match(
+    source,
+    /if \(postCleanupSafeForTags\) \{\s*for \(const name of cleanupTagNames\)/,
+    'temporary tags must not be deleted when post cleanup failed or ownership could not be resolved'
+  );
+});
