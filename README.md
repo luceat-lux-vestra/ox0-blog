@@ -73,7 +73,7 @@ GitHub only dispatches a `workflow_dispatch` workflow after that workflow file e
 
 Prefer a dedicated staging Ghost instance. The verifier is intentionally mutating: it creates uniquely named temporary **draft** content, exercises the publisher, and then deletes the temporary post/page/tags. It refuses to start unless the explicit opt-in variable is set. It also checks that its temporary slugs/tags are unused before mutation, and cleanup failure makes the command fail rather than reporting a false PASS. Cleanup-only DELETE calls in this verification harness do not constitute delete support in the publishing product.
 
-Run it from the exact candidate commit with Node 24:
+Run it from the **exact PR candidate commit** with Node 24:
 
 ```bash
 npm ci --ignore-scripts
@@ -82,6 +82,8 @@ GHOST_ADMIN_URL=https://your-ghost.example \
 GHOST_ADMIN_API_KEY='<id:hexsecret>' \
 npm run verify:ghost-live
 ```
+
+Record the exact Git commit SHA together with the PASS output. If the PR HEAD moves afterward, that live result is no longer merge-gate evidence for the new HEAD and must be rerun.
 
 The harness verifies live Ghost behavior for:
 
