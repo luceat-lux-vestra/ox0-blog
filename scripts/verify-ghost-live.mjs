@@ -32,6 +32,7 @@ const renderedHtml = renderMarkdown(sourceMarkdown);
 const lexical = createHtmlCardLexical(renderedHtml);
 const client = new GhostAdminClient({ url, key });
 const cleanupTagNames = new Set([...authorTags, sourceTag]);
+const cleanupTagIds = new Map();
 let knownPostId = null;
 let knownPageId = null;
 let primaryError = null;
@@ -60,9 +61,16 @@ function source(postPath, publicSlug) {
 function rememberTags(post) {
   for (const tag of post?.tags ?? []) {
     const name = typeof tag === 'string' ? tag : tag?.name;
-    if (name && (authorTags.includes(name) || name === sourceTag || name.startsWith(SYNC_TAG_PREFIX))) {
-      cleanupTagNames.add(name);
+    if (!name || (!authorTags.includes(name) && name !== sourceTag && !name.startsWith(SYNC_TAG_PREFIX))) continue;
+
+    cleanupTagNames.add(name);
+    const id = typeof tag === 'object' ? tag?.id : null;
+    if (!id) continue;
+    const knownId = cleanupTagIds.get(name);
+    if (knownId && knownId !== id) {
+      throw new Error(`temporary verification tag changed identity: ${name}`);
     }
+    cleanupTagIds.set(name, id);
   }
 }
 
@@ -77,6 +85,40 @@ async function findExactTag(name) {
   const matches = (payload?.tags ?? []).filter((tag) => tag?.name === name);
   if (matches.length > 1) throw new Error(`multiple Ghost tags found during cleanup/verification: ${name}`);
   return matches[0] ?? null;
+}
+
+async function getTagById(id) {
+  try {
+    const payload = await client.request(`tags/${encodeURIComponent(id)}/`);
+    return payload?.tags?.[0] ?? null;
+  } catch (error) {
+    if (error?.status === 404) return null;
+    throw error;
+  }
+}
+
+async function assertResourceMissingById(resource, id) {
+  try {
+    await client.request(`${resource}/${encodeURIComponent(id)}/`, {
+      query: resource === 'tags' ? undefined : { formats: 'lexical' }
+    });
+  } catch (error) {
+    if (error?.status === 404) return;
+    throw error;
+  }
+  throw new Error(`temporary Ghost ${resource.slice(0, -1)} still exists after cleanup: ${id}`);
+}
+
+async function assertTagUnreferenced(tag) {
+  if (!tag?.slug) throw new Error('temporary verification tag is missing a slug during cleanup');
+  const [posts, pagesPayload] = await Promise.all([
+    client.getPostsByTagSlug(tag.slug),
+    client.request('pages/', { query: { filter: `tag:${tag.slug}`, limit: 2 } })
+  ]);
+  const pages = pagesPayload?.pages ?? [];
+  if (posts.length || pages.length) {
+    throw new Error(`temporary verification tag is still referenced; refusing cleanup: ${tag.name}`);
+  }
 }
 
 async function assertTemporaryNamespaceUnused() {
@@ -155,11 +197,17 @@ async function cleanup() {
   }
 
   if (knownPageId) {
-    try { await ignoreMissingDelete(`pages/${encodeURIComponent(knownPageId)}/`); } catch (error) { errors.push(error); }
+    try {
+      await ignoreMissingDelete(`pages/${encodeURIComponent(knownPageId)}/`);
+      await assertResourceMissingById('pages', knownPageId);
+    } catch (error) {
+      errors.push(error);
+    }
   }
   if (knownPostId) {
     try {
       await ignoreMissingDelete(`posts/${encodeURIComponent(knownPostId)}/`);
+      await assertResourceMissingById('posts', knownPostId);
       postCleanupSafeForTags = true;
     } catch (error) {
       errors.push(error);
@@ -169,8 +217,23 @@ async function cleanup() {
   if (postCleanupSafeForTags) {
     for (const name of cleanupTagNames) {
       try {
-        const tag = await findExactTag(name);
-        if (tag?.id) await ignoreMissingDelete(`tags/${encodeURIComponent(tag.id)}/`);
+        const tagId = cleanupTagIds.get(name);
+        if (!tagId) {
+          const unresolved = await findExactTag(name);
+          if (unresolved) {
+            throw new Error(`temporary verification tag exists without a proven owned id; refusing cleanup: ${name}`);
+          }
+          continue;
+        }
+
+        const tag = await getTagById(tagId);
+        if (!tag) continue;
+        if (tag.name !== name) {
+          throw new Error(`temporary verification tag name changed; refusing cleanup: ${name}`);
+        }
+        await assertTagUnreferenced(tag);
+        await ignoreMissingDelete(`tags/${encodeURIComponent(tagId)}/`);
+        await assertResourceMissingById('tags', tagId);
       } catch (error) {
         errors.push(error);
       }
@@ -203,6 +266,11 @@ try {
 
   const sourceIdentityTag = await findExactTag(sourceTag);
   assert.ok(sourceIdentityTag?.id, 'temporary source identity tag was not created');
+  const rememberedSourceTagId = cleanupTagIds.get(sourceTag);
+  if (rememberedSourceTagId && rememberedSourceTagId !== sourceIdentityTag.id) {
+    throw new Error('temporary source identity tag id disagrees with persisted tag');
+  }
+  cleanupTagIds.set(sourceTag, sourceIdentityTag.id);
   const driftedTagSlug = `ox0-live-source-${suffix}`;
   await client.request(`tags/${encodeURIComponent(sourceIdentityTag.id)}/`, {
     method: 'PUT',
@@ -303,7 +371,8 @@ try {
       'persisted source-tag slug drift resolved by canonical source-tag name',
       'managed public-slug rename',
       'exact page create/fresh-read state + page slug collision rejection',
-      'manual managed-field drift rejected before overwrite'
+      'manual managed-field drift rejected before overwrite',
+      'ID-bound unreferenced cleanup with persisted absence checks'
     ]
   };
 } catch (error) {
