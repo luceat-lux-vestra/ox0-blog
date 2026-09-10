@@ -112,6 +112,8 @@ async function cleanup() {
   if (!ownsTemporaryNamespace) return [];
 
   const errors = [];
+  let postCleanupSafeForTags = false;
+
   try {
     if (!knownPageId) {
       const recoveredPage = await client.getPageBySlug(pageSlug);
@@ -132,10 +134,21 @@ async function cleanup() {
       if (recovered) {
         knownPostId = recovered.id;
         rememberTags(recovered);
+      } else {
+        postCleanupSafeForTags = true;
       }
     } else {
-      const recovered = await client.getPostById(knownPostId);
-      if (recovered) rememberTags(recovered);
+      try {
+        const recovered = await client.getPostById(knownPostId);
+        if (recovered) rememberTags(recovered);
+      } catch (error) {
+        if (error?.status === 404) {
+          knownPostId = null;
+          postCleanupSafeForTags = true;
+        } else {
+          throw error;
+        }
+      }
     }
   } catch (error) {
     errors.push(error);
@@ -145,15 +158,22 @@ async function cleanup() {
     try { await ignoreMissingDelete(`pages/${encodeURIComponent(knownPageId)}/`); } catch (error) { errors.push(error); }
   }
   if (knownPostId) {
-    try { await ignoreMissingDelete(`posts/${encodeURIComponent(knownPostId)}/`); } catch (error) { errors.push(error); }
-  }
-
-  for (const name of cleanupTagNames) {
     try {
-      const tag = await findExactTag(name);
-      if (tag?.id) await ignoreMissingDelete(`tags/${encodeURIComponent(tag.id)}/`);
+      await ignoreMissingDelete(`posts/${encodeURIComponent(knownPostId)}/`);
+      postCleanupSafeForTags = true;
     } catch (error) {
       errors.push(error);
+    }
+  }
+
+  if (postCleanupSafeForTags) {
+    for (const name of cleanupTagNames) {
+      try {
+        const tag = await findExactTag(name);
+        if (tag?.id) await ignoreMissingDelete(`tags/${encodeURIComponent(tag.id)}/`);
+      } catch (error) {
+        errors.push(error);
+      }
     }
   }
   return errors;
