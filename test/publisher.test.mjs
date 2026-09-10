@@ -107,7 +107,7 @@ const render = () => '<h1>body</h1>';
 test('creates a new draft as one Lexical HTML card and stamps source identity plus snapshot hash', async () => {
   const client = new FakeClient();
   const result = await synchronizePost({ source: source(), action: 'draft', client, repoRoot: ROOT, renderMarkdown: render });
-  assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'create', 'fresh', 'stamp', 'fresh']);
+  assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'create', 'fresh', 'slug', 'page', 'stamp', 'fresh', 'slug', 'page']);
   assert.equal(client.identityReads, 3);
   const sourceTag = sourceTagForPath(POST_PATH, ROOT);
   assert.deepEqual(client.lastMutationTags, ['Rust', sourceTag]);
@@ -172,7 +172,7 @@ test('source identity permits a public slug change and keeps author tags before 
   const oldSync = existing.tags.find((tag) => tag.name.startsWith(SYNC_TAG_PREFIX)).name;
   const client = new FakeClient({ identity: [existing] });
   const result = await synchronizePost({ source: source({ slug: 'renamed' }), action: 'draft', client, repoRoot: ROOT, renderMarkdown: render });
-  assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update', 'fresh', 'stamp', 'fresh']);
+  assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update', 'fresh', 'slug', 'page', 'stamp', 'fresh', 'slug', 'page']);
   assert.equal(client.identityReads, 3);
   assert.deepEqual(client.lastMutationTags, ['Rust', sourceTag, oldSync]);
   assert.equal(result.slug, 'renamed');
@@ -211,7 +211,7 @@ test('source identity race after mutation fails before sync stamping', async () 
     /source identity ownership changed/
   );
   assert.equal(client.identityReads, 2);
-  assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update', 'fresh']);
+  assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update', 'fresh', 'slug', 'page']);
   assert.ok(!client.calls.includes('stamp'));
 });
 
@@ -226,7 +226,7 @@ test('final persisted sync stamp is re-read and managed drift fails closed', asy
     /changed outside ox0-blog/
   );
   assert.equal(client.identityReads, 2);
-  assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update', 'fresh', 'stamp', 'fresh']);
+  assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update', 'fresh', 'slug', 'page', 'stamp', 'fresh']);
 });
 
 test('source identity race after sync stamping fails before returning success', async () => {
@@ -244,7 +244,7 @@ test('source identity race after sync stamping fails before returning success', 
     /source identity ownership changed/
   );
   assert.equal(client.identityReads, 3);
-  assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update', 'fresh', 'stamp', 'fresh']);
+  assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update', 'fresh', 'slug', 'page', 'stamp', 'fresh', 'slug', 'page']);
 });
 
 test('source-tag slug drift plus public slug drift still updates the existing post without source=html conversion', async () => {
@@ -268,6 +268,10 @@ test('source-tag slug drift plus public slug drift still updates the existing po
         return new Response(JSON.stringify({ posts: [current] }), { status: 200 });
       }
       if (method === 'GET' && parsed.pathname.includes('/posts/slug/')) {
+        const requestedSlug = decodeURIComponent(parsed.pathname.split('/posts/slug/')[1].replace(/\/$/, ''));
+        if (current.slug === requestedSlug) {
+          return new Response(JSON.stringify({ posts: [current] }), { status: 200 });
+        }
         return new Response(JSON.stringify({ errors: [{ message: 'Not found' }] }), { status: 404 });
       }
       if (method === 'GET' && parsed.pathname.includes('/pages/slug/')) {
@@ -324,7 +328,7 @@ test('final sync stamp is verified and fails closed on publisher tag reordering'
     synchronizePost({ source: source(), action: 'draft', client, repoRoot: ROOT, renderMarkdown: render }),
     /invalid ox0 publisher tag ordering/
   );
-  assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update', 'fresh', 'stamp']);
+  assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update', 'fresh', 'slug', 'page', 'stamp']);
 });
 
 test('Ghost optimistic-concurrency failure stops before sync stamping', async () => {
