@@ -34,6 +34,7 @@ let knownPostId = null;
 let knownPageId = null;
 let primaryError = null;
 let successSummary = null;
+let ownsTemporaryNamespace = false;
 
 function source(postPath, publicSlug) {
   return {
@@ -106,6 +107,8 @@ async function ignoreMissingDelete(resource) {
 }
 
 async function cleanup() {
+  if (!ownsTemporaryNamespace) return [];
+
   const errors = [];
   try {
     if (!knownPageId) {
@@ -151,6 +154,7 @@ async function cleanup() {
 
 try {
   await assertTemporaryNamespaceUnused();
+  ownsTemporaryNamespace = true;
 
   const first = await synchronizePost({
     source: source(sourcePath, slug),
