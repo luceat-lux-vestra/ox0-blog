@@ -67,6 +67,34 @@ Create a Ghost **Custom Integration** and configure the GitHub `ox0-blog` enviro
 
 The publisher calls the Ghost Admin REST API directly and generates the short-lived HS256 JWT with Node's built-in crypto. The only runtime package dependency is `marked`, pinned by `package-lock.json`, for Markdown rendering. The Lexical HTML-card envelope is generated locally with no additional runtime package.
 
+## Pre-merge live Ghost verification
+
+GitHub only dispatches a `workflow_dispatch` workflow after that workflow file exists on the repository's default branch. Before the publishing workflow has merged, use the checked-out candidate itself for controlled live verification instead of weakening the merge gate.
+
+Prefer a dedicated staging Ghost instance. The verifier is intentionally mutating: it creates uniquely named temporary **draft** content, exercises the publisher, and then deletes the temporary post/page/tags. It refuses to start unless the explicit opt-in variable is set, and cleanup failure makes the command fail rather than reporting a false PASS. Cleanup-only DELETE calls in this verification harness do not constitute delete support in the publishing product.
+
+Run it from the exact candidate commit with Node 24:
+
+```bash
+npm ci --ignore-scripts
+OX0_GHOST_LIVE_VERIFY=1 \
+GHOST_ADMIN_URL=https://your-ghost.example \
+GHOST_ADMIN_API_KEY='<id:hexsecret>' \
+npm run verify:ghost-live
+```
+
+The harness verifies live Ghost behavior for:
+
+- direct Lexical draft creation and fresh-read equality;
+- author-tag order plus canonical source/sync publisher tail state;
+- source identity lookup after the Ghost tag slug is changed;
+- managed public-slug rename without duplicate creation;
+- page-slug collision rejection before post creation;
+- manual managed-field drift rejection before overwrite;
+- cleanup of the temporary verification artifacts.
+
+Do not paste the Admin API key into shell history, logs, issues, pull requests, or repository files. Use an ephemeral environment injection mechanism where available.
+
 ## Publishing
 
 Use **Actions → Publish to Ghost → Run workflow**, select `main`, and provide:
