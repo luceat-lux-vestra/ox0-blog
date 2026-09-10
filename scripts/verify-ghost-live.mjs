@@ -31,6 +31,7 @@ const cleanupTagNames = new Set([...authorTags, sourceTag]);
 let knownPostId = null;
 let knownPageId = null;
 let primaryError = null;
+let successSummary = null;
 
 function source(postPath, publicSlug) {
   return {
@@ -95,12 +96,24 @@ async function ignoreMissingDelete(resource) {
 async function cleanup() {
   const errors = [];
   try {
+    if (!knownPageId) {
+      const recoveredPage = await client.getPageBySlug(pageSlug);
+      if (recoveredPage?.id) knownPageId = recoveredPage.id;
+    }
+  } catch (error) {
+    errors.push(error);
+  }
+
+  try {
     if (!knownPostId) {
       const recovered = await recoverPost();
       if (recovered) {
         knownPostId = recovered.id;
         rememberTags(recovered);
       }
+    } else {
+      const recovered = await client.getPostBySlug(renamedSlug) ?? await client.getPostBySlug(slug);
+      if (recovered) rememberTags(recovered);
     }
   } catch (error) {
     errors.push(error);
@@ -215,7 +228,7 @@ try {
     /changed outside ox0-blog/
   );
 
-  console.log(JSON.stringify({
+  successSummary = {
     result: 'PASS',
     postId: knownPostId,
     sourceTag,
@@ -227,16 +240,17 @@ try {
       'page slug collision rejected before post creation',
       'manual managed-field drift rejected before overwrite'
     ]
-  }, null, 2));
+  };
 } catch (error) {
   primaryError = error;
-} finally {
-  const cleanupErrors = await cleanup();
-  if (primaryError) {
-    if (cleanupErrors.length) primaryError.cleanupErrors = cleanupErrors;
-    throw primaryError;
-  }
-  if (cleanupErrors.length) {
-    throw new AggregateError(cleanupErrors, 'live Ghost verification passed but cleanup failed');
-  }
 }
+
+const cleanupErrors = await cleanup();
+if (primaryError) {
+  if (cleanupErrors.length) primaryError.cleanupErrors = cleanupErrors;
+  throw primaryError;
+}
+if (cleanupErrors.length) {
+  throw new AggregateError(cleanupErrors, 'live Ghost verification passed but cleanup failed');
+}
+console.log(JSON.stringify(successSummary, null, 2));
