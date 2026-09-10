@@ -74,6 +74,7 @@ export async function synchronizePost({ source, action, client, repoRoot, render
 
   const fresh = await client.getPostById(changed.id);
   assertMutationApplied(fresh, payload);
+  await assertDesiredSlugAvailable(client, source.metadata.slug, fresh);
   await assertExclusiveSourceIdentity(client, sourceTag, fresh.id);
 
   const hash = snapshotHash(fresh);
@@ -85,6 +86,7 @@ export async function synchronizePost({ source, action, client, repoRoot, render
 
   const final = await client.getPostById(fresh.id);
   assertManagedAndUnchanged(final, sourceTag);
+  await assertDesiredSlugAvailable(client, source.metadata.slug, final);
   await assertExclusiveSourceIdentity(client, sourceTag, final.id);
   return final;
 }
