@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -77,11 +78,13 @@ test('publisher tags preserve author tag order and append identity/state tags', 
   );
 });
 
-test('source identity is deterministic from repository-relative post path', () => {
+test('source identity hashes the repository-relative Markdown path', () => {
+  const canonicalPath = 'posts/nested/example.md';
+  const expected = `${SOURCE_TAG_PREFIX}${createHash('sha256').update(canonicalPath).digest('hex')}`;
   const tag = sourceTagForPath('/repo/posts/nested/example.md', '/repo');
-  assert.match(tag, /^#ox0-source-[a-f0-9]{64}$/);
+  assert.equal(tag, expected);
+  assert.equal(tag, sourceTagForPath('/other/posts/nested/example.md', '/other'));
   assert.equal(sourceTagSlug(tag), `hash-${tag.slice(1)}`);
-  assert.equal(tag, sourceTagForPath('/repo/posts/nested/example.md', '/repo'));
 });
 
 test('reserved publisher tags are rejected case-insensitively', () => {

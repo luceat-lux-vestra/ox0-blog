@@ -193,11 +193,14 @@ export async function loadPost(postPath, repoRoot = process.cwd()) {
 }
 
 export function sourceTagForPath(postPath, repoRoot = process.cwd()) {
-  const relative = path.relative(path.resolve(repoRoot, 'posts'), path.resolve(postPath));
-  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+  const root = path.resolve(repoRoot);
+  const absolutePostPath = path.resolve(postPath);
+  const postRoot = path.resolve(root, 'posts');
+  const withinPosts = path.relative(postRoot, absolutePostPath);
+  if (withinPosts === '..' || withinPosts.startsWith(`..${path.sep}`) || path.isAbsolute(withinPosts)) {
     throw new Error('post path must resolve inside posts/');
   }
-  const canonical = relative.split(path.sep).join('/');
+  const canonical = path.relative(root, absolutePostPath).split(path.sep).join('/');
   const hash = createHash('sha256').update(canonical).digest('hex');
   return `${SOURCE_TAG_PREFIX}${hash}`;
 }
