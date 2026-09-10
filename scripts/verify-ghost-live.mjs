@@ -74,6 +74,16 @@ async function findExactTag(name) {
   return matches[0] ?? null;
 }
 
+async function assertTemporaryNamespaceUnused() {
+  for (const name of cleanupTagNames) {
+    assert.equal(await findExactTag(name), null, `temporary verification tag already exists: ${name}`);
+  }
+  for (const candidateSlug of [slug, renamedSlug, pageSlug]) {
+    assert.equal(await client.getPostBySlug(candidateSlug), null, `temporary verification post slug already exists: ${candidateSlug}`);
+    assert.equal(await client.getPageBySlug(candidateSlug), null, `temporary verification page slug already exists: ${candidateSlug}`);
+  }
+}
+
 async function recoverPost() {
   const byIdentity = await client.getPostsBySourceTag(sourceTag);
   if (byIdentity.length > 1) throw new Error('multiple live-verification posts claim the temporary source identity');
@@ -138,6 +148,8 @@ async function cleanup() {
 }
 
 try {
+  await assertTemporaryNamespaceUnused();
+
   const first = await synchronizePost({
     source: source(sourcePath, slug),
     action: 'draft',
@@ -233,6 +245,7 @@ try {
     postId: knownPostId,
     sourceTag,
     checks: [
+      'temporary namespace ownership preflight',
       'draft create + direct Lexical fresh-read verification',
       'author/publisher tag ordering and sync stamp',
       'source-tag slug drift resolved by canonical source-tag name',
