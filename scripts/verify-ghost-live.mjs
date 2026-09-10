@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { GhostAdminClient } from '../src/ghost-client.mjs';
 import { createHtmlCardLexical } from '../src/lexical.mjs';
+import { renderMarkdown } from '../src/markdown.mjs';
 import { sourceTagForPath, SYNC_TAG_PREFIX } from '../src/post.mjs';
 import { synchronizePost } from '../src/publisher.mjs';
 
@@ -24,7 +25,8 @@ const sourcePath = path.join(repoRoot, 'posts', `.ox0-live-verify-${suffix}.md`)
 const collisionSourcePath = path.join(repoRoot, 'posts', `.ox0-live-verify-page-${suffix}.md`);
 const sourceTag = sourceTagForPath(sourcePath, repoRoot);
 const authorTags = [`ox0-live-a-${suffix}`, `ox0-live-b-${suffix}`];
-const renderedHtml = `<div data-ox0-live-verify="${suffix}"><p>temporary Ghost integration verification</p></div>`;
+const sourceMarkdown = `# Temporary Ghost integration verification\n\nRun: ${suffix}\n`;
+const renderedHtml = renderMarkdown(sourceMarkdown);
 const lexical = createHtmlCardLexical(renderedHtml);
 const client = new GhostAdminClient({ url, key });
 const cleanupTagNames = new Set([...authorTags, sourceTag]);
@@ -36,7 +38,7 @@ let successSummary = null;
 function source(postPath, publicSlug) {
   return {
     postPath,
-    markdown: `live verification ${suffix}`,
+    markdown: sourceMarkdown,
     metadata: {
       title: `ox0 live verification ${suffix}`,
       slug: publicSlug,
@@ -155,7 +157,7 @@ try {
     action: 'draft',
     client,
     repoRoot,
-    renderMarkdown: () => renderedHtml
+    renderMarkdown
   });
   knownPostId = first.id;
   rememberTags(first);
@@ -185,7 +187,7 @@ try {
     action: 'draft',
     client,
     repoRoot,
-    renderMarkdown: () => renderedHtml
+    renderMarkdown
   });
   rememberTags(renamed);
   assert.equal(renamed.id, first.id);
@@ -217,7 +219,7 @@ try {
       action: 'draft',
       client,
       repoRoot,
-      renderMarkdown: () => renderedHtml
+      renderMarkdown
     }),
     /occupied by a page/
   );
@@ -235,7 +237,7 @@ try {
       action: 'draft',
       client,
       repoRoot,
-      renderMarkdown: () => renderedHtml
+      renderMarkdown
     }),
     /changed outside ox0-blog/
   );
@@ -246,7 +248,7 @@ try {
     sourceTag,
     checks: [
       'temporary namespace ownership preflight',
-      'draft create + direct Lexical fresh-read verification',
+      'pinned Markdown render + draft create + direct Lexical fresh-read verification',
       'author/publisher tag ordering and sync stamp',
       'source-tag slug drift resolved by canonical source-tag name',
       'managed public-slug rename',
