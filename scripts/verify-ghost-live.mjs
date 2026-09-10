@@ -208,6 +208,9 @@ try {
     method: 'PUT',
     body: { tags: [{ slug: driftedTagSlug }] }
   });
+  const driftedSourceIdentityTag = await findExactTag(sourceTag);
+  assert.equal(driftedSourceIdentityTag?.id, sourceIdentityTag.id, 'source identity tag changed identity after slug edit');
+  assert.equal(driftedSourceIdentityTag?.slug, driftedTagSlug, 'Ghost did not persist source identity tag slug drift');
 
   const afterTagSlugDrift = await client.getPostsBySourceTag(sourceTag);
   assert.equal(afterTagSlugDrift.length, 1);
@@ -297,7 +300,7 @@ try {
       'temporary namespace ownership preflight',
       'pinned Markdown render + draft create + direct Lexical fresh-read verification',
       'author/publisher tag ordering and sync stamp',
-      'source-tag slug drift resolved by canonical source-tag name',
+      'persisted source-tag slug drift resolved by canonical source-tag name',
       'managed public-slug rename',
       'exact page create/fresh-read state + page slug collision rejection',
       'manual managed-field drift rejected before overwrite'
