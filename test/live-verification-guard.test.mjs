@@ -111,3 +111,17 @@ test('live Ghost verifier proves exact page persistence before collision check',
   assert.match(source, /assert\.equal\(persistedPage\.lexical, lexical/);
   assert.match(source, /assert\.equal\(persistedPage\.status, 'draft'/);
 });
+
+test('live Ghost verifier proves the source tag slug actually drifted before identity lookup', () => {
+  const source = readFileSync(SCRIPT, 'utf8');
+  const tagUpdate = source.indexOf("await client.request(`tags/${encodeURIComponent(sourceIdentityTag.id)}/`");
+  const persistedTagRead = source.indexOf('const driftedSourceIdentityTag = await findExactTag(sourceTag);');
+  const slugCheck = source.indexOf("assert.equal(driftedSourceIdentityTag?.slug, driftedTagSlug, 'Ghost did not persist source identity tag slug drift');");
+  const identityLookup = source.indexOf('const afterTagSlugDrift = await client.getPostsBySourceTag(sourceTag);');
+
+  assert.ok(tagUpdate >= 0, 'source-tag slug update must remain present');
+  assert.ok(persistedTagRead > tagUpdate, 'updated source tag must be reread by canonical name');
+  assert.ok(slugCheck > persistedTagRead, 'persisted source-tag slug must equal the requested drift slug');
+  assert.ok(identityLookup > slugCheck, 'canonical source identity lookup must run only after drift is proven');
+  assert.match(source, /assert\.equal\(driftedSourceIdentityTag\?\.id, sourceIdentityTag\.id/);
+});
