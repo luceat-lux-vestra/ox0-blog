@@ -15,8 +15,12 @@ function namesFromTags(tags) {
     .filter(Boolean);
 }
 
+function isReservedPublisherNamespace(name) {
+  return typeof name === 'string' && name.toLowerCase().startsWith('#ox0-');
+}
+
 export function publisherTagNames(tags) {
-  return namesFromTags(tags).filter((name) => name.startsWith('#ox0-'));
+  return namesFromTags(tags).filter(isReservedPublisherNamespace);
 }
 
 function publisherPrefix(name) {
@@ -24,7 +28,7 @@ function publisherPrefix(name) {
 }
 
 function assertNoUnknownPublisherTags(names) {
-  const unknown = names.filter((name) => name.startsWith('#ox0-') && publisherPrefix(name) == null);
+  const unknown = names.filter((name) => isReservedPublisherNamespace(name) && publisherPrefix(name) == null);
   if (unknown.length > 0) {
     throw new Error(`Ghost post contains unsupported ox0 publisher tags: ${unknown.join(', ')}`);
   }
@@ -54,7 +58,8 @@ export function normalizeProjectionIdentityTags(identityTags) {
       throw new Error(`projection identityTags contain multiple ${prefix} identities`);
     }
   }
-  return normalized;
+
+  return IDENTITY_PREFIXES.flatMap((prefix) => normalized.filter((tag) => tag.startsWith(prefix)));
 }
 
 export function projectionLookupTag(identityTags) {
