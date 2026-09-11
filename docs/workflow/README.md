@@ -65,7 +65,7 @@ For a Blog/RTA task:
 3. read canonical `main` source for the target Article when it exists;
 4. inspect any active Article PR/work branch that may own the requested change;
 5. derive translation state from required locales + current fingerprints + the checkpoint on the source being evaluated;
-6. recover RTA state only from the RTA repository authority when RTA is involved;
+6. when RTA is involved, load `research-to-action/AGENTS.md` and recover RTA state from that repository's current authority;
 7. fresh-read Ghost only when projection/publication state is relevant;
 8. apply the operation guards from `state-machines.md` and the Git policy before mutation.
 
@@ -82,6 +82,8 @@ Prefer, in order:
 
 Do **not** guess from recency alone when multiple Articles/issues/work units are plausible. If durable evidence still leaves more than one materially plausible target, ask only for the target identity/semantic choice; do not ask the user to perform Git or repository discovery.
 
+If multiple active work units claim the same logical Article/change, treat ownership as a reconciliation/conflict condition. Do not silently choose whichever PR or branch is newest.
+
 A request such as `지난 글 업데이트해` is executable without a question only when the durable/current context identifies one intended Article. In a truly context-free ambiguous session, one minimal target-identification question is the correct fail-closed behavior.
 
 ### Authority precedence while work is in progress
@@ -95,6 +97,44 @@ Different machines intentionally observe different authorities:
 - RTA repository state is authoritative for RTA lifecycle.
 
 An unmerged branch edit must **not** by itself mark the currently published Ghost projection `OUTDATED`; it means a new Blog work unit exists. Projection becomes outdated only when the canonical production source relation changes under the projection-state contract.
+
+## Durable recovery evidence
+
+A fresh session must be able to reconstruct semantic state without trusting an orphaned enum value.
+
+### Article readiness evidence
+
+`READY` is a reviewed semantic claim, so a bare persisted `state: READY` is insufficient evidence.
+
+The eventual durable Article representation must retain enough versioned evidence to establish that the current readiness-relevant source is the source that passed the current readiness-review contract, for example a reviewed source fingerprint/checkpoint plus contract version and stable provenance kind. The exact manifest syntax remains unfrozen.
+
+Requirements:
+
+- current readiness-relevant source must match the reviewed evidence before `READY` is accepted;
+- a source mismatch, unsupported review-contract version, malformed evidence, or unresolved `ARTICLE_REVIEW_NEEDED` signal fails closed to `REVIEW_REQUIRED`;
+- semantic review provenance must not contain hidden reasoning, model/session identifiers, or volatile confidence scores;
+- Article readiness evidence is **separate** from translation equivalence evidence.
+
+This allows `READY` to survive process/session loss while still invalidating deterministically when the reviewed source changes.
+
+### Distinct fingerprint domains
+
+Do not overload one hash for unrelated invariants.
+
+At minimum distinguish conceptually:
+
+- **translation fingerprint** — #3's translation-relevant observable meaning used only for locale equivalence/staleness;
+- **readiness/source fingerprint** — the Article source/evidence surface covered by Article readiness review;
+- **projection fingerprint** — the per-locale canonical material that determines whether the managed Ghost projection is current.
+
+The exact encodings may share lower-level canonicalization helpers, but their contracts and versioning are independent.
+
+Consequences:
+
+- a deployment/projection-visible change may make Ghost `OUTDATED` without making translations stale;
+- a factual/content change may invalidate Article readiness and translation equivalence as applicable;
+- a translation checkpoint must never be used as proof that Ghost is current;
+- a projection fingerprint must never be used as proof that translations are semantically equivalent.
 
 ## Intent-to-operation boundaries
 
@@ -124,7 +164,9 @@ A Ghost draft mutation requires a task that actually authorizes draft projection
 
 Example: `발행해`.
 
-This is explicit production-publication authorization for the intended Article operation, subject to all source, translation, identity, drift, and publication guards. For multiple locale projections, success is established per variant and then aggregated; partial success is recovered from fresh Ghost reads and is never reported as whole-Article publication success.
+This is explicit production-publication authorization for the intended Article operation, subject to all source, translation, identity, drift, and publication guards. It does **not** implicitly authorize a pending Git merge; merge and production publication remain separate authorization boundaries.
+
+For multiple locale projections, success is established per variant and then aggregated; partial success is recovered from fresh Ghost reads and is never reported as whole-Article publication success.
 
 Authorization is not a substitute for validation. A stale plan, changed canonical source, changed Ghost state, or unresolved reconciliation condition requires re-planning/re-validation before the write.
 
