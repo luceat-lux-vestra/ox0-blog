@@ -17,6 +17,13 @@ function requireInvalidationId(value) {
   return value;
 }
 
+function requireEpoch(value) {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error('Article readiness invalidation epoch must be a positive safe integer');
+  }
+  return value;
+}
+
 function optionalReference(value) {
   if (value == null || value === '') return null;
   if (typeof value !== 'string' || value.trim() === '') {
@@ -29,7 +36,7 @@ function optionalReference(value) {
   return reference;
 }
 
-function normalizeArticleReadinessInvalidation({ id, reason, origin, reference = null }) {
+function normalizeArticleReadinessInvalidation({ id, epoch, reason, origin, reference = null }) {
   if (!REASONS.has(reason)) {
     throw new Error(`unsupported Article readiness invalidation reason: ${reason}`);
   }
@@ -39,14 +46,21 @@ function normalizeArticleReadinessInvalidation({ id, reason, origin, reference =
   return {
     version: ARTICLE_READINESS_INVALIDATION_VERSION,
     id: requireInvalidationId(id),
+    epoch: requireEpoch(epoch),
     reason,
     origin,
     reference: optionalReference(reference)
   };
 }
 
-export function createArticleReadinessInvalidation({ id = randomUUID(), reason, origin, reference = null }) {
-  return normalizeArticleReadinessInvalidation({ id, reason, origin, reference });
+export function createArticleReadinessInvalidation({
+  id = randomUUID(),
+  epoch,
+  reason,
+  origin,
+  reference = null
+}) {
+  return normalizeArticleReadinessInvalidation({ id, epoch, reason, origin, reference });
 }
 
 export function validateArticleReadinessInvalidation(invalidation) {
@@ -58,6 +72,7 @@ export function validateArticleReadinessInvalidation(invalidation) {
   }
   return normalizeArticleReadinessInvalidation({
     id: invalidation.id,
+    epoch: invalidation.epoch,
     reason: invalidation.reason,
     origin: invalidation.origin,
     reference: invalidation.reference ?? null
