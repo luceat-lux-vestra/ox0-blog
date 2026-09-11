@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 export const ARTICLE_READINESS_INVALIDATION_VERSION = 1;
 
 const REASONS = new Set([
@@ -6,6 +8,14 @@ const REASONS = new Set([
   'SEMANTIC_REVIEW_REQUESTED'
 ]);
 const ORIGINS = new Set(['rta', 'blog-audit', 'user', 'external']);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+function requireInvalidationId(value) {
+  if (typeof value !== 'string' || !UUID_RE.test(value)) {
+    throw new Error('Article readiness invalidation id must be a lowercase UUID v4');
+  }
+  return value;
+}
 
 function optionalReference(value) {
   if (value == null || value === '') return null;
@@ -19,7 +29,7 @@ function optionalReference(value) {
   return reference;
 }
 
-export function createArticleReadinessInvalidation({ reason, origin, reference = null }) {
+function normalizeArticleReadinessInvalidation({ id, reason, origin, reference = null }) {
   if (!REASONS.has(reason)) {
     throw new Error(`unsupported Article readiness invalidation reason: ${reason}`);
   }
@@ -28,10 +38,15 @@ export function createArticleReadinessInvalidation({ reason, origin, reference =
   }
   return {
     version: ARTICLE_READINESS_INVALIDATION_VERSION,
+    id: requireInvalidationId(id),
     reason,
     origin,
     reference: optionalReference(reference)
   };
+}
+
+export function createArticleReadinessInvalidation({ id = randomUUID(), reason, origin, reference = null }) {
+  return normalizeArticleReadinessInvalidation({ id, reason, origin, reference });
 }
 
 export function validateArticleReadinessInvalidation(invalidation) {
@@ -41,9 +56,14 @@ export function validateArticleReadinessInvalidation(invalidation) {
   if (invalidation.version !== ARTICLE_READINESS_INVALIDATION_VERSION) {
     throw new Error(`unsupported Article readiness invalidation version: ${invalidation.version}`);
   }
-  return createArticleReadinessInvalidation({
+  return normalizeArticleReadinessInvalidation({
+    id: invalidation.id,
     reason: invalidation.reason,
     origin: invalidation.origin,
     reference: invalidation.reference ?? null
   });
+}
+
+export function isArticleReadinessInvalidationId(value) {
+  return typeof value === 'string' && UUID_RE.test(value);
 }
