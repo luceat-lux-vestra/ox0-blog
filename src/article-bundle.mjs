@@ -5,6 +5,7 @@ import {
 } from './article-readiness-invalidation.mjs';
 import { articleSemanticSourceFingerprintV1 } from './article-readiness-source.mjs';
 import {
+  createArticleReadinessCheckpoint,
   deriveReviewedArticleReadiness,
   resolveArticleReadinessInvalidations,
   validateArticleReadinessCheckpoint
@@ -195,7 +196,7 @@ export function requestArticleBundleReadinessReview(
   });
 }
 
-export function resolveArticleBundleReadinessInvalidations(
+export function acceptArticleBundleReadinessReview(
   rawBundle,
   {
     currentTranslationFingerprints,
@@ -203,21 +204,53 @@ export function resolveArticleBundleReadinessInvalidations(
   }
 ) {
   const recovered = recoverArticleBundleReviewState(rawBundle, { currentTranslationFingerprints });
+  if (recovered.translation.state !== 'SYNCED') {
+    throw new Error('Article readiness review cannot be accepted while translation state is not SYNCED');
+  }
+  if (recovered.readiness.state !== 'REVIEW_REQUIRED') {
+    throw new Error('Article readiness review can be accepted only from REVIEW_REQUIRED');
+  }
+
+  const priorReviewedEpoch = recovered.bundle.readinessCheckpoint?.reviewedEpoch ?? 0;
+  const activeInvalidations = recovered.bundle.readinessInvalidations;
+  let readinessCheckpoint;
+
+  if (activeInvalidations.length > 0) {
+    readinessCheckpoint = resolveArticleReadinessInvalidations({
+      currentSourceFingerprint: recovered.articleSourceFingerprint,
+      priorReviewedEpoch,
+      currentEpoch: recovered.bundle.readinessEpoch,
+      invalidations: activeInvalidations,
+      review
+    }).checkpoint;
+  } else {
+    if (priorReviewedEpoch !== recovered.bundle.readinessEpoch) {
+      throw new Error('Article readiness review cannot skip missing invalidation evidence for unreviewed epochs');
+    }
+    readinessCheckpoint = createArticleReadinessCheckpoint({
+      sourceFingerprint: recovered.articleSourceFingerprint,
+      reviewedEpoch: recovered.bundle.readinessEpoch,
+      resolvedInvalidationIds: [],
+      review
+    });
+  }
+
+  return normalizeArticleBundle({
+    ...recovered.bundle,
+    readinessCheckpoint,
+    readinessInvalidations: []
+  });
+}
+
+export function resolveArticleBundleReadinessInvalidations(
+  rawBundle,
+  args
+) {
+  const recovered = recoverArticleBundleReviewState(rawBundle, {
+    currentTranslationFingerprints: args.currentTranslationFingerprints
+  });
   if (recovered.bundle.readinessInvalidations.length === 0) {
     throw new Error('Article bundle has no active readiness invalidations to resolve');
   }
-  if (recovered.translation.state !== 'SYNCED') {
-    throw new Error('Article readiness invalidations cannot resolve while translation state is not SYNCED');
-  }
-  const resolution = resolveArticleReadinessInvalidations({
-    currentSourceFingerprint: recovered.articleSourceFingerprint,
-    currentEpoch: recovered.bundle.readinessEpoch,
-    invalidations: recovered.bundle.readinessInvalidations,
-    review
-  });
-  return normalizeArticleBundle({
-    ...recovered.bundle,
-    readinessCheckpoint: resolution.checkpoint,
-    readinessInvalidations: []
-  });
+  return acceptArticleBundleReadinessReview(rawBundle, args);
 }
