@@ -201,13 +201,19 @@ export class GhostAdminClient {
     return payload.posts[0];
   }
 
-  async uploadImage(filePath, ref) {
-    const bytes = await readFile(filePath);
+  async uploadImageBytes({ bytes, filename }, ref) {
+    if (!(bytes instanceof Uint8Array)) throw new Error('image snapshot bytes must be a Uint8Array');
+    if (typeof filename !== 'string' || filename.trim() === '') throw new Error('image snapshot filename is required');
     const form = new FormData();
-    form.append('file', new Blob([bytes], { type: mimeType(filePath) }), path.basename(filePath));
+    form.append('file', new Blob([bytes], { type: mimeType(filename) }), path.basename(filename));
     form.append('purpose', 'image');
     if (ref) form.append('ref', ref);
     const payload = await this.request('images/upload/', { method: 'POST', body: form });
     return validateUploadedImage(payload?.images?.[0]);
+  }
+
+  async uploadImage(filePath, ref) {
+    const bytes = await readFile(filePath);
+    return this.uploadImageBytes({ bytes, filename: path.basename(filePath) }, ref);
   }
 }
