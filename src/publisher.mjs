@@ -3,9 +3,12 @@ import { requireCompiledDocument } from './compiler/document-compiler.mjs';
 import { createHtmlCardLexical } from './lexical.mjs';
 import { sourceTagForPath } from './post.mjs';
 import {
+  REVISION_TAG_PREFIX,
   assertProjectionManagedAndUnchanged,
+  getProjectionSourceFingerprint,
   getProjectionSyncHash,
   normalizeProjectionIdentityTags,
+  normalizeSourceFingerprint,
   projectionLookupTag,
   projectionSnapshotHash,
   replaceProjectionPublisherTags
@@ -20,6 +23,16 @@ function desiredStatusForAction(action) {
 function requireProjectionDescriptor(projection) {
   if (!projection || typeof projection !== 'object') throw new Error('projection descriptor is required');
   const identityTags = normalizeProjectionIdentityTags(projection.identityTags);
+  if (identityTags.length !== 1 && identityTags.length !== 3) {
+    throw new Error('projection identity must be legacy source-only or complete article + locale + variant identity');
+  }
+  const sourceFingerprint = projection.sourceFingerprint == null
+    ? null
+    : normalizeSourceFingerprint(projection.sourceFingerprint, 'projection.sourceFingerprint');
+  if (identityTags.length === 3 && sourceFingerprint == null) {
+    throw new Error('stable Article/LocaleVariant projection requires projection.sourceFingerprint');
+  }
+
   const requiredStrings = ['title', 'slug'];
   for (const field of requiredStrings) {
     if (typeof projection[field] !== 'string' || projection[field].trim() === '') {
@@ -35,6 +48,7 @@ function requireProjectionDescriptor(projection) {
   }
   return {
     identityTags,
+    sourceFingerprint,
     title: projection.title,
     slug: projection.slug,
     excerpt: projection.excerpt ?? null,
@@ -48,15 +62,17 @@ function requireProjectionDescriptor(projection) {
   };
 }
 
-async function assertExclusiveProjectionIdentity(client, lookupTag, identityTags, postId) {
+async function assertExclusiveProjectionIdentity(client, lookupTag, projection, postId) {
   const matches = await client.getPostsBySourceTag(lookupTag);
   if (matches.length !== 1 || matches[0]?.id !== postId) {
     throw new Error('Ghost source identity ownership changed during synchronization; projection identity is no longer exclusive; refusing sync stamp');
   }
-  assertProjectionManagedAndUnchanged(matches[0], identityTags);
+  assertProjectionManagedAndUnchanged(matches[0], projection.identityTags, {
+    requireSourceFingerprint: projection.sourceFingerprint != null
+  });
 }
 
-async function assertProjectionIdentityStableBeforeMutation(client, lookupTag, identityTags, existing) {
+async function assertProjectionIdentityStableBeforeMutation(client, lookupTag, projection, existing) {
   const matches = await client.getPostsBySourceTag(lookupTag);
   if (!existing) {
     if (matches.length !== 0) {
@@ -68,7 +84,9 @@ async function assertProjectionIdentityStableBeforeMutation(client, lookupTag, i
   if (matches.length !== 1 || matches[0]?.id !== existing.id) {
     throw new Error('Ghost source identity ownership changed before mutation; projection identity owner changed; refusing write');
   }
-  assertProjectionManagedAndUnchanged(matches[0], identityTags);
+  assertProjectionManagedAndUnchanged(matches[0], projection.identityTags, {
+    requireSourceFingerprint: projection.sourceFingerprint != null
+  });
   if (matches[0]?.updated_at !== existing.updated_at) {
     throw new Error('Ghost managed projection changed before mutation; refusing stale write');
   }
@@ -91,14 +109,20 @@ async function inspectProjectionSynchronization({ projection: rawProjection, com
   if (action === 'draft' && existing?.status === 'published') {
     throw new Error('draft sync refuses to unpublish an existing published Ghost post');
   }
-  if (existing) assertProjectionManagedAndUnchanged(existing, projection.identityTags);
+  if (existing) {
+    assertProjectionManagedAndUnchanged(existing, projection.identityTags, {
+      requireSourceFingerprint: projection.sourceFingerprint != null
+    });
+  }
 
   await assertDesiredSlugAvailable(client, projection.slug, existing);
 
+  const oldSourceFingerprint = existing == null ? null : getProjectionSourceFingerprint(existing);
   const oldSyncTag = existing == null ? null : getProjectionSyncHash(existing);
   const tags = [
     ...projection.tags,
     ...projection.identityTags,
+    ...(oldSourceFingerprint ? [`${REVISION_TAG_PREFIX}${oldSourceFingerprint.slice('sha256:'.length)}`] : []),
     ...(oldSyncTag ? [`#ox0-sync:${oldSyncTag}`] : [])
   ];
 
@@ -122,6 +146,7 @@ async function inspectProjectionSynchronization({ projection: rawProjection, com
     compiledDocument,
     existing,
     lookupTag,
+    projectedSourceFingerprint: oldSourceFingerprint,
     payload,
     renderedHtmlBytes: Buffer.byteLength(compiledDocument.htmlFragment, 'utf8')
   };
@@ -150,6 +175,8 @@ export async function planProjectionSynchronization(args) {
     sourceIdentity: inspected.lookupTag,
     identityTags: [...inspected.projection.identityTags],
     locale: inspected.compiledDocument.locale,
+    sourceFingerprint: inspected.projection.sourceFingerprint,
+    projectedSourceFingerprint: inspected.projectedSourceFingerprint,
     title: inspected.projection.title,
     slug: inspected.projection.slug,
     currentStatus: inspected.existing?.status ?? null,
@@ -176,7 +203,7 @@ export async function synchronizeProjection(args) {
   await assertProjectionIdentityStableBeforeMutation(
     client,
     inspected.lookupTag,
-    inspected.projection.identityTags,
+    inspected.projection,
     inspected.existing
   );
 
@@ -200,15 +227,21 @@ export async function synchronizeProjection(args) {
 
   const hash = projectionSnapshotHash(fresh);
   const stamped = await client.updatePostMetadata(fresh.id, {
-    tags: replaceProjectionPublisherTags(fresh.tags, inspected.projection.identityTags, hash),
+    tags: replaceProjectionPublisherTags(fresh.tags, inspected.projection.identityTags, hash, {
+      sourceFingerprint: inspected.projection.sourceFingerprint
+    }),
     updated_at: fresh.updated_at
   });
-  assertProjectionManagedAndUnchanged(stamped, inspected.projection.identityTags);
+  assertProjectionManagedAndUnchanged(stamped, inspected.projection.identityTags, {
+    requireSourceFingerprint: inspected.projection.sourceFingerprint != null
+  });
 
   const final = await client.getPostById(fresh.id);
-  assertProjectionManagedAndUnchanged(final, inspected.projection.identityTags);
+  assertProjectionManagedAndUnchanged(final, inspected.projection.identityTags, {
+    requireSourceFingerprint: inspected.projection.sourceFingerprint != null
+  });
   await assertDesiredSlugAvailable(client, inspected.projection.slug, final);
-  await assertExclusiveProjectionIdentity(client, inspected.lookupTag, inspected.projection.identityTags, final.id);
+  await assertExclusiveProjectionIdentity(client, inspected.lookupTag, inspected.projection, final.id);
   return final;
 }
 
