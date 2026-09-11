@@ -1,4 +1,7 @@
-import { assertProjectionManagedAndUnchanged } from './projection-managed-state.mjs';
+import {
+  assertProjectionManagedAndUnchanged,
+  getProjectionSourceFingerprint
+} from './projection-managed-state.mjs';
 
 function validFingerprint(value) {
   return typeof value === 'string' && /^sha256:[a-f0-9]{64}$/.test(value);
@@ -44,11 +47,28 @@ export function deriveProjectionState({
     return reconciliation('UNSUPPORTED_GHOST_STATUS', `status=${observedPost.status ?? '<missing>'}`);
   }
 
-  if (!validFingerprint(currentSourceFingerprint) || !validFingerprint(projectedSourceFingerprint)) {
-    return reconciliation('SOURCE_FINGERPRINT_UNAVAILABLE');
+  if (!validFingerprint(currentSourceFingerprint)) {
+    return reconciliation('CURRENT_SOURCE_FINGERPRINT_UNAVAILABLE');
   }
 
-  if (currentSourceFingerprint !== projectedSourceFingerprint) {
+  const recoveredFingerprint = getProjectionSourceFingerprint(observedPost);
+  if (projectedSourceFingerprint != null && !validFingerprint(projectedSourceFingerprint)) {
+    return reconciliation('PROJECTED_SOURCE_FINGERPRINT_INVALID');
+  }
+  if (
+    projectedSourceFingerprint != null
+    && recoveredFingerprint != null
+    && projectedSourceFingerprint !== recoveredFingerprint
+  ) {
+    return reconciliation('SOURCE_FINGERPRINT_CONFLICT');
+  }
+
+  const projected = projectedSourceFingerprint ?? recoveredFingerprint;
+  if (!validFingerprint(projected)) {
+    return reconciliation('PROJECTED_SOURCE_FINGERPRINT_UNAVAILABLE');
+  }
+
+  if (currentSourceFingerprint !== projected) {
     return { state: 'OUTDATED', visibility };
   }
 
