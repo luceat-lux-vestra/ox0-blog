@@ -1,5 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {
+  createArticleReadinessInvalidation,
+  validateArticleReadinessInvalidation
+} from '../src/article-readiness-invalidation.mjs';
 import { articleSemanticSourceFingerprintV1 } from '../src/article-readiness-source.mjs';
 import {
   ARTICLE_READINESS_REVIEW_CONTRACT_VERSION,
@@ -10,44 +14,35 @@ import {
 
 const KO = `sha256:${'a'.repeat(64)}`;
 const EN = `sha256:${'b'.repeat(64)}`;
-const EVIDENCE_A = `sha256:${'c'.repeat(64)}`;
-const EVIDENCE_B = `sha256:${'d'.repeat(64)}`;
 
 function sourceFingerprint(overrides = {}) {
   return articleSemanticSourceFingerprintV1({
     requiredLocales: overrides.requiredLocales ?? ['ko-KR', 'en'],
-    translationFingerprints: overrides.translationFingerprints ?? {
-      'ko-KR': KO,
-      en: EN
-    }
+    translationFingerprints: overrides.translationFingerprints ?? { 'ko-KR': KO, en: EN }
   });
 }
 
-function passReview(source, evidence = null, overrides = {}) {
+function passReview(source, overrides = {}) {
   return {
     result: 'PASS',
     kind: overrides.kind ?? 'agent',
     contractVersion: ARTICLE_READINESS_REVIEW_CONTRACT_VERSION,
-    reviewedSourceFingerprint: source,
-    reviewedEvidenceFingerprint: evidence
+    reviewedSourceFingerprint: source
   };
 }
 
 test('Article semantic source fingerprint is independent from required locale ordering', () => {
-  const first = sourceFingerprint({ requiredLocales: ['ko-KR', 'en'] });
-  const second = sourceFingerprint({ requiredLocales: ['en', 'ko-KR'] });
-  assert.equal(second, first);
+  assert.equal(
+    sourceFingerprint({ requiredLocales: ['ko-KR', 'en'] }),
+    sourceFingerprint({ requiredLocales: ['en', 'ko-KR'] })
+  );
 });
 
 test('Article semantic source fingerprint changes when any translation-relevant locale fingerprint changes', () => {
-  const first = sourceFingerprint();
-  const second = sourceFingerprint({
-    translationFingerprints: {
-      'ko-KR': `sha256:${'e'.repeat(64)}`,
-      en: EN
-    }
-  });
-  assert.notEqual(second, first);
+  assert.notEqual(
+    sourceFingerprint(),
+    sourceFingerprint({ translationFingerprints: { 'ko-KR': `sha256:${'e'.repeat(64)}`, en: EN } })
+  );
 });
 
 test('missing or unexpected locale fingerprint fails closed', () => {
@@ -67,21 +62,16 @@ test('missing or unexpected locale fingerprint fails closed', () => {
   );
 });
 
-test('READY is recoverable only when source and evidence exactly match reviewed checkpoint', () => {
+test('READY is recoverable from exact reviewed source with no active invalidation', () => {
   const source = sourceFingerprint();
   const checkpoint = createArticleReadinessCheckpoint({
     sourceFingerprint: source,
-    evidenceFingerprint: EVIDENCE_A,
-    review: passReview(source, EVIDENCE_A)
+    review: passReview(source)
   });
 
   assert.deepEqual(validateArticleReadinessCheckpoint(checkpoint), checkpoint);
   assert.deepEqual(
-    deriveReviewedArticleReadiness({
-      currentSourceFingerprint: source,
-      currentEvidenceFingerprint: EVIDENCE_A,
-      checkpoint
-    }),
+    deriveReviewedArticleReadiness({ currentSourceFingerprint: source, checkpoint }),
     { state: 'READY' }
   );
 });
@@ -89,60 +79,43 @@ test('READY is recoverable only when source and evidence exactly match reviewed 
 test('source change invalidates READY without mutating translation or Ghost state', () => {
   const source = sourceFingerprint();
   const changedSource = sourceFingerprint({
-    translationFingerprints: {
-      'ko-KR': KO,
-      en: `sha256:${'f'.repeat(64)}`
-    }
+    translationFingerprints: { 'ko-KR': KO, en: `sha256:${'f'.repeat(64)}` }
   });
-  const checkpoint = createArticleReadinessCheckpoint({
-    sourceFingerprint: source,
-    review: passReview(source)
-  });
+  const checkpoint = createArticleReadinessCheckpoint({ sourceFingerprint: source, review: passReview(source) });
 
   assert.deepEqual(
-    deriveReviewedArticleReadiness({
-      currentSourceFingerprint: changedSource,
-      checkpoint
-    }),
+    deriveReviewedArticleReadiness({ currentSourceFingerprint: changedSource, checkpoint }),
     { state: 'REVIEW_REQUIRED', reason: 'SOURCE_CHANGED' }
   );
 });
 
-test('evidence change invalidates READY even when Article source is unchanged', () => {
+test('durable RTA evidence invalidation survives session loss even when Article source is unchanged', () => {
   const source = sourceFingerprint();
-  const checkpoint = createArticleReadinessCheckpoint({
-    sourceFingerprint: source,
-    evidenceFingerprint: EVIDENCE_A,
-    review: passReview(source, EVIDENCE_A)
+  const checkpoint = createArticleReadinessCheckpoint({ sourceFingerprint: source, review: passReview(source) });
+  const invalidation = createArticleReadinessInvalidation({
+    reason: 'EXTERNAL_EVIDENCE_CHANGED',
+    origin: 'rta',
+    reference: 'rta:luceat-lux-vestra/research-to-action#22'
   });
 
+  assert.deepEqual(validateArticleReadinessInvalidation(invalidation), invalidation);
   assert.deepEqual(
-    deriveReviewedArticleReadiness({
-      currentSourceFingerprint: source,
-      currentEvidenceFingerprint: EVIDENCE_B,
-      checkpoint
-    }),
-    { state: 'REVIEW_REQUIRED', reason: 'EVIDENCE_CHANGED' }
+    deriveReviewedArticleReadiness({ currentSourceFingerprint: source, checkpoint, invalidation }),
+    { state: 'REVIEW_REQUIRED', reason: 'DURABLE_INVALIDATION', invalidation }
   );
 });
 
-test('external review signal invalidates READY without requiring a source fingerprint change', () => {
-  const source = sourceFingerprint();
-  const checkpoint = createArticleReadinessCheckpoint({
-    sourceFingerprint: source,
-    evidenceFingerprint: EVIDENCE_A,
-    review: passReview(source, EVIDENCE_A)
-  });
-
-  assert.deepEqual(
-    deriveReviewedArticleReadiness({
-      currentSourceFingerprint: source,
-      currentEvidenceFingerprint: EVIDENCE_A,
-      checkpoint,
-      reviewRequiredSignal: true
-    }),
-    { state: 'REVIEW_REQUIRED', reason: 'EXTERNAL_REVIEW_SIGNAL' }
-  );
+test('readiness invalidation refuses chat/session/model identifiers as durable references', () => {
+  for (const reference of ['chat:123', 'session:abc', 'model:gpt']) {
+    assert.throws(
+      () => createArticleReadinessInvalidation({
+        reason: 'SEMANTIC_REVIEW_REQUESTED',
+        origin: 'user',
+        reference
+      }),
+      /must not persist chat\/session\/model identifiers/
+    );
+  }
 });
 
 test('no readiness checkpoint never infers READY', () => {
@@ -152,40 +125,40 @@ test('no readiness checkpoint never infers READY', () => {
   );
 });
 
-test('checkpoint creation requires PASS over the exact source and evidence fingerprints', () => {
+test('checkpoint creation requires PASS over the exact current source fingerprint', () => {
   const source = sourceFingerprint();
   assert.throws(
     () => createArticleReadinessCheckpoint({
       sourceFingerprint: source,
-      evidenceFingerprint: EVIDENCE_A,
-      review: {
-        ...passReview(source, EVIDENCE_A),
-        result: 'UNCERTAIN'
-      }
+      review: { ...passReview(source), result: 'UNCERTAIN' }
     }),
     /requires review result PASS/
   );
-
   assert.throws(
     () => createArticleReadinessCheckpoint({
       sourceFingerprint: source,
-      evidenceFingerprint: EVIDENCE_A,
-      review: passReview(source, EVIDENCE_B)
+      review: passReview(`sha256:${'c'.repeat(64)}`)
     }),
-    /exact current evidence fingerprint/
+    /exact current source fingerprint/
   );
 });
 
-test('unsupported readiness contract versions fail closed', () => {
+test('unsupported readiness contract and invalidation versions fail closed', () => {
   const source = sourceFingerprint();
   assert.throws(
     () => createArticleReadinessCheckpoint({
       sourceFingerprint: source,
-      review: {
-        ...passReview(source),
-        contractVersion: 999
-      }
+      review: { ...passReview(source), contractVersion: 999 }
     }),
     /unsupported Article readiness review contract version/
+  );
+  assert.throws(
+    () => validateArticleReadinessInvalidation({
+      version: 999,
+      reason: 'EXTERNAL_EVIDENCE_CHANGED',
+      origin: 'rta',
+      reference: null
+    }),
+    /unsupported Article readiness invalidation version/
   );
 });
