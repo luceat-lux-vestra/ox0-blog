@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { requireCompiledDocument } from './compiler/document-compiler.mjs';
-import { requireRepositoryAssetFile } from './file-confinement.mjs';
+import { readRepositoryAssetSnapshot } from './file-confinement.mjs';
 import { createHtmlCardLexical } from './lexical.mjs';
 import { sourceTagForPath } from './post.mjs';
 import {
@@ -46,19 +46,34 @@ function requireProjectionDescriptor(projection) {
     visibility: projection.visibility,
     canonicalUrl: projection.canonicalUrl
   });
+  const localFeatureImage = metadata.featureImage && !/^https:\/\//.test(metadata.featureImage);
+  const featureImageFingerprint = projection.featureImageFingerprint == null
+    ? null
+    : normalizeSourceFingerprint(projection.featureImageFingerprint, 'projection.featureImageFingerprint');
+  if (identityTags.length === 3 && localFeatureImage && featureImageFingerprint == null) {
+    throw new Error('stable local featureImage requires projection.featureImageFingerprint');
+  }
+  if (!localFeatureImage && featureImageFingerprint != null) {
+    throw new Error('projection.featureImageFingerprint is only valid for a local featureImage');
+  }
 
   return {
     identityTags,
     sourceFingerprint,
+    featureImageFingerprint,
     locale: projection.locale ?? null,
     ...metadata
   };
 }
 
-async function validateProjectionFilesystem(projection, repoRoot) {
-  if (projection.identityTags.length === 1) return;
-  if (!projection.featureImage || /^https:\/\//.test(projection.featureImage)) return;
-  await requireRepositoryAssetFile(projection.featureImage, repoRoot, 'local featureImage');
+async function snapshotStableLocalFeatureImage(projection, repoRoot) {
+  if (projection.identityTags.length === 1) return null;
+  if (!projection.featureImage || /^https:\/\//.test(projection.featureImage)) return null;
+  const snapshot = await readRepositoryAssetSnapshot(projection.featureImage, repoRoot, 'local featureImage');
+  if (snapshot.fingerprint !== projection.featureImageFingerprint) {
+    throw new Error(`local featureImage changed since projection compilation: expected ${projection.featureImageFingerprint}, got ${snapshot.fingerprint}`);
+  }
+  return snapshot;
 }
 
 async function assertExclusiveProjectionIdentity(client, lookupTag, projection, postId) {
@@ -99,7 +114,7 @@ async function inspectProjectionSynchronization({ projection: rawProjection, com
     throw new Error(`CompiledDocument.locale=${compiledDocument.locale} does not match projection.locale=${projection.locale}`);
   }
 
-  await validateProjectionFilesystem(projection, repoRoot);
+  const featureImageSnapshot = await snapshotStableLocalFeatureImage(projection, repoRoot);
 
   const lexical = createHtmlCardLexical(compiledDocument.htmlFragment);
   const lookupTag = projectionLookupTag(projection.identityTags);
@@ -145,6 +160,7 @@ async function inspectProjectionSynchronization({ projection: rawProjection, com
     desiredStatus,
     projection,
     compiledDocument,
+    featureImageSnapshot,
     existing,
     lookupTag,
     projectedSourceFingerprint: oldSourceFingerprint,
@@ -165,7 +181,8 @@ export async function planProjectionSynchronization(args) {
   } else {
     featureImage = {
       action: 'upload',
-      ref: path.relative(repoRoot, featureImageValue).replaceAll(path.sep, '/')
+      ref: path.relative(repoRoot, featureImageValue).replaceAll(path.sep, '/'),
+      fingerprint: inspected.featureImageSnapshot?.fingerprint ?? inspected.projection.featureImageFingerprint
     };
   }
 
@@ -195,7 +212,18 @@ export async function synchronizeProjection(args) {
   let featureImage = inspected.projection.featureImage;
   if (featureImage && !/^https:\/\//.test(featureImage)) {
     const ref = path.relative(repoRoot, featureImage).replaceAll(path.sep, '/');
-    const uploaded = await client.uploadImage(featureImage, ref);
+    let uploaded;
+    if (inspected.featureImageSnapshot) {
+      if (typeof client.uploadImageBytes !== 'function') {
+        throw new Error('Ghost client must support uploadImageBytes for stable local featureImage publication');
+      }
+      uploaded = await client.uploadImageBytes({
+        bytes: inspected.featureImageSnapshot.bytes,
+        filename: inspected.featureImageSnapshot.filename
+      }, ref);
+    } else {
+      uploaded = await client.uploadImage(featureImage, ref);
+    }
     featureImage = uploaded.url;
     await assertDesiredSlugAvailable(client, inspected.projection.slug, inspected.existing);
   }
