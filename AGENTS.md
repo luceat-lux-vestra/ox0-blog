@@ -7,7 +7,8 @@
 - Technical claims must be traceable to evidence. Distinguish measurement, observation, inference, and opinion.
 - Benchmark writing must state environment, provenance, semantic-parity constraints, correctness checks, recovery behavior when relevant, and limitations before making performance claims.
 - Do not generalize hosted-runner observations into universal language/runtime claims.
-- Put local body images under `assets/` and reference them with Markdown image syntax; the renderer validates and embeds them as data URIs. Do not bypass this with raw HTML image elements.
+- Put local body images under `assets/` and reference them with Markdown image syntax; the renderer validates and embeds them as data URIs.
+- Do not author raw HTML in post bodies. The validated authoring contract intentionally rejects raw HTML so alternate asset-loading or embed paths cannot bypass repository validation.
 - Preserve `#ox0-*` tags for publisher state; authors must not add them manually.
 - Never put Ghost Admin credentials in source, logs, examples, issues, or pull requests.
 - Use dry-run before the first mutation of a new post. Publication remains an explicit action.
