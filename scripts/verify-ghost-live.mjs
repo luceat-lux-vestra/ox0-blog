@@ -5,7 +5,7 @@ import path from 'node:path';
 import { GhostAdminClient } from '../src/ghost-client.mjs';
 import { createHtmlCardLexical } from '../src/lexical.mjs';
 import { renderMarkdown } from '../src/markdown.mjs';
-import { sourceTagForPath, SYNC_TAG_PREFIX } from '../src/post.mjs';
+import { snapshotHash, sourceTagForPath, SYNC_TAG_PREFIX } from '../src/post.mjs';
 import { synchronizePost } from '../src/publisher.mjs';
 
 if (process.env.OX0_GHOST_LIVE_VERIFY !== '1') {
@@ -31,7 +31,33 @@ const sourceMarkdown = `# Temporary Ghost integration verification\n\nRun: ${suf
 const renderedHtml = renderMarkdown(sourceMarkdown);
 const lexical = createHtmlCardLexical(renderedHtml);
 const client = new GhostAdminClient({ url, key });
-const cleanupTagNames = new Set([...authorTags, sourceTag]);
+
+function expectedSyncTagForSlug(publicSlug) {
+  const hash = snapshotHash({
+    title: postTitle,
+    slug: publicSlug,
+    lexical,
+    custom_excerpt: null,
+    feature_image: null,
+    feature_image_alt: null,
+    featured: false,
+    visibility: 'public',
+    status: 'draft',
+    canonical_url: null,
+    tags: authorTags.map((name) => ({ name }))
+  });
+  return `${SYNC_TAG_PREFIX}${hash}`;
+}
+
+const expectedInitialSyncTag = expectedSyncTagForSlug(slug);
+const expectedRenamedSyncTag = expectedSyncTagForSlug(renamedSlug);
+const ownedTagNames = new Set([
+  ...authorTags,
+  sourceTag,
+  expectedInitialSyncTag,
+  expectedRenamedSyncTag
+]);
+const cleanupTagNames = new Set(ownedTagNames);
 const cleanupTagIds = new Map();
 let knownPostId = null;
 let knownPageId = null;
@@ -61,7 +87,11 @@ function source(postPath, publicSlug) {
 function rememberTags(post) {
   for (const tag of post?.tags ?? []) {
     const name = typeof tag === 'string' ? tag : tag?.name;
-    if (!name || (!authorTags.includes(name) && name !== sourceTag && !name.startsWith(SYNC_TAG_PREFIX))) continue;
+    if (!name) continue;
+    if (name.startsWith(SYNC_TAG_PREFIX) && !ownedTagNames.has(name)) {
+      throw new Error(`temporary verification post has unexpected sync tag; refusing cleanup ownership: ${name}`);
+    }
+    if (!ownedTagNames.has(name)) continue;
 
     cleanupTagNames.add(name);
     const id = typeof tag === 'object' ? tag?.id : null;
@@ -118,6 +148,31 @@ async function assertOwnedTemporaryPageById(id) {
   return page;
 }
 
+async function assertOwnedTemporaryPostById(id) {
+  let post;
+  try {
+    post = await client.getPostById(id);
+  } catch (error) {
+    if (error?.status === 404) return null;
+    throw error;
+  }
+
+  const tagNames = (post?.tags ?? [])
+    .map((tag) => typeof tag === 'string' ? tag : tag?.name)
+    .filter(Boolean);
+  const allowedTitles = new Set([postTitle, `${postTitle} manual-drift`]);
+  const allowedSlugs = new Set([slug, renamedSlug]);
+  const sourceClaims = tagNames.filter((name) => name === sourceTag);
+
+  if (
+    !post || post.id !== id || !allowedTitles.has(post.title) || !allowedSlugs.has(post.slug) ||
+    post.lexical !== lexical || post.status !== 'draft' || sourceClaims.length !== 1
+  ) {
+    throw new Error('temporary post id resolves to unexpected post state; refusing cleanup');
+  }
+  return post;
+}
+
 async function assertResourceMissingById(resource, id) {
   try {
     await client.request(`${resource}/${encodeURIComponent(id)}/`, {
@@ -157,7 +212,10 @@ async function recoverPost() {
   if (byIdentity.length > 1) throw new Error('multiple live-verification posts claim the temporary source identity');
   const post = byIdentity[0] ?? null;
   if (!post) return null;
-  if (post.title !== postTitle || post.lexical !== lexical || post.status !== 'draft') {
+  if (
+    post.title !== postTitle || ![slug, renamedSlug].includes(post.slug) ||
+    post.lexical !== lexical || post.status !== 'draft'
+  ) {
     throw new Error('temporary source identity resolves to unexpected post state; refusing cleanup');
   }
   return post;
@@ -200,18 +258,6 @@ async function cleanup() {
       } else {
         postCleanupSafeForTags = true;
       }
-    } else {
-      try {
-        const recovered = await client.getPostById(knownPostId);
-        if (recovered) rememberTags(recovered);
-      } catch (error) {
-        if (error?.status === 404) {
-          knownPostId = null;
-          postCleanupSafeForTags = true;
-        } else {
-          throw error;
-        }
-      }
     }
   } catch (error) {
     errors.push(error);
@@ -230,9 +276,16 @@ async function cleanup() {
   }
   if (knownPostId) {
     try {
-      await ignoreMissingDelete(`posts/${encodeURIComponent(knownPostId)}/`);
-      await assertResourceMissingById('posts', knownPostId);
-      postCleanupSafeForTags = true;
+      const ownedPost = await assertOwnedTemporaryPostById(knownPostId);
+      if (!ownedPost) {
+        knownPostId = null;
+        postCleanupSafeForTags = true;
+      } else {
+        rememberTags(ownedPost);
+        await ignoreMissingDelete(`posts/${encodeURIComponent(knownPostId)}/`);
+        await assertResourceMissingById('posts', knownPostId);
+        postCleanupSafeForTags = true;
+      }
     } catch (error) {
       errors.push(error);
     }
@@ -286,7 +339,7 @@ try {
   const firstNames = first.tags.map((tag) => typeof tag === 'string' ? tag : tag.name);
   assert.deepEqual(firstNames.slice(0, 2), authorTags);
   assert.equal(firstNames.at(-2), sourceTag);
-  assert.match(firstNames.at(-1), /^#ox0-sync:[a-f0-9]{64}$/);
+  assert.equal(firstNames.at(-1), expectedInitialSyncTag);
 
   const sourceIdentityTag = await findExactTag(sourceTag);
   assert.ok(sourceIdentityTag?.id, 'temporary source identity tag was not created');
@@ -322,7 +375,7 @@ try {
   const renamedNames = renamed.tags.map((tag) => typeof tag === 'string' ? tag : tag.name);
   assert.deepEqual(renamedNames.slice(0, 2), authorTags);
   assert.equal(renamedNames.at(-2), sourceTag);
-  assert.match(renamedNames.at(-1), /^#ox0-sync:[a-f0-9]{64}$/);
+  assert.equal(renamedNames.at(-1), expectedRenamedSyncTag);
 
   const pagePayload = await client.request('pages/', {
     method: 'POST',
@@ -389,14 +442,14 @@ try {
     postId: knownPostId,
     sourceTag,
     checks: [
-      'temporary namespace ownership preflight',
+      'temporary namespace ownership preflight including expected sync tags',
       'pinned Markdown render + draft create + direct Lexical fresh-read verification',
-      'author/publisher tag ordering and sync stamp',
+      'author/publisher tag ordering and exact sync stamps',
       'persisted source-tag slug drift resolved by canonical source-tag name',
       'managed public-slug rename',
       'exact page create/fresh-read state + page slug collision rejection',
       'manual managed-field drift rejected before overwrite',
-      'ID-bound unreferenced cleanup with persisted absence checks'
+      'ID-bound post/page/tag cleanup ownership with persisted absence checks'
     ]
   };
 } catch (error) {
