@@ -25,10 +25,13 @@ DRAFT
 | DRAFT | content work reaches reviewable shape | required source exists | validate content and locale state | REVIEW_REQUIRED | no |
 | REVIEW_REQUIRED | content/translation/research review PASS | all material questions resolved | record reviewed state/checkpoints | READY | normally no |
 | REVIEW_REQUIRED | material ambiguity remains | cannot safely infer intent | preserve unresolved item | REVIEW_REQUIRED | yes, only for unresolved decision |
-| READY | translation-relevant or factual content changes | source changed | invalidate readiness and rerun review | REVIEW_REQUIRED | no |
-| READY | non-semantic projection/Git metadata changes | Article content unaffected | no Article transition | READY | no |
+| READY | translation-relevant or factual source changes | source changed | invalidate readiness and rerun review | REVIEW_REQUIRED | no |
+| READY | provenance/evidence materially weakens a relied-on claim | source may be unchanged | audit affected claim against current evidence | REVIEW_REQUIRED | no |
+| READY | non-semantic projection/Git metadata changes | Article content/evidence unaffected | no Article transition | READY | no |
 
 A new Article starts in `DRAFT`.
+
+A provenance-driven transition to `REVIEW_REQUIRED` does **not** by itself make the Ghost projection outdated. If audit concludes no Article change is required, the Article can return to `READY` while the existing projection remains current. If source changes, projection state is then recomputed separately.
 
 ---
 
@@ -81,8 +84,9 @@ missing required locale -> INCOMPLETE
 | UNREVIEWED | all required locales exist | fingerprints computable | no checkpoint yet | equivalence review | REVIEW_REQUIRED | normally no |
 | any | required locale missing | configured required locale absent | mark missing set | none | INCOMPLETE | no |
 | INCOMPLETE | missing locale created | all required locales now exist | compute fingerprints | equivalence review | REVIEW_REQUIRED | no |
-| SYNCED | one locale changes | fingerprint differs from checkpoint | compute changed/stale sets | update sibling locale | STALE | no |
-| STALE | stale sibling updated | more than one current fingerprint differs from checkpoint | keep old checkpoint | equivalence review | REVIEW_REQUIRED | no |
+| SYNCED | exactly one locale changes | one fingerprint differs from checkpoint | compute changed/stale sets | update sibling locale | STALE | no |
+| SYNCED | multiple locales/shared semantic asset change | multiple translation fingerprints differ | keep old checkpoint | equivalence review | REVIEW_REQUIRED | no |
+| STALE | stale sibling updated | multiple current fingerprints now differ from checkpoint | keep old checkpoint | equivalence review | REVIEW_REQUIRED | no |
 | REVIEW_REQUIRED | review PASS | compiler/validation PASS; no material ambiguity | atomically advance checkpoint | none | SYNCED | no |
 | REVIEW_REQUIRED | review FAIL/UNCERTAIN | material mismatch/ambiguity exists | checkpoint unchanged | resolve content or escalate decision | REVIEW_REQUIRED | only if necessary |
 | SYNCED | deployment-only metadata changes | translation fingerprint unchanged | no effect | none | SYNCED | no |
@@ -95,7 +99,7 @@ Production publication requires `SYNCED` for all required locales under v1 polic
 
 ## 3. Git / PR work state
 
-Git work state is operational and separate from Article readiness.
+Git work state is **per logical work unit**, not a permanent global Article state.
 
 States:
 
@@ -118,11 +122,13 @@ IDLE -> ACTIVE -> CANDIDATE -> MERGED
 
 ### Meaning
 
-- `IDLE`: no active branch/PR currently owns the Article change.
+- `IDLE`: no active branch/PR currently owns the requested Article change.
 - `ACTIVE`: branch/PR exists and development may move HEAD normally.
 - `CANDIDATE`: development slice is stable enough to begin strict exact-HEAD merge judgment.
 - `CONFLICTED`: base/current ownership changed and semantic reconciliation is required.
-- `MERGED`: canonical source change is on `main`.
+- `MERGED`: this work unit's canonical source change is on `main`.
+
+A later Article change starts a new work unit from `IDLE`; it does not mutate the historical `MERGED` work unit back to `ACTIVE`.
 
 ### Transitions
 
@@ -135,59 +141,66 @@ IDLE -> ACTIVE -> CANDIDATE -> MERGED
 | CONFLICTED | reconciliation complete | no unresolved ownership conflict | continue work | ACTIVE | no |
 | CANDIDATE | strict merge gate PASS + authorized merge | exact final HEAD proven | squash merge with reviewed HEAD lock when supported | MERGED | normally no |
 
-Development-phase CI/review is feedback. Strict proof obligations begin at `CANDIDATE` merge judgment; a later HEAD change returns the work to `ACTIVE`.
+Development-phase CI/review is feedback. Strict proof obligations begin at `CANDIDATE` merge judgment; a later HEAD change returns the current work unit to `ACTIVE`.
 
 ---
 
 ## 4. Ghost projection state
 
-This state tracks the relationship between canonical Git source and Ghost. It is independent from Git merge and Article readiness.
+This state tracks the relationship between canonical Git source and managed Ghost content. It is independent from Git merge and Article readiness.
 
 States:
 
 ```text
 NOT_PROJECTED
-PLANNED
-DRAFT_PROJECTED
-PUBLISHED
+DRAFT_CURRENT
+PUBLISHED_CURRENT
 OUTDATED
 DRIFTED
 ```
 
+`dry-run`/planning is an **operation/result**, not a projection state. Running a dry-run must not erase whether Ghost is currently published, draft, absent, outdated, or drifted.
+
 ### Diagram
 
 ```text
-NOT_PROJECTED -> PLANNED -> DRAFT_PROJECTED -> PUBLISHED
-                      \             ^             |
-                       \------------|-------------+
-                                    | source changes
-                                    v
-                                 OUTDATED
+NOT_PROJECTED ---- draft write ----> DRAFT_CURRENT
+      |                                  |
+      | publish                          | publish
+      v                                  v
+PUBLISHED_CURRENT <-----------------------+
+      |
+      | canonical managed source changes
+      v
+   OUTDATED
 
-Ghost-side managed drift/collision -> DRIFTED
+managed Ghost drift / ownership ambiguity -> DRIFTED
 ```
 
 ### Meaning
 
 - `NOT_PROJECTED`: no managed Ghost projection exists.
-- `PLANNED`: dry-run has produced a current read-only plan; no Ghost write is implied.
-- `DRAFT_PROJECTED`: managed Ghost draft matches the last successful projection.
-- `PUBLISHED`: managed public Ghost post matches the last successful projection.
-- `OUTDATED`: canonical source is newer/different than the managed Ghost projection.
+- `DRAFT_CURRENT`: managed Ghost draft matches the recorded/current canonical projection fingerprint.
+- `PUBLISHED_CURRENT`: managed public Ghost post matches the recorded/current canonical projection fingerprint.
+- `OUTDATED`: a managed projection exists but canonical managed source is newer/different.
 - `DRIFTED`: Ghost managed state/identity/collision differs from what the publisher can safely reconcile automatically.
+
+### Dry-run plan
+
+A dry-run produces an ephemeral `PublicationPlan` bound to the observed source fingerprint/identity and observed Ghost state. It does **not** transition projection state. The plan is stale and must be recomputed if relevant source or Ghost state changes before mutation.
 
 ### Transitions
 
 | From | Event | Preconditions | Agent action | To | User input? |
 |---|---|---|---|---|---|
-| NOT_PROJECTED/OUTDATED | dry-run | source/translation validation PASS | read Ghost and produce plan only | PLANNED | no |
-| PLANNED | explicit draft projection | mutation guards PASS | write managed Ghost draft and fresh-read verify | DRAFT_PROJECTED | explicit mutation instruction may be required by task |
-| PLANNED/DRAFT_PROJECTED/OUTDATED | explicit `발행해` | Article READY; translation SYNCED; publication/identity gates PASS | publish and verify persisted managed state | PUBLISHED | **yes: publication authorization** |
-| DRAFT_PROJECTED/PUBLISHED | canonical Article changes | translation-relevant or managed source fingerprint changes | mark projection stale | OUTDATED | no |
+| any non-drifted state | dry-run | source/translation validation PASS | read Ghost; emit bounded plan; no write | unchanged | no |
+| NOT_PROJECTED/OUTDATED | explicit draft projection | current plan/mutation guards PASS | write managed Ghost draft and fresh-read verify | DRAFT_CURRENT | explicit mutation instruction may be required by task |
+| NOT_PROJECTED/DRAFT_CURRENT/OUTDATED | explicit `발행해` | Article READY; translation SYNCED; publication/identity gates PASS | publish and verify persisted managed state | PUBLISHED_CURRENT | **yes: publication authorization** |
+| DRAFT_CURRENT/PUBLISHED_CURRENT | canonical managed source changes | managed source fingerprint differs from last verified projection | no Ghost write yet | OUTDATED | no |
 | any managed state | Ghost drift/ownership ambiguity detected | safe automatic reconciliation not proven | stop mutation; preserve evidence | DRIFTED | possibly, for reconciliation decision |
-| DRIFTED | explicit reconciliation proves ownership/current intent | ambiguity resolved | rerun plan/guards | PLANNED | only when semantic/ownership decision is needed |
+| DRIFTED | reconciliation proves ownership/current intent | ambiguity resolved | rerun read-only plan/guards | recomputed from observed source/Ghost state | only when semantic/ownership decision is needed |
 
-A Git merge never automatically transitions to `PUBLISHED`.
+A Git merge never automatically transitions to `PUBLISHED_CURRENT`.
 
 ---
 
@@ -244,3 +257,21 @@ Examples:
 ```
 
 Conversation events do not bypass repository authorization, validation, translation, merge, or publication guards.
+
+---
+
+## 7. Typical combined states
+
+The machines form a product state. These examples show why they stay separate.
+
+| Situation | Article | Translation | Git work | Ghost projection |
+|---|---|---|---|---|
+| new bilingual draft in progress | DRAFT/REVIEW_REQUIRED | UNREVIEWED/REVIEW_REQUIRED | ACTIVE | NOT_PROJECTED |
+| source ready in PR, not merged | READY | SYNCED | CANDIDATE | prior projection state unchanged |
+| merged but not yet published | READY | SYNCED | MERGED | NOT_PROJECTED or OUTDATED |
+| fully current public Article | READY | SYNCED | MERGED for latest work unit | PUBLISHED_CURRENT |
+| RTA evidence weakens a published claim, audit not finished | REVIEW_REQUIRED | SYNCED | IDLE or ACTIVE | PUBLISHED_CURRENT |
+| Korean update being translated | REVIEW_REQUIRED | STALE | ACTIVE | previous projection may remain PUBLISHED_CURRENT until canonical source changes/merges |
+| Ghost edited outside managed workflow | Article state unchanged | translation state unchanged | Git state unchanged | DRIFTED |
+
+No single state value is allowed to collapse these independent facts.
