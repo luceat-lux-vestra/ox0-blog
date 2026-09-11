@@ -48,6 +48,6 @@ export function assertMutationApplied(post, payload) {
   }
 
   if (post.lexical !== payload.lexical) {
-    throw new Error('Ghost mutation did not preserve the requested direct Lexical representation exactly; refusing sync stamp');
+    throw new Error('Ghost Lexical document differs; expected the requested direct Lexical representation exactly; refusing sync stamp');
   }
 }
