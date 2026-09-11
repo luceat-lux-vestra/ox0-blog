@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto';
 
 export const SYNC_TAG_PREFIX = '#ox0-sync:';
+export const REVISION_TAG_PREFIX = '#ox0-revision-';
 export const ARTICLE_TAG_PREFIX = '#ox0-article-';
 export const LOCALE_TAG_PREFIX = '#ox0-locale-';
 export const SOURCE_TAG_PREFIX = '#ox0-source-';
 
 const IDENTITY_PREFIXES = [ARTICLE_TAG_PREFIX, LOCALE_TAG_PREFIX, SOURCE_TAG_PREFIX];
-const SUPPORTED_PUBLISHER_PREFIXES = [...IDENTITY_PREFIXES, SYNC_TAG_PREFIX];
+const SUPPORTED_PUBLISHER_PREFIXES = [...IDENTITY_PREFIXES, REVISION_TAG_PREFIX, SYNC_TAG_PREFIX];
 
 function namesFromTags(tags) {
   return (tags ?? [])
@@ -65,6 +66,24 @@ export function projectionLookupTag(identityTags) {
   return sourceTags[0];
 }
 
+export function normalizeSourceFingerprint(value, name = 'sourceFingerprint') {
+  if (typeof value !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(value)) {
+    throw new Error(`${name} must be sha256:<64 lowercase hex>`);
+  }
+  return value;
+}
+
+export function getProjectionSourceFingerprint(post) {
+  const names = namesFromTags(post?.tags);
+  assertNoUnknownPublisherTags(names);
+  const revisions = names.filter((tag) => tag.startsWith(REVISION_TAG_PREFIX));
+  if (revisions.length > 1) throw new Error('Ghost post has multiple ox0 revision tags');
+  if (revisions.length === 0) return null;
+  const hash = revisions[0].slice(REVISION_TAG_PREFIX.length);
+  if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error('Ghost post has malformed ox0 revision tag');
+  return `sha256:${hash}`;
+}
+
 export function getProjectionSyncHash(post) {
   const names = namesFromTags(post?.tags);
   assertNoUnknownPublisherTags(names);
@@ -101,7 +120,7 @@ export function projectionSnapshotHash(post) {
     .digest('hex');
 }
 
-export function assertProjectionManagedAndUnchanged(post, identityTags) {
+export function assertProjectionManagedAndUnchanged(post, identityTags, { requireSourceFingerprint = false } = {}) {
   const expectedIdentity = normalizeProjectionIdentityTags(identityTags);
   const names = namesFromTags(post?.tags);
   assertNoUnknownPublisherTags(names);
@@ -111,12 +130,18 @@ export function assertProjectionManagedAndUnchanged(post, identityTags) {
     throw new Error(`Ghost post ${post?.slug ?? '<unknown>'} has invalid ox0 source identity; invalid ox0 projection identity; refusing overwrite`);
   }
 
+  const sourceFingerprint = getProjectionSourceFingerprint(post);
+  if (requireSourceFingerprint && sourceFingerprint == null) {
+    throw new Error(`Ghost post ${post?.slug ?? '<unknown>'} is missing ox0 projection source revision evidence`);
+  }
+
   const expectedHash = getProjectionSyncHash(post);
   if (!expectedHash) {
     throw new Error(`Ghost post ${post?.slug ?? '<unknown>'} exists but is not managed by ox0-blog; refusing implicit adoption`);
   }
 
-  const expectedTail = [...expectedIdentity, `${SYNC_TAG_PREFIX}${expectedHash}`];
+  const revisionTag = sourceFingerprint == null ? [] : [`${REVISION_TAG_PREFIX}${sourceFingerprint.slice('sha256:'.length)}`];
+  const expectedTail = [...expectedIdentity, ...revisionTag, `${SYNC_TAG_PREFIX}${expectedHash}`];
   const actualTail = names.slice(-expectedTail.length);
   if (actualTail.length !== expectedTail.length || actualTail.some((tag, index) => tag !== expectedTail[index])) {
     throw new Error(`Ghost post ${post?.slug ?? '<unknown>'} has invalid ox0 publisher tag ordering; refusing overwrite`);
@@ -128,11 +153,15 @@ export function assertProjectionManagedAndUnchanged(post, identityTags) {
   }
 }
 
-export function replaceProjectionPublisherTags(tags, identityTags, hash) {
+export function replaceProjectionPublisherTags(tags, identityTags, hash, { sourceFingerprint = null } = {}) {
   if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error('sync hash must be sha256 hex');
   const identity = normalizeProjectionIdentityTags(identityTags);
+  const normalizedSourceFingerprint = sourceFingerprint == null ? null : normalizeSourceFingerprint(sourceFingerprint);
   const names = namesFromTags(tags);
   assertNoUnknownPublisherTags(names);
   const publicTags = names.filter((tag) => publisherPrefix(tag) == null);
-  return [...publicTags, ...identity, `${SYNC_TAG_PREFIX}${hash}`];
+  const revisionTag = normalizedSourceFingerprint == null
+    ? []
+    : [`${REVISION_TAG_PREFIX}${normalizedSourceFingerprint.slice('sha256:'.length)}`];
+  return [...publicTags, ...identity, ...revisionTag, `${SYNC_TAG_PREFIX}${hash}`];
 }
