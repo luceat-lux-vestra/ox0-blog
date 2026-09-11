@@ -81,7 +81,7 @@ test('live Ghost verifier claims cleanup ownership only after namespace prefligh
   assert.ok(mutationIndex > claimIndex, 'ownership must be claimed before the first Ghost mutation');
 });
 
-test('live Ghost verifier never recovers cleanup ownership from slug alone', () => {
+test('live Ghost verifier never recovers destructive cleanup ownership from slug alone', () => {
   const source = readFileSync(SCRIPT, 'utf8');
   const recoverStart = source.indexOf('async function recoverPost()');
   const recoverEnd = source.indexOf('async function ignoreMissingDelete', recoverStart);
@@ -94,11 +94,13 @@ test('live Ghost verifier never recovers cleanup ownership from slug alone', () 
   assert.match(recoverPost, /post\.lexical !== lexical/);
   assert.match(recoverPost, /post\.status !== 'draft'/);
 
-  assert.match(
-    source,
-    /recoveredPage\.title !== pageTitle \|\| recoveredPage\.lexical !== lexical \|\| recoveredPage\.status !== 'draft'/,
-    'page cleanup recovery must verify the exact temporary marker state'
-  );
+  const cleanupStart = source.indexOf('async function cleanup()');
+  const cleanupEnd = source.indexOf('\ntry {\n  await assertTemporaryNamespaceUnused();', cleanupStart);
+  assert.ok(cleanupStart >= 0 && cleanupEnd > cleanupStart, 'cleanup must remain inspectable');
+  const cleanup = source.slice(cleanupStart, cleanupEnd);
+  assert.match(cleanup, /const unresolvedPage = await client\.getPageBySlug\(pageSlug\);/);
+  assert.match(cleanup, /temporary page exists without a proven owned id; refusing slug-only cleanup; manual reconciliation required/);
+  assert.doesNotMatch(cleanup, /knownPageId = .*\.id/, 'page slug lookup may detect an orphan but must never adopt its id for deletion');
 });
 
 test('live Ghost verifier re-proves exact page ownership by id before destructive cleanup', () => {
