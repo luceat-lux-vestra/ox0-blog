@@ -44,6 +44,25 @@ test('live Ghost verifier filters the tags resource by its own name field', () =
   assert.doesNotMatch(source, /filter: `tags\.name:/);
 });
 
+test('live Ghost verifier preflights every tag it may later delete', () => {
+  const source = readFileSync(SCRIPT, 'utf8');
+  const initialSync = source.indexOf('const expectedInitialSyncTag = expectedSyncTagForSlug(slug);');
+  const renamedSync = source.indexOf('const expectedRenamedSyncTag = expectedSyncTagForSlug(renamedSlug);');
+  const ownedNames = source.indexOf('const ownedTagNames = new Set([');
+  const cleanupNames = source.indexOf('const cleanupTagNames = new Set(ownedTagNames);');
+  const preflight = source.indexOf('async function assertTemporaryNamespaceUnused()');
+  const firstMutation = source.indexOf('const first = await synchronizePost({');
+
+  assert.match(source, /import \{ snapshotHash, sourceTagForPath, SYNC_TAG_PREFIX \}/);
+  assert.ok(initialSync >= 0 && renamedSync > initialSync, 'both expected sync tags must be precomputed');
+  assert.ok(ownedNames > renamedSync && cleanupNames > ownedNames, 'expected sync tags must enter the cleanup ownership set before preflight');
+  assert.ok(preflight > cleanupNames && firstMutation > preflight, 'tag namespace preflight must precede mutation');
+  assert.match(source, /for \(const name of cleanupTagNames\)/);
+  assert.match(source, /temporary verification post has unexpected sync tag; refusing cleanup ownership/);
+  assert.match(source, /assert\.equal\(firstNames\.at\(-1\), expectedInitialSyncTag\)/);
+  assert.match(source, /assert\.equal\(renamedNames\.at\(-1\), expectedRenamedSyncTag\)/);
+});
+
 test('live Ghost verifier claims cleanup ownership only after namespace preflight', () => {
   const source = readFileSync(SCRIPT, 'utf8');
   const cleanupGuard = 'if (!ownsTemporaryNamespace) return [];';
@@ -71,6 +90,7 @@ test('live Ghost verifier never recovers cleanup ownership from slug alone', () 
   const recoverPost = source.slice(recoverStart, recoverEnd);
   assert.doesNotMatch(recoverPost, /getPostBySlug/, 'post cleanup recovery must not adopt a slug-only match');
   assert.match(recoverPost, /post\.title !== postTitle/);
+  assert.match(recoverPost, /\!\[slug, renamedSlug\]\.includes\(post\.slug\)/);
   assert.match(recoverPost, /post\.lexical !== lexical/);
   assert.match(recoverPost, /post\.status !== 'draft'/);
 
@@ -79,17 +99,12 @@ test('live Ghost verifier never recovers cleanup ownership from slug alone', () 
     /recoveredPage\.title !== pageTitle \|\| recoveredPage\.lexical !== lexical \|\| recoveredPage\.status !== 'draft'/,
     'page cleanup recovery must verify the exact temporary marker state'
   );
-  assert.match(
-    source,
-    /const recovered = await client\.getPostById\(knownPostId\);/,
-    'once a post ID is known, cleanup metadata recovery must stay bound to that ID'
-  );
 });
 
 test('live Ghost verifier re-proves exact page ownership by id before destructive cleanup', () => {
   const source = readFileSync(SCRIPT, 'utf8');
   const helperStart = source.indexOf('async function assertOwnedTemporaryPageById(id)');
-  const helperEnd = source.indexOf('async function assertResourceMissingById', helperStart);
+  const helperEnd = source.indexOf('async function assertOwnedTemporaryPostById', helperStart);
   assert.ok(helperStart >= 0 && helperEnd > helperStart, 'page ownership helper must remain inspectable');
 
   const helper = source.slice(helperStart, helperEnd);
@@ -110,6 +125,33 @@ test('live Ghost verifier re-proves exact page ownership by id before destructiv
   assert.ok(ownershipCheck > cleanupBlock, 'page ownership must be reread by exact id before deletion');
   assert.ok(pageDelete > ownershipCheck, 'page deletion must occur only after exact ownership is proven');
   assert.ok(absenceCheck > pageDelete, 'page deletion must be followed by persisted absence verification');
+});
+
+test('live Ghost verifier re-proves exact post ownership by id before destructive cleanup', () => {
+  const source = readFileSync(SCRIPT, 'utf8');
+  const helperStart = source.indexOf('async function assertOwnedTemporaryPostById(id)');
+  const helperEnd = source.indexOf('async function assertResourceMissingById', helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, 'post ownership helper must remain inspectable');
+
+  const helper = source.slice(helperStart, helperEnd);
+  assert.match(helper, /client\.getPostById\(id\)/);
+  assert.match(helper, /post\.id !== id/);
+  assert.match(helper, /allowedTitles\.has\(post\.title\)/);
+  assert.match(helper, /allowedSlugs\.has\(post\.slug\)/);
+  assert.match(helper, /post\.lexical !== lexical/);
+  assert.match(helper, /post\.status !== 'draft'/);
+  assert.match(helper, /sourceClaims\.length !== 1/);
+  assert.match(helper, /refusing cleanup/);
+
+  const cleanupBlock = source.indexOf('if (knownPostId) {');
+  const ownershipCheck = source.indexOf('const ownedPost = await assertOwnedTemporaryPostById(knownPostId);', cleanupBlock);
+  const postDelete = source.indexOf('await ignoreMissingDelete(`posts/${encodeURIComponent(knownPostId)}/`);', ownershipCheck);
+  const absenceCheck = source.indexOf("await assertResourceMissingById('posts', knownPostId);", postDelete);
+
+  assert.ok(cleanupBlock >= 0, 'post cleanup block must remain present');
+  assert.ok(ownershipCheck > cleanupBlock, 'post ownership must be reread by exact id before deletion');
+  assert.ok(postDelete > ownershipCheck, 'post deletion must occur only after exact ownership is proven');
+  assert.ok(absenceCheck > postDelete, 'post deletion must be followed by persisted absence verification');
 });
 
 test('live Ghost verifier retains publisher tags unless post cleanup is proven complete', () => {
