@@ -1,3 +1,4 @@
+import { validateArticleReadinessInvalidation } from './article-readiness-invalidation.mjs';
 import { ARTICLE_SOURCE_FINGERPRINT_VERSION } from './article-readiness-source.mjs';
 
 export const ARTICLE_READINESS_CHECKPOINT_VERSION = 1;
@@ -5,10 +6,9 @@ export const ARTICLE_READINESS_REVIEW_CONTRACT_VERSION = 1;
 
 const REVIEW_KINDS = new Set(['agent', 'human']);
 
-function requireFingerprint(value, name, { nullable = false } = {}) {
-  if (nullable && value == null) return null;
+function requireFingerprint(value, name) {
   if (typeof value !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(value)) {
-    throw new Error(`${name} must be sha256:<64 lowercase hex>${nullable ? ' or null' : ''}`);
+    throw new Error(`${name} must be sha256:<64 lowercase hex>`);
   }
   return value;
 }
@@ -32,33 +32,19 @@ function normalizeReview(review, { requirePass = false } = {}) {
   };
 }
 
-export function createArticleReadinessCheckpoint({
-  sourceFingerprint,
-  evidenceFingerprint = null,
-  review
-}) {
+export function createArticleReadinessCheckpoint({ sourceFingerprint, review }) {
   const source = requireFingerprint(sourceFingerprint, 'sourceFingerprint');
-  const evidence = requireFingerprint(evidenceFingerprint, 'evidenceFingerprint', { nullable: true });
   const normalizedReview = normalizeReview(review, { requirePass: true });
   const reviewedSource = requireFingerprint(review.reviewedSourceFingerprint, 'review.reviewedSourceFingerprint');
-  const reviewedEvidence = requireFingerprint(
-    review.reviewedEvidenceFingerprint ?? null,
-    'review.reviewedEvidenceFingerprint',
-    { nullable: true }
-  );
 
   if (reviewedSource !== source) {
     throw new Error('Article readiness review does not cover the exact current source fingerprint');
-  }
-  if (reviewedEvidence !== evidence) {
-    throw new Error('Article readiness review does not cover the exact current evidence fingerprint');
   }
 
   return {
     version: ARTICLE_READINESS_CHECKPOINT_VERSION,
     sourceFingerprintVersion: ARTICLE_SOURCE_FINGERPRINT_VERSION,
     sourceFingerprint: source,
-    evidenceFingerprint: evidence,
     review: normalizedReview
   };
 }
@@ -74,45 +60,36 @@ export function validateArticleReadinessCheckpoint(checkpoint) {
     throw new Error(`unsupported Article source fingerprint version: ${checkpoint.sourceFingerprintVersion}`);
   }
   const sourceFingerprint = requireFingerprint(checkpoint.sourceFingerprint, 'Article readiness checkpoint sourceFingerprint');
-  const evidenceFingerprint = requireFingerprint(
-    checkpoint.evidenceFingerprint ?? null,
-    'Article readiness checkpoint evidenceFingerprint',
-    { nullable: true }
-  );
   const review = normalizeReview(checkpoint.review);
   return {
     version: checkpoint.version,
     sourceFingerprintVersion: checkpoint.sourceFingerprintVersion,
     sourceFingerprint,
-    evidenceFingerprint,
     review
   };
 }
 
 export function deriveReviewedArticleReadiness({
   currentSourceFingerprint,
-  currentEvidenceFingerprint = null,
   checkpoint = null,
-  reviewRequiredSignal = false
+  invalidation = null
 }) {
   const source = requireFingerprint(currentSourceFingerprint, 'currentSourceFingerprint');
-  const evidence = requireFingerprint(currentEvidenceFingerprint, 'currentEvidenceFingerprint', { nullable: true });
-  if (typeof reviewRequiredSignal !== 'boolean') {
-    throw new Error('reviewRequiredSignal must be boolean');
-  }
 
   if (checkpoint == null) {
     return { state: 'REVIEW_REQUIRED', reason: 'NO_READINESS_CHECKPOINT' };
   }
   const accepted = validateArticleReadinessCheckpoint(checkpoint);
-  if (reviewRequiredSignal) {
-    return { state: 'REVIEW_REQUIRED', reason: 'EXTERNAL_REVIEW_SIGNAL' };
+  if (invalidation != null) {
+    const durable = validateArticleReadinessInvalidation(invalidation);
+    return {
+      state: 'REVIEW_REQUIRED',
+      reason: 'DURABLE_INVALIDATION',
+      invalidation: durable
+    };
   }
   if (accepted.sourceFingerprint !== source) {
     return { state: 'REVIEW_REQUIRED', reason: 'SOURCE_CHANGED' };
-  }
-  if (accepted.evidenceFingerprint !== evidence) {
-    return { state: 'REVIEW_REQUIRED', reason: 'EVIDENCE_CHANGED' };
   }
   return { state: 'READY' };
 }
