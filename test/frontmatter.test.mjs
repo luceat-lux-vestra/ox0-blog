@@ -15,6 +15,27 @@ test('parses YAML-style doubled single-quote escapes', () => {
   assert.equal(parsed.data.title, "It's constrained");
 });
 
+test('quoted and block scalars may contain hash characters literally', () => {
+  const quoted = parseFrontmatterDocument(`---\ntitle: "C# notes"\nslug: example\nstatus: draft\n---\nbody`);
+  assert.equal(quoted.data.title, 'C# notes');
+
+  const block = parseFrontmatterDocument(`---\ntitle: Example\nslug: example\nstatus: draft\nexcerpt: |-\n  line # literal content\n---\nbody`);
+  assert.equal(block.data.excerpt, 'line # literal content');
+});
+
+test('rejects inline YAML comments instead of silently changing canonical metadata', () => {
+  for (const frontmatter of [
+    'title: Example # temporary note',
+    'title: # missing title',
+    'tags:\n  - Rust # primary tag'
+  ]) {
+    assert.throws(
+      () => parseFrontmatterDocument(`---\n${frontmatter}\nslug: example\nstatus: draft\n---\nbody`),
+      /inline YAML comments are not supported/
+    );
+  }
+});
+
 test('rejects malformed single-quoted scalars instead of treating them as plain strings', () => {
   for (const title of ["'unclosed", "'closed' trailing", "'it\\'s not yaml'"]) {
     assert.throws(
