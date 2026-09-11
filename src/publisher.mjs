@@ -15,6 +15,24 @@ async function assertExclusiveSourceIdentity(client, sourceTag, postId) {
   }
 }
 
+async function assertSourceIdentityStableBeforeMutation(client, sourceTag, existing) {
+  const matches = await client.getPostsBySourceTag(sourceTag);
+  if (!existing) {
+    if (matches.length !== 0) {
+      throw new Error('Ghost source identity ownership changed before mutation; refusing write');
+    }
+    return;
+  }
+
+  if (matches.length !== 1 || matches[0]?.id !== existing.id) {
+    throw new Error('Ghost source identity ownership changed before mutation; refusing write');
+  }
+  assertManagedAndUnchanged(matches[0], sourceTag);
+  if (matches[0]?.updated_at !== existing.updated_at) {
+    throw new Error('Ghost managed post changed before mutation; refusing stale write');
+  }
+}
+
 export async function synchronizePost({ source, action, client, repoRoot, renderMarkdown }) {
   if (!['draft', 'publish'].includes(action)) throw new Error('action must be draft or publish');
   if (typeof renderMarkdown !== 'function') throw new Error('renderMarkdown function is required');
@@ -43,7 +61,9 @@ export async function synchronizePost({ source, action, client, repoRoot, render
     const ref = path.relative(repoRoot, featureImage).replaceAll(path.sep, '/');
     const uploaded = await client.uploadImage(featureImage, ref);
     featureImage = uploaded.url;
+    await assertDesiredSlugAvailable(client, source.metadata.slug, existing);
   }
+  await assertSourceIdentityStableBeforeMutation(client, sourceTag, existing);
 
   const publicTags = source.metadata.tags;
   const oldSyncTags = existing
