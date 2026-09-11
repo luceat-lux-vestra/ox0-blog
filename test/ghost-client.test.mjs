@@ -124,7 +124,8 @@ test('source identity resolves its current Ghost tag slug by exact tag name', as
   const posts = await client.getPostsBySourceTag(sourceTag);
   assert.equal(posts.length, 1);
   assert.equal(seen.length, 2);
-  assert.equal(seen[0].searchParams.get('filter'), `tags.name:'${sourceTag}'`);
+  assert.equal(seen[0].searchParams.get('filter'), `name:'${sourceTag}'`);
+  assert.doesNotMatch(seen[0].searchParams.get('filter'), /^tags\.name:/);
   assert.equal(seen[0].searchParams.get('limit'), '2');
   assert.equal(seen[1].searchParams.get('filter'), 'tag:manually-renamed-source-tag');
   assert.equal(seen[1].searchParams.get('limit'), '2');
