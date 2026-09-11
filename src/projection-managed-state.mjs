@@ -108,7 +108,7 @@ export function assertProjectionManagedAndUnchanged(post, identityTags) {
 
   const actualIdentity = names.filter((tag) => IDENTITY_PREFIXES.some((prefix) => tag.startsWith(prefix)));
   if (actualIdentity.length !== expectedIdentity.length || actualIdentity.some((tag, index) => tag !== expectedIdentity[index])) {
-    throw new Error(`Ghost post ${post?.slug ?? '<unknown>'} has invalid ox0 source identity / projection identity; refusing overwrite`);
+    throw new Error(`Ghost post ${post?.slug ?? '<unknown>'} has invalid ox0 source identity; invalid ox0 projection identity; refusing overwrite`);
   }
 
   const expectedHash = getProjectionSyncHash(post);
