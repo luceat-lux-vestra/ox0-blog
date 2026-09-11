@@ -86,6 +86,32 @@ test('live Ghost verifier never recovers cleanup ownership from slug alone', () 
   );
 });
 
+test('live Ghost verifier re-proves exact page ownership by id before destructive cleanup', () => {
+  const source = readFileSync(SCRIPT, 'utf8');
+  const helperStart = source.indexOf('async function assertOwnedTemporaryPageById(id)');
+  const helperEnd = source.indexOf('async function assertResourceMissingById', helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, 'page ownership helper must remain inspectable');
+
+  const helper = source.slice(helperStart, helperEnd);
+  assert.match(helper, /pages\/\$\{encodeURIComponent\(id\)\}/);
+  assert.match(helper, /page\.id !== id/);
+  assert.match(helper, /page\.title !== pageTitle/);
+  assert.match(helper, /page\.slug !== pageSlug/);
+  assert.match(helper, /page\.lexical !== lexical/);
+  assert.match(helper, /page\.status !== 'draft'/);
+  assert.match(helper, /refusing cleanup/);
+
+  const cleanupBlock = source.indexOf('if (knownPageId) {');
+  const ownershipCheck = source.indexOf('const ownedPage = await assertOwnedTemporaryPageById(knownPageId);', cleanupBlock);
+  const pageDelete = source.indexOf('await ignoreMissingDelete(`pages/${encodeURIComponent(knownPageId)}/`);', ownershipCheck);
+  const absenceCheck = source.indexOf("await assertResourceMissingById('pages', knownPageId);", pageDelete);
+
+  assert.ok(cleanupBlock >= 0, 'page cleanup block must remain present');
+  assert.ok(ownershipCheck > cleanupBlock, 'page ownership must be reread by exact id before deletion');
+  assert.ok(pageDelete > ownershipCheck, 'page deletion must occur only after exact ownership is proven');
+  assert.ok(absenceCheck > pageDelete, 'page deletion must be followed by persisted absence verification');
+});
+
 test('live Ghost verifier retains publisher tags unless post cleanup is proven complete', () => {
   const source = readFileSync(SCRIPT, 'utf8');
   const postDelete = source.indexOf('await ignoreMissingDelete(`posts/${encodeURIComponent(knownPostId)}/`);');
