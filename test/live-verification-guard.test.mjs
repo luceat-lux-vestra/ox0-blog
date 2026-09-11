@@ -38,6 +38,12 @@ test('live Ghost verifier requires credentials after explicit opt-in', () => {
   assert.doesNotMatch(result.stderr, /fetch failed|ENOTFOUND|timed out/);
 });
 
+test('live Ghost verifier filters the tags resource by its own name field', () => {
+  const source = readFileSync(SCRIPT, 'utf8');
+  assert.match(source, /filter: `name:\$\{nqlString\(name\)\}`/);
+  assert.doesNotMatch(source, /filter: `tags\.name:/);
+});
+
 test('live Ghost verifier claims cleanup ownership only after namespace preflight', () => {
   const source = readFileSync(SCRIPT, 'utf8');
   const cleanupGuard = 'if (!ownsTemporaryNamespace) return [];';
