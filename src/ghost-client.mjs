@@ -4,6 +4,7 @@ import path from 'node:path';
 
 const API_VERSION = 'v6.0';
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const MAX_FEATURE_IMAGE_URL_LENGTH = 2000;
 
 function base64url(input) {
   return Buffer.from(input).toString('base64url');
@@ -48,6 +49,26 @@ function mimeType(filePath) {
     case '.svg': return 'image/svg+xml';
     default: throw new Error(`unsupported image extension: ${filePath}`);
   }
+}
+
+function validateUploadedImage(image) {
+  if (!image || typeof image.url !== 'string' || image.url.length === 0) {
+    throw new Error('Ghost image upload response did not contain a valid images[0].url string');
+  }
+  if (image.url.length > MAX_FEATURE_IMAGE_URL_LENGTH) {
+    throw new Error(`Ghost image upload URL must be at most ${MAX_FEATURE_IMAGE_URL_LENGTH} characters`);
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(image.url);
+  } catch {
+    throw new Error('Ghost image upload response URL must be a valid absolute URL');
+  }
+  if (parsed.protocol !== 'https:') {
+    throw new Error('Ghost image upload response URL must use https');
+  }
+  return image;
 }
 
 export class GhostAdminClient {
@@ -187,7 +208,6 @@ export class GhostAdminClient {
     form.append('purpose', 'image');
     if (ref) form.append('ref', ref);
     const payload = await this.request('images/upload/', { method: 'POST', body: form });
-    if (!payload?.images?.[0]?.url) throw new Error('Ghost image upload response did not contain images[0].url');
-    return payload.images[0];
+    return validateUploadedImage(payload?.images?.[0]);
   }
 }
