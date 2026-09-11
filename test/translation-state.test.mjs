@@ -13,7 +13,7 @@ function state(currentFingerprints, acceptedFingerprints = ACCEPTED) {
   });
 }
 
-test('missing required locale takes precedence over checkpoint state', () => {
+test('missing required locale takes precedence over a valid checkpoint relation', () => {
   assert.deepEqual(
     state({ 'ko-KR': 'sha256:ko-a' }),
     { state: 'INCOMPLETE', missingLocales: ['en'] }
@@ -72,6 +72,17 @@ test('malformed accepted checkpoint fails closed instead of becoming synchronize
     () => deriveTranslationState({
       requiredLocales: REQUIRED,
       currentFingerprints: ACCEPTED,
+      acceptedFingerprints: { 'ko-KR': 'sha256:ko-a' }
+    }),
+    /malformed/
+  );
+});
+
+test('malformed accepted checkpoint fails closed even when a current locale is missing', () => {
+  assert.throws(
+    () => deriveTranslationState({
+      requiredLocales: REQUIRED,
+      currentFingerprints: { 'ko-KR': 'sha256:ko-a' },
       acceptedFingerprints: { 'ko-KR': 'sha256:ko-a' }
     }),
     /malformed/
