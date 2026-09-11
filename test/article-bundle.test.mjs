@@ -44,12 +44,13 @@ function fingerprints() {
   return { 'ko-KR': KO, en: EN };
 }
 
-function readinessPass(sourceFingerprint) {
+function readinessPass(sourceFingerprint, reviewedInvalidationIds = []) {
   return {
     result: 'PASS',
     kind: 'agent',
     contractVersion: ARTICLE_READINESS_REVIEW_CONTRACT_VERSION,
-    reviewedSourceFingerprint: sourceFingerprint
+    reviewedSourceFingerprint: sourceFingerprint,
+    reviewedInvalidationIds
   };
 }
 
@@ -148,7 +149,7 @@ test('initial readiness review resolves review request and creates first READY c
   });
   const ready = resolveArticleBundleReadinessInvalidations(requested, {
     currentTranslationFingerprints: fingerprints(),
-    review: readinessPass(before.articleSourceFingerprint)
+    review: readinessPass(before.articleSourceFingerprint, [ID1])
   });
   assert.equal(ready.readinessCheckpoint.reviewedEpoch, 1);
   assert.deepEqual(ready.readinessCheckpoint.resolvedInvalidationIds, [ID1]);
@@ -162,9 +163,7 @@ test('initial readiness review resolves review request and creates first READY c
 });
 
 test('DRAFT with incomplete locale source stays DRAFT and cannot request readiness review yet', () => {
-  const draft = {
-    ...translationReviewedDraftBundle({ translationCheckpoint: null })
-  };
+  const draft = { ...translationReviewedDraftBundle({ translationCheckpoint: null }) };
   const current = { 'ko-KR': KO };
   assert.deepEqual(
     recoverArticleBundleReviewState(draft, { currentTranslationFingerprints: current }).readiness,
@@ -262,7 +261,7 @@ test('manually clearing invalidation records cannot restore READY while epoch is
   );
 });
 
-test('atomic invalidation resolution reviews exact source and records epoch + all event ids', () => {
+test('atomic invalidation resolution reviews exact source and all event ids', () => {
   let bundle = invalidateArticleBundleReadiness(reviewedBundle(), {
     id: ID1,
     reason: 'EXTERNAL_EVIDENCE_CHANGED',
@@ -278,7 +277,7 @@ test('atomic invalidation resolution reviews exact source and records epoch + al
   });
   const resolved = resolveArticleBundleReadinessInvalidations(bundle, {
     currentTranslationFingerprints: fingerprints(),
-    review: readinessPass(before.articleSourceFingerprint)
+    review: readinessPass(before.articleSourceFingerprint, [ID1, ID2])
   });
 
   assert.equal(resolved.readinessEpoch, 2);
@@ -290,6 +289,24 @@ test('atomic invalidation resolution reviews exact source and records epoch + al
       currentTranslationFingerprints: fingerprints()
     }).readiness,
     { state: 'READY' }
+  );
+});
+
+test('bundle review cannot resolve active invalidations it did not explicitly cover', () => {
+  const bundle = invalidateArticleBundleReadiness(reviewedBundle(), {
+    id: ID1,
+    reason: 'EXTERNAL_EVIDENCE_CHANGED',
+    origin: 'rta'
+  });
+  const before = recoverArticleBundleReviewState(bundle, {
+    currentTranslationFingerprints: fingerprints()
+  });
+  assert.throws(
+    () => resolveArticleBundleReadinessInvalidations(bundle, {
+      currentTranslationFingerprints: fingerprints(),
+      review: readinessPass(before.articleSourceFingerprint)
+    }),
+    /does not cover the exact resolved invalidation id set/
   );
 });
 
@@ -307,7 +324,7 @@ test('invalidation resolution refuses non-SYNCED translation state', () => {
   assert.throws(
     () => resolveArticleBundleReadinessInvalidations(bundle, {
       currentTranslationFingerprints: changed,
-      review: readinessPass(changedSource)
+      review: readinessPass(changedSource, [ID1])
     }),
     /cannot resolve while translation state is not SYNCED/
   );
