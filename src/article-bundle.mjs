@@ -101,6 +101,12 @@ export function normalizeArticleBundle(raw) {
   };
 }
 
+function draftReadiness(bundle) {
+  return bundle.readinessCheckpoint == null
+    && bundle.readinessEpoch === 0
+    && bundle.readinessInvalidations.length === 0;
+}
+
 export function recoverArticleBundleReviewState(rawBundle, { currentTranslationFingerprints }) {
   const bundle = normalizeArticleBundle(rawBundle);
   const acceptedFingerprints = bundle.translationCheckpoint == null
@@ -119,7 +125,9 @@ export function recoverArticleBundleReviewState(rawBundle, { currentTranslationF
       bundle,
       translation,
       articleSourceFingerprint: null,
-      readiness: { state: 'REVIEW_REQUIRED', reason: 'SOURCE_INCOMPLETE' }
+      readiness: draftReadiness(bundle)
+        ? { state: 'DRAFT' }
+        : { state: 'REVIEW_REQUIRED', reason: 'SOURCE_INCOMPLETE' }
     };
   }
 
@@ -160,6 +168,30 @@ export function invalidateArticleBundleReadiness(
     ...bundle,
     readinessEpoch: nextEpoch,
     readinessInvalidations: [...bundle.readinessInvalidations, invalidation]
+  });
+}
+
+export function requestArticleBundleReadinessReview(
+  rawBundle,
+  {
+    currentTranslationFingerprints,
+    id,
+    origin = 'blog-audit',
+    reference = null
+  }
+) {
+  const recovered = recoverArticleBundleReviewState(rawBundle, { currentTranslationFingerprints });
+  if (recovered.readiness.state !== 'DRAFT') {
+    throw new Error('Article readiness review can be requested only from DRAFT');
+  }
+  if (recovered.translation.state === 'INCOMPLETE') {
+    throw new Error('Article readiness review cannot be requested while required locale source is incomplete');
+  }
+  return invalidateArticleBundleReadiness(recovered.bundle, {
+    id,
+    reason: 'SEMANTIC_REVIEW_REQUESTED',
+    origin,
+    reference
   });
 }
 
