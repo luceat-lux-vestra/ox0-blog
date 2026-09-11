@@ -29,6 +29,20 @@ function article() {
   };
 }
 
+function compiler() {
+  return {
+    async compile(variant, projectContext) {
+      return {
+        htmlFragment: '<h1>본문</h1>',
+        locale: variant.locale,
+        referencedAssets: [],
+        diagnostics: [],
+        projectContext
+      };
+    }
+  };
+}
+
 test('descriptor derives public content and stable identity from Article + LocaleVariant', () => {
   const descriptor = createLocaleProjectionDescriptor({
     article: article(),
@@ -71,7 +85,7 @@ test('missing required locale variant fails closed', () => {
 
 test('compile boundary is async, validates locale ownership, and attaches source revision', async () => {
   const seen = [];
-  const compiler = {
+  const observedCompiler = {
     async compile(variant, projectContext) {
       seen.push({ variant, projectContext });
       return {
@@ -87,7 +101,7 @@ test('compile boundary is async, validates locale ownership, and attaches source
     article: article(),
     locale: 'ko-KR',
     publication: { tags: ['Rust'] },
-    compiler,
+    compiler: observedCompiler,
     projectContext: { root: '/repo' }
   });
 
@@ -98,26 +112,50 @@ test('compile boundary is async, validates locale ownership, and attaches source
   assert.equal(result.projection.locale, 'ko-KR');
   assert.match(result.sourceFingerprint, /^sha256:[a-f0-9]{64}$/);
   assert.equal(result.projection.sourceFingerprint, result.sourceFingerprint);
+  assert.deepEqual(result.projection.materialAssets, []);
+  assert.deepEqual(result.fingerprintEvidence, {
+    materialAssets: [],
+    featureImageFingerprint: null
+  });
   assert.equal(Object.hasOwn(result.projection, 'featureImageFingerprint'), false);
 });
 
-test('local feature image needs stable content evidence and carries it into publisher handoff', async () => {
-  const compiler = {
-    async compile(variant) {
-      return {
-        htmlFragment: '<h1>본문</h1>',
-        locale: variant.locale,
-        referencedAssets: [],
-        diagnostics: []
-      };
+test('material asset fingerprint evidence is copied into publisher handoff and affects source revision', async () => {
+  const materialAssets = [
+    { ref: '../assets/diagram.png', sha256: 'a'.repeat(64) }
+  ];
+  const first = await compileLocaleProjection({
+    article: article(),
+    locale: 'ko-KR',
+    compiler: compiler(),
+    fingerprintEvidence: { materialAssets }
+  });
+
+  assert.deepEqual(first.projection.materialAssets, materialAssets);
+  assert.deepEqual(first.fingerprintEvidence.materialAssets, materialAssets);
+  assert.notEqual(first.projection.materialAssets, materialAssets);
+  assert.notEqual(first.projection.materialAssets[0], materialAssets[0]);
+
+  const changed = await compileLocaleProjection({
+    article: article(),
+    locale: 'ko-KR',
+    compiler: compiler(),
+    fingerprintEvidence: {
+      materialAssets: [
+        { ref: '../assets/diagram.png', sha256: 'b'.repeat(64) }
+      ]
     }
-  };
+  });
+  assert.notEqual(changed.sourceFingerprint, first.sourceFingerprint);
+});
+
+test('local feature image needs stable content evidence and carries it into publisher handoff', async () => {
   await assert.rejects(
     compileLocaleProjection({
       article: article(),
       locale: 'ko-KR',
       publication: { featureImage: '/repo/assets/cover.png' },
-      compiler
+      compiler: compiler()
     }),
     /requires featureImageFingerprint/
   );
@@ -127,15 +165,16 @@ test('local feature image needs stable content evidence and carries it into publ
     article: article(),
     locale: 'ko-KR',
     publication: { featureImage: '/repo/assets/cover.png' },
-    compiler,
+    compiler: compiler(),
     fingerprintEvidence: { featureImageFingerprint }
   });
   assert.match(result.sourceFingerprint, /^sha256:[a-f0-9]{64}$/);
   assert.equal(result.projection.featureImageFingerprint, featureImageFingerprint);
+  assert.equal(result.fingerprintEvidence.featureImageFingerprint, featureImageFingerprint);
 });
 
 test('compiler returning a different locale fails before publisher handoff', async () => {
-  const compiler = {
+  const wrongCompiler = {
     async compile() {
       return {
         htmlFragment: '<h1>wrong</h1>',
@@ -147,7 +186,7 @@ test('compiler returning a different locale fails before publisher handoff', asy
   };
 
   await assert.rejects(
-    compileLocaleProjection({ article: article(), locale: 'ko-KR', compiler }),
+    compileLocaleProjection({ article: article(), locale: 'ko-KR', compiler: wrongCompiler }),
     /compiler returned locale=en/
   );
 });
