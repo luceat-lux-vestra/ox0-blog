@@ -22,6 +22,16 @@ function desiredStatusForAction(action) {
   return action === 'publish' ? 'published' : 'draft';
 }
 
+function tagNames(tags) {
+  return (tags ?? []).map((tag) => typeof tag === 'string' ? tag : tag?.name).filter(Boolean);
+}
+
+function sameTagNames(left, right) {
+  const a = tagNames(left);
+  const b = tagNames(right);
+  return a.length === b.length && a.every((tag, index) => tag === b[index]);
+}
+
 function requireProjectionDescriptor(projection) {
   if (!projection || typeof projection !== 'object') throw new Error('projection descriptor is required');
   const identityTags = normalizeProjectionIdentityTags(projection.identityTags);
@@ -106,6 +116,14 @@ async function assertProjectionIdentityStableBeforeMutation(client, lookupTag, p
   }
 }
 
+function synchronizationOperation(inspected) {
+  if (!inspected.existing) return 'create';
+  const sameRevision = inspected.projection.sourceFingerprint != null
+    && inspected.projectedSourceFingerprint === inspected.projection.sourceFingerprint;
+  if (!sameRevision) return 'update';
+  return inspected.existing.status === inspected.desiredStatus ? 'noop' : 'status-update';
+}
+
 async function inspectProjectionSynchronization({ projection: rawProjection, compiledDocument: rawDocument, action, client, repoRoot }) {
   const desiredStatus = desiredStatusForAction(action);
   const projection = requireProjectionDescriptor(rawProjection);
@@ -169,25 +187,29 @@ async function inspectProjectionSynchronization({ projection: rawProjection, com
   };
 }
 
+function plannedFeatureImage(inspected, repoRoot, operation) {
+  const featureImageValue = inspected.projection.featureImage;
+  if (!featureImageValue) return { action: 'none' };
+  if (operation === 'noop' || operation === 'status-update') {
+    return { action: 'preserve', url: inspected.existing?.feature_image ?? null };
+  }
+  if (/^https:\/\//.test(featureImageValue)) {
+    return { action: 'reuse', url: featureImageValue };
+  }
+  return {
+    action: 'upload',
+    ref: path.relative(repoRoot, featureImageValue).replaceAll(path.sep, '/'),
+    fingerprint: inspected.featureImageSnapshot?.fingerprint ?? inspected.projection.featureImageFingerprint
+  };
+}
+
 export async function planProjectionSynchronization(args) {
   const { repoRoot } = args;
   const inspected = await inspectProjectionSynchronization(args);
-  const featureImageValue = inspected.projection.featureImage;
-  let featureImage;
-  if (!featureImageValue) {
-    featureImage = { action: 'none' };
-  } else if (/^https:\/\//.test(featureImageValue)) {
-    featureImage = { action: 'reuse', url: featureImageValue };
-  } else {
-    featureImage = {
-      action: 'upload',
-      ref: path.relative(repoRoot, featureImageValue).replaceAll(path.sep, '/'),
-      fingerprint: inspected.featureImageSnapshot?.fingerprint ?? inspected.projection.featureImageFingerprint
-    };
-  }
+  const operation = synchronizationOperation(inspected);
 
   return {
-    operation: inspected.existing ? 'update' : 'create',
+    operation,
     existingPostId: inspected.existing?.id ?? null,
     sourceIdentity: inspected.lookupTag,
     identityTags: [...inspected.projection.identityTags],
@@ -199,16 +221,93 @@ export async function planProjectionSynchronization(args) {
     currentStatus: inspected.existing?.status ?? null,
     desiredStatus: inspected.desiredStatus,
     tags: [...inspected.projection.tags],
-    featureImage,
+    featureImage: plannedFeatureImage(inspected, repoRoot, operation),
     renderedHtmlBytes: inspected.renderedHtmlBytes,
     referencedAssets: [...inspected.compiledDocument.referencedAssets],
     diagnostics: [...inspected.compiledDocument.diagnostics]
   };
 }
 
+async function verifyNoopProjection(client, inspected) {
+  await assertProjectionIdentityStableBeforeMutation(
+    client,
+    inspected.lookupTag,
+    inspected.projection,
+    inspected.existing
+  );
+  const fresh = await client.getPostById(inspected.existing.id);
+  assertProjectionManagedAndUnchanged(fresh, inspected.projection.identityTags, {
+    requireSourceFingerprint: true
+  });
+  if (fresh.updated_at !== inspected.existing.updated_at) {
+    throw new Error('Ghost managed projection changed during no-op verification; refusing stale success');
+  }
+  await assertDesiredSlugAvailable(client, inspected.projection.slug, fresh);
+  await assertExclusiveProjectionIdentity(client, inspected.lookupTag, inspected.projection, fresh.id);
+  return fresh;
+}
+
+async function synchronizeStatusOnly(client, inspected) {
+  await assertProjectionIdentityStableBeforeMutation(
+    client,
+    inspected.lookupTag,
+    inspected.projection,
+    inspected.existing
+  );
+
+  const expectedManagedHash = projectionSnapshotHash({
+    ...inspected.existing,
+    status: inspected.desiredStatus
+  });
+  const changed = await client.updatePost(inspected.existing.id, {
+    status: inspected.desiredStatus,
+    updated_at: inspected.existing.updated_at
+  });
+  const fresh = await client.getPostById(changed.id);
+  if (fresh.status !== inspected.desiredStatus) {
+    throw new Error('Ghost status-only projection mutation did not apply requested status');
+  }
+  if (projectionSnapshotHash(fresh) !== expectedManagedHash) {
+    throw new Error('Ghost status-only projection mutation changed another managed field; refusing sync stamp');
+  }
+  if (!sameTagNames(fresh.tags, inspected.existing.tags)) {
+    throw new Error('Ghost status-only projection mutation changed publisher/author tags; refusing sync stamp');
+  }
+
+  await assertDesiredSlugAvailable(client, inspected.projection.slug, fresh);
+  const ownershipMatches = await client.getPostsBySourceTag(inspected.lookupTag);
+  if (ownershipMatches.length !== 1 || ownershipMatches[0]?.id !== fresh.id) {
+    throw new Error('Ghost source identity ownership changed after status mutation; projection identity owner changed; refusing sync stamp');
+  }
+
+  const hash = projectionSnapshotHash(fresh);
+  const stamped = await client.updatePostMetadata(fresh.id, {
+    tags: replaceProjectionPublisherTags(fresh.tags, inspected.projection.identityTags, hash, {
+      sourceFingerprint: inspected.projection.sourceFingerprint
+    }),
+    updated_at: fresh.updated_at
+  });
+  assertProjectionManagedAndUnchanged(stamped, inspected.projection.identityTags, {
+    requireSourceFingerprint: true
+  });
+
+  const final = await client.getPostById(fresh.id);
+  assertProjectionManagedAndUnchanged(final, inspected.projection.identityTags, {
+    requireSourceFingerprint: true
+  });
+  await assertDesiredSlugAvailable(client, inspected.projection.slug, final);
+  await assertExclusiveProjectionIdentity(client, inspected.lookupTag, inspected.projection, final.id);
+  return final;
+}
+
 export async function synchronizeProjection(args) {
   const { client, repoRoot } = args;
   const inspected = await inspectProjectionSynchronization(args);
+  const operation = synchronizationOperation(inspected);
+
+  if (operation === 'noop') return verifyNoopProjection(client, inspected);
+  if (operation === 'status-update') return synchronizeStatusOnly(client, inspected);
+
   let featureImage = inspected.projection.featureImage;
   if (featureImage && !/^https:\/\//.test(featureImage)) {
     const ref = path.relative(repoRoot, featureImage).replaceAll(path.sep, '/');
