@@ -8,6 +8,11 @@ import {
 import { createHtmlCardLexical } from './lexical.mjs';
 import { assertDesiredSlugAvailable, assertMutationApplied } from './publish-guards.mjs';
 
+function desiredStatusForAction(action) {
+  if (!['draft', 'publish'].includes(action)) throw new Error('action must be draft or publish');
+  return action === 'publish' ? 'published' : 'draft';
+}
+
 async function assertExclusiveSourceIdentity(client, sourceTag, postId) {
   const matches = await client.getPostsBySourceTag(sourceTag);
   if (matches.length !== 1 || matches[0]?.id !== postId) {
@@ -33,16 +38,14 @@ async function assertSourceIdentityStableBeforeMutation(client, sourceTag, exist
   }
 }
 
-export async function synchronizePost({ source, action, client, repoRoot, renderMarkdown }) {
-  if (!['draft', 'publish'].includes(action)) throw new Error('action must be draft or publish');
+async function inspectSynchronization({ source, action, client, repoRoot, renderMarkdown }) {
+  const desiredStatus = desiredStatusForAction(action);
   if (typeof renderMarkdown !== 'function') throw new Error('renderMarkdown function is required');
-
-  const desiredStatus = action === 'publish' ? 'published' : 'draft';
   if (source.metadata.status !== desiredStatus) {
     throw new Error(`frontmatter status=${source.metadata.status} does not match requested action=${action}`);
   }
 
-  const html = renderMarkdown(source.markdown);
+  const html = await renderMarkdown(source.markdown, { postPath: source.postPath, repoRoot });
   const lexical = createHtmlCardLexical(html);
   const sourceTag = sourceTagForPath(source.postPath, repoRoot);
   const identityMatches = await client.getPostsBySourceTag(sourceTag);
@@ -56,16 +59,6 @@ export async function synchronizePost({ source, action, client, repoRoot, render
 
   await assertDesiredSlugAvailable(client, source.metadata.slug, existing);
 
-  let featureImage = source.metadata.featureImage;
-  if (featureImage && !/^https:\/\//.test(featureImage)) {
-    const ref = path.relative(repoRoot, featureImage).replaceAll(path.sep, '/');
-    const uploaded = await client.uploadImage(featureImage, ref);
-    featureImage = uploaded.url;
-    await assertDesiredSlugAvailable(client, source.metadata.slug, existing);
-  }
-  await assertSourceIdentityStableBeforeMutation(client, sourceTag, existing);
-
-  const publicTags = source.metadata.tags;
   const oldSyncTags = existing
     ? (existing.tags ?? []).map((tag) => typeof tag === 'string' ? tag : tag.name).filter((name) => name?.startsWith('#ox0-sync:'))
     : [];
@@ -75,8 +68,8 @@ export async function synchronizePost({ source, action, client, repoRoot, render
     slug: source.metadata.slug,
     lexical,
     custom_excerpt: source.metadata.excerpt,
-    tags: [...publicTags, sourceTag, ...oldSyncTags],
-    feature_image: featureImage,
+    tags: [...source.metadata.tags, sourceTag, ...oldSyncTags],
+    feature_image: source.metadata.featureImage,
     feature_image_alt: source.metadata.featureImageAlt,
     featured: source.metadata.featured,
     visibility: source.metadata.visibility,
@@ -84,10 +77,61 @@ export async function synchronizePost({ source, action, client, repoRoot, render
     status: desiredStatus
   };
 
+  return {
+    desiredStatus,
+    existing,
+    sourceTag,
+    payload,
+    renderedHtmlBytes: Buffer.byteLength(html, 'utf8')
+  };
+}
+
+export async function planPostSynchronization(args) {
+  const { source, repoRoot } = args;
+  const inspected = await inspectSynchronization(args);
+  let featureImage;
+  if (!source.metadata.featureImage) {
+    featureImage = { action: 'none' };
+  } else if (/^https:\/\//.test(source.metadata.featureImage)) {
+    featureImage = { action: 'reuse', url: source.metadata.featureImage };
+  } else {
+    featureImage = {
+      action: 'upload',
+      ref: path.relative(repoRoot, source.metadata.featureImage).replaceAll(path.sep, '/')
+    };
+  }
+
+  return {
+    operation: inspected.existing ? 'update' : 'create',
+    existingPostId: inspected.existing?.id ?? null,
+    sourceIdentity: inspected.sourceTag,
+    title: source.metadata.title,
+    slug: source.metadata.slug,
+    currentStatus: inspected.existing?.status ?? null,
+    desiredStatus: inspected.desiredStatus,
+    tags: [...source.metadata.tags],
+    featureImage,
+    renderedHtmlBytes: inspected.renderedHtmlBytes
+  };
+}
+
+export async function synchronizePost(args) {
+  const { source, client, repoRoot } = args;
+  const inspected = await inspectSynchronization(args);
+  let featureImage = source.metadata.featureImage;
+  if (featureImage && !/^https:\/\//.test(featureImage)) {
+    const ref = path.relative(repoRoot, featureImage).replaceAll(path.sep, '/');
+    const uploaded = await client.uploadImage(featureImage, ref);
+    featureImage = uploaded.url;
+    await assertDesiredSlugAvailable(client, source.metadata.slug, inspected.existing);
+  }
+  await assertSourceIdentityStableBeforeMutation(client, inspected.sourceTag, inspected.existing);
+
+  const payload = { ...inspected.payload, feature_image: featureImage };
   let changed;
-  if (existing) {
-    payload.updated_at = existing.updated_at;
-    changed = await client.updatePost(existing.id, payload);
+  if (inspected.existing) {
+    payload.updated_at = inspected.existing.updated_at;
+    changed = await client.updatePost(inspected.existing.id, payload);
   } else {
     changed = await client.createPost(payload);
   }
@@ -95,18 +139,18 @@ export async function synchronizePost({ source, action, client, repoRoot, render
   const fresh = await client.getPostById(changed.id);
   assertMutationApplied(fresh, payload);
   await assertDesiredSlugAvailable(client, source.metadata.slug, fresh);
-  await assertExclusiveSourceIdentity(client, sourceTag, fresh.id);
+  await assertExclusiveSourceIdentity(client, inspected.sourceTag, fresh.id);
 
   const hash = snapshotHash(fresh);
   const stamped = await client.updatePostMetadata(fresh.id, {
-    tags: replacePublisherTags(fresh.tags, sourceTag, hash),
+    tags: replacePublisherTags(fresh.tags, inspected.sourceTag, hash),
     updated_at: fresh.updated_at
   });
-  assertManagedAndUnchanged(stamped, sourceTag);
+  assertManagedAndUnchanged(stamped, inspected.sourceTag);
 
   const final = await client.getPostById(fresh.id);
-  assertManagedAndUnchanged(final, sourceTag);
+  assertManagedAndUnchanged(final, inspected.sourceTag);
   await assertDesiredSlugAvailable(client, source.metadata.slug, final);
-  await assertExclusiveSourceIdentity(client, sourceTag, final.id);
+  await assertExclusiveSourceIdentity(client, inspected.sourceTag, final.id);
   return final;
 }

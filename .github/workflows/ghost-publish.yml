@@ -8,11 +8,12 @@ on:
         required: true
         type: string
       action:
-        description: Synchronize as draft or explicitly publish
+        description: Preview, synchronize as draft, or explicitly publish
         required: true
-        default: draft
+        default: dry-run
         type: choice
         options:
+          - dry-run
           - draft
           - publish
 
@@ -42,11 +43,19 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Test publisher
         run: npm test
-      - name: Validate selected post
+      - name: Validate repository and selected post
         env:
           POST_PATH: ${{ inputs.post_path }}
         run: node scripts/validate-post.mjs "$POST_PATH"
+      - name: Preview Ghost changes
+        if: inputs.action == 'dry-run'
+        env:
+          GHOST_ADMIN_URL: ${{ vars.GHOST_ADMIN_URL || secrets.GHOST_ADMIN_URL }}
+          GHOST_ADMIN_API_KEY: ${{ secrets.GHOST_ADMIN_API_KEY }}
+          POST_PATH: ${{ inputs.post_path }}
+        run: node scripts/plan-post.mjs "$POST_PATH"
       - name: Synchronize post
+        if: inputs.action != 'dry-run'
         env:
           GHOST_ADMIN_URL: ${{ vars.GHOST_ADMIN_URL || secrets.GHOST_ADMIN_URL }}
           GHOST_ADMIN_API_KEY: ${{ secrets.GHOST_ADMIN_API_KEY }}

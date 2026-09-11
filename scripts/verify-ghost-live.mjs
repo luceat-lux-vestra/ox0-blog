@@ -27,8 +27,11 @@ const sourcePath = path.join(repoRoot, 'posts', `.ox0-live-verify-${suffix}.md`)
 const collisionSourcePath = path.join(repoRoot, 'posts', `.ox0-live-verify-page-${suffix}.md`);
 const sourceTag = sourceTagForPath(sourcePath, repoRoot);
 const authorTags = [`ox0-live-a-${suffix}`, `ox0-live-b-${suffix}`];
-const sourceMarkdown = `# Temporary Ghost integration verification\n\nRun: ${suffix}\n`;
+const sourceMarkdown = `:::lang ko\n\n# 임시 Ghost 통합 검증\n\n검증 실행: ${suffix}\n\n:::\n\n:::lang en\n\n# Temporary Ghost integration verification\n\nVerification run: ${suffix}\n\n:::\n`;
 const renderedHtml = renderMarkdown(sourceMarkdown);
+assert.match(renderedHtml, /<div class="ox0-bilingual" data-ox0-bilingual="true">/);
+assert.match(renderedHtml, /<section class="ox0-lang" lang="ko" data-ox0-lang="ko">/);
+assert.match(renderedHtml, /<section class="ox0-lang" lang="en" data-ox0-lang="en">/);
 const lexical = createHtmlCardLexical(renderedHtml);
 const client = new GhostAdminClient({ url, key });
 
@@ -440,7 +443,8 @@ try {
     sourceTag,
     checks: [
       'temporary namespace ownership preflight including expected sync tags',
-      'pinned Markdown render + draft create + direct Lexical fresh-read verification',
+      'bilingual Markdown wrapper generation before mutation',
+      'bilingual wrapper persistence through direct Lexical draft create + fresh read',
       'author/publisher tag ordering and exact sync stamps',
       'persisted source-tag slug drift resolved by canonical source-tag name',
       'managed public-slug rename',
