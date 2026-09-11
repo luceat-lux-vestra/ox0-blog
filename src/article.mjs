@@ -5,6 +5,13 @@ function requireString(value, name) {
   return value.trim();
 }
 
+function requireSourceBody(value) {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error('LocaleVariant.body must be non-empty Markdown source');
+  }
+  return value;
+}
+
 function optionalString(value, name) {
   if (value == null || value === '') return null;
   if (typeof value !== 'string') throw new Error(`${name} must be a string or null`);
@@ -30,7 +37,7 @@ export function normalizeLocaleVariant(raw) {
     title: requireString(raw.title, 'LocaleVariant.title'),
     excerpt: optionalString(raw.excerpt, 'LocaleVariant.excerpt'),
     slug: requireString(raw.slug, 'LocaleVariant.slug'),
-    body: requireString(raw.body, 'LocaleVariant.body'),
+    body: requireSourceBody(raw.body),
     sourcePath: raw.sourcePath == null ? null : requireString(raw.sourcePath, 'LocaleVariant.sourcePath')
   };
 }
