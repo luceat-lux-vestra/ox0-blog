@@ -15,9 +15,10 @@ async function fixture() {
   return { repoRoot, postPath: path.join(postDir, 'example.md'), assetDir };
 }
 
-test('text-only rendering remains synchronous for existing callers', () => {
-  const html = renderMarkdown('# body');
-  assert.equal(typeof html, 'string');
+test('text-only compatibility rendering uses the async compiler boundary', async () => {
+  const pending = renderMarkdown('# body');
+  assert.equal(typeof pending?.then, 'function');
+  const html = await pending;
   assert.match(html, /<h1>body<\/h1>/);
 });
 
@@ -28,7 +29,7 @@ test('bilingual rendering emits accessible language wrappers', async () => {
   assert.match(html, /class="ox0-lang" lang="en" data-ox0-lang="en"/);
 });
 
-test('local Markdown images are embedded as data URIs', async () => {
+test('local Markdown images are embedded as data URIs only by the legacy host resolver', async () => {
   const { repoRoot, postPath, assetDir } = await fixture();
   const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
   await writeFile(path.join(assetDir, 'diagram.png'), bytes);
@@ -38,7 +39,7 @@ test('local Markdown images are embedded as data URIs', async () => {
   assert.doesNotMatch(html, /\.\.\/assets\/example\/diagram\.png/);
 });
 
-test('reference-style local images are embedded through marked image tokens', async () => {
+test('reference-style local images are resolved through the compatibility resource resolver', async () => {
   const { repoRoot, postPath, assetDir } = await fixture();
   const bytes = Buffer.from('gif');
   await writeFile(path.join(assetDir, 'diagram.gif'), bytes);
