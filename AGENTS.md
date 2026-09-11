@@ -19,6 +19,7 @@ Then recover current repository, Article, RTA, PR, and Ghost-related state relev
 - `research-to-action` owns research/evidence/promotion governance. RTA state does not authorize Blog publication or project mutation.
 - The user normally supplies intent and material decisions. The agent owns routine editing, translation synchronization/review/checkpoints, Git/PR mechanics, validation, and authorized Ghost mechanics.
 - Production publication requires an explicit publication instruction unless a separately approved automation policy exists.
+- Merge/merge-judgment authorization and production-publication authorization are separate and task-scoped. Do not infer either from recovered PR/Ghost state after task/session loss.
 
 ## Development and merge policy
 
@@ -28,6 +29,10 @@ A coherent PR may reach `CANDIDATE` without beginning strict merge judgment. Do 
 
 At merge judgment, correctness/safety not proven is FAIL. `UNKNOWN`, `UNVERIFIED`, and `INSUFFICIENT EVIDENCE` are FAIL. Exact final HEAD is the evidence unit; if it moves, exact-HEAD merge evidence is invalidated. Use squash merge and exact reviewed-head locking (`expected_head_sha`) where supported.
 
+## Publication boundary
+
+`발행 준비해` / `PREPARE_PUBLISH` is read-only with respect to Ghost under contract v1: validate, fresh-read, and create a bounded publication plan. Ghost draft mutation requires an explicit draft-projection task. `발행해` authorizes production publication only after all guards pass and does not implicitly authorize a pending Git merge.
+
 ## Authoring safety
 
 - Technical claims must be traceable to evidence. Distinguish measurement, observation, inference, and opinion.
@@ -36,6 +41,7 @@ At merge judgment, correctness/safety not proven is FAIL. `UNKNOWN`, `UNVERIFIED
 - Never put Ghost Admin credentials in source, logs, examples, issues, or pull requests.
 - Use dry-run/read-only planning before first mutation when the publication workflow supports it.
 - Ghost projection state is per locale variant. Never claim whole-Article publication success after a partial multi-locale mutation; fresh-read and recover the actual state of every targeted projection.
+- A currently published managed projection is not a routine draft-staging surface; preserve published visibility unless an explicitly designed/authorized production-impacting operation says otherwise.
 
 ## Transitional implementation warning
 
