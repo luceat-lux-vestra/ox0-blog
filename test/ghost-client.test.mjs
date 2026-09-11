@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { createAdminToken, GhostAdminClient } from '../src/ghost-client.mjs';
 
 function decode(part) {
@@ -17,6 +20,13 @@ function rejectWhenAborted(signal) {
     if (signal.aborted) onAbort();
     else signal.addEventListener('abort', onAbort, { once: true });
   });
+}
+
+async function tempPng() {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'ox0-ghost-client-'));
+  const file = path.join(dir, 'cover.png');
+  await writeFile(file, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  return { file, cleanup: () => rm(dir, { recursive: true, force: true }) };
 }
 
 test('creates Ghost-compatible five-minute HS256 token', () => {
@@ -145,4 +155,47 @@ test('source identity lookup ignores non-exact tag-name results and does not bro
 
   assert.deepEqual(await client.getPostsBySourceTag(sourceTag), []);
   assert.equal(calls, 1);
+});
+
+test('image upload accepts a bounded absolute HTTPS URL', async () => {
+  const temp = await tempPng();
+  try {
+    const client = new GhostAdminClient({
+      url: 'https://blog.example',
+      key: `abc:${'aa'.repeat(32)}`,
+      fetchImpl: async () => new Response(JSON.stringify({
+        images: [{ url: 'https://cdn.example/content/images/cover.png', ref: 'assets/cover.png' }]
+      }), { status: 200 })
+    });
+    const image = await client.uploadImage(temp.file, 'assets/cover.png');
+    assert.equal(image.url, 'https://cdn.example/content/images/cover.png');
+    assert.equal(image.ref, 'assets/cover.png');
+  } finally {
+    await temp.cleanup();
+  }
+});
+
+test('image upload rejects malformed or unsafe returned URLs before post mutation', async () => {
+  const temp = await tempPng();
+  let returnedImage;
+  const client = new GhostAdminClient({
+    url: 'https://blog.example',
+    key: `abc:${'bb'.repeat(32)}`,
+    fetchImpl: async () => new Response(JSON.stringify({ images: [returnedImage] }), { status: 200 })
+  });
+
+  try {
+    const cases = [
+      [{ url: 123 }, /valid images\[0\]\.url string/],
+      [{ url: 'relative/content/images/cover.png' }, /valid absolute URL/],
+      [{ url: 'http://cdn.example/cover.png' }, /must use https/],
+      [{ url: `https://cdn.example/${'a'.repeat(2000)}` }, /at most 2000 characters/]
+    ];
+    for (const [image, pattern] of cases) {
+      returnedImage = image;
+      await assert.rejects(client.uploadImage(temp.file, 'assets/cover.png'), pattern);
+    }
+  } finally {
+    await temp.cleanup();
+  }
 });
