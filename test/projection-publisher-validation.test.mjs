@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
@@ -12,6 +13,11 @@ const IDENTITY = projectionIdentityTags({
   locale: 'ko-KR'
 });
 const SOURCE_FP = `sha256:${'a'.repeat(64)}`;
+const ANY_IMAGE_FP = `sha256:${'b'.repeat(64)}`;
+
+function fingerprint(bytes) {
+  return `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+}
 
 function projection(overrides = {}) {
   return {
@@ -86,7 +92,10 @@ test('missing local feature image fails before Ghost access', async () => {
   const client = new ProbeClient();
   await assert.rejects(
     planProjectionSynchronization({
-      projection: projection({ featureImage: path.join(repoRoot, 'assets', 'missing.png') }),
+      projection: projection({
+        featureImage: path.join(repoRoot, 'assets', 'missing.png'),
+        featureImageFingerprint: ANY_IMAGE_FP
+      }),
       compiledDocument,
       action: 'draft',
       client,
@@ -104,7 +113,7 @@ test('local feature image outside assets fails before Ghost access', async () =>
   const client = new ProbeClient();
   await assert.rejects(
     planProjectionSynchronization({
-      projection: projection({ featureImage: outside }),
+      projection: projection({ featureImage: outside, featureImageFingerprint: ANY_IMAGE_FP }),
       compiledDocument,
       action: 'draft',
       client,
@@ -115,18 +124,42 @@ test('local feature image outside assets fails before Ghost access', async () =>
   assert.deepEqual(client.calls, []);
 });
 
-test('valid confined local feature image permits GET-only dry-run planning', async () => {
+test('local feature image digest mismatch fails before Ghost access', async () => {
   const repoRoot = await repoFixture();
   const cover = path.join(repoRoot, 'assets', 'cover.png');
   await writeFile(cover, 'png');
   const client = new ProbeClient();
+  await assert.rejects(
+    planProjectionSynchronization({
+      projection: projection({ featureImage: cover, featureImageFingerprint: ANY_IMAGE_FP }),
+      compiledDocument,
+      action: 'draft',
+      client,
+      repoRoot
+    }),
+    /changed since projection compilation/
+  );
+  assert.deepEqual(client.calls, []);
+});
+
+test('valid confined local feature image permits GET-only dry-run planning with exact digest', async () => {
+  const repoRoot = await repoFixture();
+  const cover = path.join(repoRoot, 'assets', 'cover.png');
+  const bytes = Buffer.from('png');
+  await writeFile(cover, bytes);
+  const imageFingerprint = fingerprint(bytes);
+  const client = new ProbeClient();
   const plan = await planProjectionSynchronization({
-    projection: projection({ featureImage: cover }),
+    projection: projection({ featureImage: cover, featureImageFingerprint: imageFingerprint }),
     compiledDocument,
     action: 'draft',
     client,
     repoRoot
   });
   assert.deepEqual(client.calls, ['identity', 'slug', 'page']);
-  assert.deepEqual(plan.featureImage, { action: 'upload', ref: 'assets/cover.png' });
+  assert.deepEqual(plan.featureImage, {
+    action: 'upload',
+    ref: 'assets/cover.png',
+    fingerprint: imageFingerprint
+  });
 });
