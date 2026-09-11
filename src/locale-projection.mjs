@@ -15,6 +15,11 @@ function requirePublicationOptions(publication) {
   return publication;
 }
 
+function localFeatureImageFingerprint(projection, fingerprintEvidence) {
+  if (!projection.featureImage || /^https:\/\//.test(projection.featureImage)) return null;
+  return fingerprintEvidence.featureImageFingerprint ?? null;
+}
+
 export function localeVariantFor(article, locale) {
   const normalized = normalizeArticle(article);
   if (typeof locale !== 'string' || locale.trim() === '') throw new Error('locale is required');
@@ -69,6 +74,11 @@ export async function compileLocaleProjection({
     throw new Error(`compiler returned locale=${compiledDocument.locale} for LocaleVariant.locale=${resolved.variant.locale}`);
   }
   const sourceFingerprint = projectionSourceFingerprintV1(baseProjection, compiledDocument, fingerprintEvidence);
-  const projection = { ...baseProjection, sourceFingerprint };
+  const featureImageFingerprint = localFeatureImageFingerprint(baseProjection, fingerprintEvidence);
+  const projection = {
+    ...baseProjection,
+    sourceFingerprint,
+    ...(featureImageFingerprint ? { featureImageFingerprint } : {})
+  };
   return { projection, compiledDocument, variant: resolved.variant, sourceFingerprint };
 }
