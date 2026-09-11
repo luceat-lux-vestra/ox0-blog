@@ -31,6 +31,9 @@ function requireLocales(requiredLocales) {
 
 export function normalizeLocaleVariant(raw) {
   if (!raw || typeof raw !== 'object') throw new Error('LocaleVariant is required');
+  if (Object.hasOwn(raw, 'status')) {
+    throw new Error('LocaleVariant.status is not v1 source state; draft/publish is an explicit operation');
+  }
   return {
     variantId: requireString(raw.variantId, 'LocaleVariant.variantId'),
     locale: requireString(raw.locale, 'LocaleVariant.locale'),
