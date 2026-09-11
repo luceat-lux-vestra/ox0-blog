@@ -199,10 +199,32 @@ test('readiness invalidation refuses chat/session/model identifiers as durable r
   }
 });
 
-test('no readiness checkpoint never infers READY', () => {
+test('new Article without readiness evidence derives DRAFT, not REVIEW_REQUIRED', () => {
   assert.deepEqual(
     deriveReviewedArticleReadiness({ currentSourceFingerprint: sourceFingerprint() }),
-    { state: 'REVIEW_REQUIRED', reason: 'NO_READINESS_CHECKPOINT' }
+    { state: 'DRAFT' }
+  );
+});
+
+test('review requested without a checkpoint derives REVIEW_REQUIRED', () => {
+  const invalidation = createArticleReadinessInvalidation({
+    id: ID1,
+    epoch: 1,
+    reason: 'SEMANTIC_REVIEW_REQUESTED',
+    origin: 'blog-audit'
+  });
+  assert.deepEqual(
+    deriveReviewedArticleReadiness({
+      currentSourceFingerprint: sourceFingerprint(),
+      currentEpoch: 1,
+      invalidations: [invalidation]
+    }),
+    {
+      state: 'REVIEW_REQUIRED',
+      reason: 'NO_READINESS_CHECKPOINT',
+      invalidations: [invalidation],
+      currentEpoch: 1
+    }
   );
 });
 
