@@ -125,7 +125,7 @@ REVIEW_REQUIRED
 | From | Event | Guard / preconditions | Deterministic side effects | Semantic / agent review | To | User authorization required? |
 |---|---|---|---|---|---|---|
 | any | required locale removed/missing | configured required locale absent | derive missing set | none | INCOMPLETE | no |
-| INCOMPLETE | missing locale created | all required locales now exist | recompute fingerprints/state by the evaluation rule | schedule/perform equivalence review when production readiness is desired | UNREVIEWED, STALE, or REVIEW_REQUIRED as derived | no |
+| INCOMPLETE | missing locale created | all required locales now exist | recompute fingerprints/state by the evaluation rule | schedule/perform equivalence review when production readiness is desired | UNREVIEWED, SYNCED, STALE, or REVIEW_REQUIRED as derived | no |
 | UNREVIEWED | translation-relevant content/assets change | all required locales exist; still no checkpoint | recompute fingerprints; checkpoint remains absent | review may be performed but no automatic acceptance | UNREVIEWED | no |
 | SYNCED | translation-relevant content/assets change | accepted checkpoint exists | recompute `changed_locales` / `stale_locales` | synchronize/inspect sibling locales as required | STALE or REVIEW_REQUIRED as derived | no |
 | STALE | additional locale content/assets change | accepted checkpoint exists | recompute changed/stale sets | continue synchronization/review | STALE or REVIEW_REQUIRED as derived | no |
