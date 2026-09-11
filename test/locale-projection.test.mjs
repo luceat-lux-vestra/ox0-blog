@@ -46,6 +46,7 @@ test('descriptor derives public content and stable identity from Article + Local
   assert.match(descriptor.identityTags[0], /^#ox0-article-[a-f0-9]{64}$/);
   assert.equal(descriptor.identityTags[1], '#ox0-locale-ko-KR');
   assert.match(descriptor.identityTags[2], /^#ox0-source-[a-f0-9]{64}$/);
+  assert.equal(Object.hasOwn(descriptor, 'sourceFingerprint'), false);
 });
 
 test('publication status is rejected because authorization belongs to the operation', () => {
@@ -68,7 +69,7 @@ test('missing required locale variant fails closed', () => {
   );
 });
 
-test('compile boundary is async and validates compiler locale ownership', async () => {
+test('compile boundary is async, validates locale ownership, and attaches source revision', async () => {
   const seen = [];
   const compiler = {
     async compile(variant, projectContext) {
@@ -95,6 +96,39 @@ test('compile boundary is async and validates compiler locale ownership', async 
   assert.deepEqual(seen[0].projectContext, { root: '/repo' });
   assert.equal(result.compiledDocument.locale, 'ko-KR');
   assert.equal(result.projection.locale, 'ko-KR');
+  assert.match(result.sourceFingerprint, /^sha256:[a-f0-9]{64}$/);
+  assert.equal(result.projection.sourceFingerprint, result.sourceFingerprint);
+});
+
+test('local feature image needs stable content evidence before projection revision can be computed', async () => {
+  const compiler = {
+    async compile(variant) {
+      return {
+        htmlFragment: '<h1>본문</h1>',
+        locale: variant.locale,
+        referencedAssets: [],
+        diagnostics: []
+      };
+    }
+  };
+  await assert.rejects(
+    compileLocaleProjection({
+      article: article(),
+      locale: 'ko-KR',
+      publication: { featureImage: '/repo/assets/cover.png' },
+      compiler
+    }),
+    /requires featureImageFingerprint/
+  );
+
+  const result = await compileLocaleProjection({
+    article: article(),
+    locale: 'ko-KR',
+    publication: { featureImage: '/repo/assets/cover.png' },
+    compiler,
+    fingerprintEvidence: { featureImageFingerprint: `sha256:${'c'.repeat(64)}` }
+  });
+  assert.match(result.sourceFingerprint, /^sha256:[a-f0-9]{64}$/);
 });
 
 test('compiler returning a different locale fails before publisher handoff', async () => {
