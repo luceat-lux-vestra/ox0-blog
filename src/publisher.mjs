@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { requireCompiledDocument } from './compiler/document-compiler.mjs';
+import { requireRepositoryAssetFile } from './file-confinement.mjs';
 import { createHtmlCardLexical } from './lexical.mjs';
 import { sourceTagForPath } from './post.mjs';
 import {
@@ -13,6 +14,7 @@ import {
   projectionSnapshotHash,
   replaceProjectionPublisherTags
 } from './projection-managed-state.mjs';
+import { normalizeProjectionMetadata } from './projection-metadata.mjs';
 import { assertDesiredSlugAvailable, assertMutationApplied } from './publish-guards.mjs';
 
 function desiredStatusForAction(action) {
@@ -33,33 +35,29 @@ function requireProjectionDescriptor(projection) {
     throw new Error('stable Article/LocaleVariant projection requires projection.sourceFingerprint');
   }
 
-  const requiredStrings = ['title', 'slug'];
-  for (const field of requiredStrings) {
-    if (typeof projection[field] !== 'string' || projection[field].trim() === '') {
-      throw new Error(`projection.${field} must be a non-empty string`);
-    }
-  }
-  if (!Array.isArray(projection.tags)) throw new Error('projection.tags must be an array');
-  if (projection.tags.some((tag) => typeof tag !== 'string' || tag.trim() === '')) {
-    throw new Error('projection.tags must contain non-empty strings');
-  }
-  if (projection.tags.some((tag) => tag.startsWith('#ox0-'))) {
-    throw new Error('projection.tags must not contain reserved #ox0- publisher tags');
-  }
+  const metadata = normalizeProjectionMetadata({
+    title: projection.title,
+    slug: projection.slug,
+    excerpt: projection.excerpt,
+    tags: projection.tags,
+    featureImage: projection.featureImage,
+    featureImageAlt: projection.featureImageAlt,
+    featured: projection.featured,
+    visibility: projection.visibility,
+    canonicalUrl: projection.canonicalUrl
+  });
+
   return {
     identityTags,
     sourceFingerprint,
-    title: projection.title,
-    slug: projection.slug,
-    excerpt: projection.excerpt ?? null,
-    tags: [...projection.tags],
-    featureImage: projection.featureImage ?? null,
-    featureImageAlt: projection.featureImageAlt ?? null,
-    featured: projection.featured ?? false,
-    visibility: projection.visibility ?? 'public',
-    canonicalUrl: projection.canonicalUrl ?? null,
-    locale: projection.locale ?? null
+    locale: projection.locale ?? null,
+    ...metadata
   };
+}
+
+async function validateProjectionFilesystem(projection, repoRoot) {
+  if (!projection.featureImage || /^https:\/\//.test(projection.featureImage)) return;
+  await requireRepositoryAssetFile(projection.featureImage, repoRoot, 'local featureImage');
 }
 
 async function assertExclusiveProjectionIdentity(client, lookupTag, projection, postId) {
@@ -92,13 +90,15 @@ async function assertProjectionIdentityStableBeforeMutation(client, lookupTag, p
   }
 }
 
-async function inspectProjectionSynchronization({ projection: rawProjection, compiledDocument: rawDocument, action, client }) {
+async function inspectProjectionSynchronization({ projection: rawProjection, compiledDocument: rawDocument, action, client, repoRoot }) {
   const desiredStatus = desiredStatusForAction(action);
   const projection = requireProjectionDescriptor(rawProjection);
   const compiledDocument = requireCompiledDocument(rawDocument);
   if (projection.locale != null && compiledDocument.locale !== projection.locale) {
     throw new Error(`CompiledDocument.locale=${compiledDocument.locale} does not match projection.locale=${projection.locale}`);
   }
+
+  await validateProjectionFilesystem(projection, repoRoot);
 
   const lexical = createHtmlCardLexical(compiledDocument.htmlFragment);
   const lookupTag = projectionLookupTag(projection.identityTags);
@@ -162,7 +162,6 @@ export async function planProjectionSynchronization(args) {
   } else if (/^https:\/\//.test(featureImageValue)) {
     featureImage = { action: 'reuse', url: featureImageValue };
   } else {
-    if (!repoRoot) throw new Error('repoRoot is required to plan a local feature image upload');
     featureImage = {
       action: 'upload',
       ref: path.relative(repoRoot, featureImageValue).replaceAll(path.sep, '/')
@@ -194,7 +193,6 @@ export async function synchronizeProjection(args) {
   const inspected = await inspectProjectionSynchronization(args);
   let featureImage = inspected.projection.featureImage;
   if (featureImage && !/^https:\/\//.test(featureImage)) {
-    if (!repoRoot) throw new Error('repoRoot is required to upload a local feature image');
     const ref = path.relative(repoRoot, featureImage).replaceAll(path.sep, '/');
     const uploaded = await client.uploadImage(featureImage, ref);
     featureImage = uploaded.url;
