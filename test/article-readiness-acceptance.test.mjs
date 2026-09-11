@@ -16,6 +16,7 @@ import {
   createTranslationCheckpoint
 } from '../src/translation-checkpoint.mjs';
 
+const ID1 = '11111111-1111-4111-8111-111111111111';
 const ID2 = '22222222-2222-4222-8222-222222222222';
 const OLD = {
   'ko-KR': `sha256:${'a'.repeat(64)}`,
@@ -66,22 +67,42 @@ function readinessReview(sourceFingerprint, reviewedInvalidationIds = []) {
   };
 }
 
-function readyBundle() {
-  const sourceFingerprint = articleSemanticSourceFingerprintV1({
+function sourceFingerprint(current) {
+  return articleSemanticSourceFingerprintV1({
     requiredLocales: ['ko-KR', 'en'],
-    translationFingerprints: OLD
+    translationFingerprints: current
   });
+}
+
+function readyBundle() {
+  const fingerprint = sourceFingerprint(OLD);
   return {
     version: ARTICLE_BUNDLE_CONTRACT_VERSION,
     article: article(),
     translationCheckpoint: translationCheckpoint(OLD),
     readinessEpoch: 0,
     readinessCheckpoint: createArticleReadinessCheckpoint({
-      sourceFingerprint,
+      sourceFingerprint: fingerprint,
+      priorReviewedEpoch: 0,
       reviewedEpoch: 0,
-      review: readinessReview(sourceFingerprint)
+      review: readinessReview(fingerprint)
     }),
     readinessInvalidations: []
+  };
+}
+
+function readyBundleAtEpochTwo() {
+  const fingerprint = sourceFingerprint(OLD);
+  return {
+    ...readyBundle(),
+    readinessEpoch: 2,
+    readinessCheckpoint: createArticleReadinessCheckpoint({
+      sourceFingerprint: fingerprint,
+      priorReviewedEpoch: 0,
+      reviewedEpoch: 2,
+      resolvedInvalidationIds: [ID1, ID2],
+      review: readinessReview(fingerprint, [ID1, ID2])
+    })
   };
 }
 
@@ -105,8 +126,32 @@ test('source edit can become READY again after translations are re-synchronized 
   });
   assert.deepEqual(after.readiness, { state: 'READY' });
   assert.equal(accepted.readinessCheckpoint.sourceFingerprint, before.articleSourceFingerprint);
+  assert.equal(accepted.readinessCheckpoint.priorReviewedEpoch, 0);
   assert.equal(accepted.readinessCheckpoint.reviewedEpoch, 0);
   assert.deepEqual(accepted.readinessCheckpoint.resolvedInvalidationIds, []);
+});
+
+test('source-only rereview after prior invalidation epochs preserves current epoch as a zero-width review span', () => {
+  const bundle = normalizeArticleBundle({
+    ...readyBundleAtEpochTwo(),
+    translationCheckpoint: translationCheckpoint(CHANGED)
+  });
+  const before = recoverArticleBundleReviewState(bundle, {
+    currentTranslationFingerprints: CHANGED
+  });
+  assert.deepEqual(before.readiness, { state: 'REVIEW_REQUIRED', reason: 'SOURCE_CHANGED' });
+
+  const accepted = acceptArticleBundleReadinessReview(bundle, {
+    currentTranslationFingerprints: CHANGED,
+    review: readinessReview(before.articleSourceFingerprint)
+  });
+  assert.equal(accepted.readinessCheckpoint.priorReviewedEpoch, 2);
+  assert.equal(accepted.readinessCheckpoint.reviewedEpoch, 2);
+  assert.deepEqual(accepted.readinessCheckpoint.resolvedInvalidationIds, []);
+  assert.deepEqual(
+    recoverArticleBundleReviewState(accepted, { currentTranslationFingerprints: CHANGED }).readiness,
+    { state: 'READY' }
+  );
 });
 
 test('review cannot skip a missing invalidation epoch even when the remaining active event is explicitly reviewed', () => {
@@ -135,6 +180,22 @@ test('review cannot skip a missing invalidation epoch even when the remaining ac
       review: readinessReview(before.articleSourceFingerprint, [ID2])
     }),
     /does not cover every unreviewed epoch/
+  );
+});
+
+test('malformed persisted checkpoint epoch span fails closed during bundle recovery', () => {
+  const malformed = {
+    ...readyBundle(),
+    readinessEpoch: 2,
+    readinessCheckpoint: {
+      ...readyBundleAtEpochTwo().readinessCheckpoint,
+      priorReviewedEpoch: 1,
+      resolvedInvalidationIds: [ID1, ID2]
+    }
+  };
+  assert.throws(
+    () => normalizeArticleBundle(malformed),
+    /must exactly cover the reviewed readiness epoch span/
   );
 });
 
