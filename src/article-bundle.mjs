@@ -1,4 +1,5 @@
 import { normalizeArticle } from './article.mjs';
+import { validateArticleReadinessInvalidation } from './article-readiness-invalidation.mjs';
 import { articleSemanticSourceFingerprintV1 } from './article-readiness-source.mjs';
 import { deriveReviewedArticleReadiness, validateArticleReadinessCheckpoint } from './article-readiness.mjs';
 import {
@@ -39,23 +40,20 @@ export function normalizeArticleBundle(raw) {
   const readinessCheckpoint = raw.readinessCheckpoint == null
     ? null
     : validateArticleReadinessCheckpoint(raw.readinessCheckpoint);
+  const readinessInvalidation = raw.readinessInvalidation == null
+    ? null
+    : validateArticleReadinessInvalidation(raw.readinessInvalidation);
 
   return {
     version: ARTICLE_BUNDLE_CONTRACT_VERSION,
     article,
     translationCheckpoint,
-    readinessCheckpoint
+    readinessCheckpoint,
+    readinessInvalidation
   };
 }
 
-export function recoverArticleBundleReviewState(
-  rawBundle,
-  {
-    currentTranslationFingerprints,
-    currentEvidenceFingerprint = null,
-    reviewRequiredSignal = false
-  }
-) {
+export function recoverArticleBundleReviewState(rawBundle, { currentTranslationFingerprints }) {
   const bundle = normalizeArticleBundle(rawBundle);
   const acceptedFingerprints = bundle.translationCheckpoint == null
     ? null
@@ -83,9 +81,8 @@ export function recoverArticleBundleReviewState(
   });
   const readiness = deriveReviewedArticleReadiness({
     currentSourceFingerprint: articleSourceFingerprint,
-    currentEvidenceFingerprint,
     checkpoint: bundle.readinessCheckpoint,
-    reviewRequiredSignal
+    invalidation: bundle.readinessInvalidation
   });
 
   return {
