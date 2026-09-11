@@ -39,12 +39,13 @@ function seal(post, sourceTag = sourceTagForPath(POST_PATH, ROOT)) {
 }
 
 class FakeClient {
-  constructor({ identity = [], slug = undefined, page = null, updateError = null, stampTransform = null, identityAfterMutation = null, mutationTransform = null, finalReadTransform = null } = {}) {
+  constructor({ identity = [], slug = undefined, page = null, updateError = null, stampTransform = null, identityBeforeMutation = null, identityAfterMutation = null, mutationTransform = null, finalReadTransform = null } = {}) {
     this.identity = identity;
     this.slug = slug;
     this.page = page;
     this.updateError = updateError;
     this.stampTransform = stampTransform;
+    this.identityBeforeMutation = identityBeforeMutation;
     this.identityAfterMutation = identityAfterMutation;
     this.mutationTransform = mutationTransform;
     this.finalReadTransform = finalReadTransform;
@@ -54,12 +55,17 @@ class FakeClient {
     this.lastMutationPayload = null;
     this.identityReads = 0;
     this.postReads = 0;
+    this.hasMutated = false;
   }
   async getPostsBySourceTag() {
     this.identityReads += 1;
     if (this.identityReads === 1) {
       this.calls.push('identity');
       return this.identity;
+    }
+    if (!this.hasMutated) {
+      if (this.identityBeforeMutation) return this.identityBeforeMutation(this.current);
+      return this.current ? [this.current] : [];
     }
     if (this.identityAfterMutation) return this.identityAfterMutation(this.current);
     return this.current ? [this.current] : [];
@@ -76,6 +82,7 @@ class FakeClient {
     this.lastMutationTags = [...payload.tags];
     this.lastMutationPayload = structuredClone(payload);
     this.current = ghostPost({ ...payload, tags: payload.tags.map((name) => ({ name })), id: 'created' });
+    this.hasMutated = true;
     if (this.mutationTransform) this.current = this.mutationTransform(this.current);
     return this.current;
   }
@@ -85,6 +92,7 @@ class FakeClient {
     this.lastMutationPayload = structuredClone(payload);
     if (this.updateError) throw this.updateError;
     this.current = { ...this.current, ...payload, id, tags: payload.tags.map((name) => ({ name })), updated_at: '2026-01-02T00:00:00.000Z' };
+    this.hasMutated = true;
     if (this.mutationTransform) this.current = this.mutationTransform(this.current);
     return this.current;
   }
@@ -108,7 +116,7 @@ test('creates a new draft as one Lexical HTML card and stamps source identity pl
   const client = new FakeClient();
   const result = await synchronizePost({ source: source(), action: 'draft', client, repoRoot: ROOT, renderMarkdown: render });
   assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'create', 'fresh', 'slug', 'page', 'stamp', 'fresh', 'slug', 'page']);
-  assert.equal(client.identityReads, 3);
+  assert.equal(client.identityReads, 4);
   const sourceTag = sourceTagForPath(POST_PATH, ROOT);
   assert.deepEqual(client.lastMutationTags, ['Rust', sourceTag]);
   assert.equal(client.lastMutationPayload.lexical, createHtmlCardLexical('<h1>body</h1>'));
@@ -143,6 +151,49 @@ test('same-slug managed update rechecks page collision before image upload or wr
   assert.ok(!client.calls.includes('update'));
 });
 
+test('source identity appearing before create fails before mutation', async () => {
+  const client = new FakeClient({
+    identityBeforeMutation: () => [ghostPost({ id: 'post-race' })]
+  });
+  await assert.rejects(
+    synchronizePost({ source: source(), action: 'draft', client, repoRoot: ROOT, renderMarkdown: render }),
+    /source identity ownership changed before mutation/
+  );
+  assert.equal(client.identityReads, 2);
+  assert.deepEqual(client.calls, ['identity', 'slug', 'page']);
+  assert.ok(!client.calls.includes('create'));
+});
+
+test('managed source identity disappearing before update fails before mutation', async () => {
+  const existing = seal(ghostPost());
+  const client = new FakeClient({
+    identity: [existing],
+    identityBeforeMutation: () => []
+  });
+  await assert.rejects(
+    synchronizePost({ source: source(), action: 'draft', client, repoRoot: ROOT, renderMarkdown: render }),
+    /source identity ownership changed before mutation/
+  );
+  assert.equal(client.identityReads, 2);
+  assert.deepEqual(client.calls, ['identity', 'slug', 'page']);
+  assert.ok(!client.calls.includes('update'));
+});
+
+test('managed updated_at changing before update fails before stale write', async () => {
+  const existing = seal(ghostPost());
+  const client = new FakeClient({
+    identity: [existing],
+    identityBeforeMutation: (current) => [{ ...current, updated_at: '2026-01-01T00:00:01.000Z' }]
+  });
+  await assert.rejects(
+    synchronizePost({ source: source(), action: 'draft', client, repoRoot: ROOT, renderMarkdown: render }),
+    /changed before mutation; refusing stale write/
+  );
+  assert.equal(client.identityReads, 2);
+  assert.deepEqual(client.calls, ['identity', 'slug', 'page']);
+  assert.ok(!client.calls.includes('update'));
+});
+
 test('draft action refuses to unpublish an existing published post', async () => {
   const existing = seal(ghostPost({ status: 'published' }));
   const client = new FakeClient({ identity: [existing] });
@@ -173,7 +224,7 @@ test('source identity permits a public slug change and keeps author tags before 
   const client = new FakeClient({ identity: [existing] });
   const result = await synchronizePost({ source: source({ slug: 'renamed' }), action: 'draft', client, repoRoot: ROOT, renderMarkdown: render });
   assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update', 'fresh', 'slug', 'page', 'stamp', 'fresh', 'slug', 'page']);
-  assert.equal(client.identityReads, 3);
+  assert.equal(client.identityReads, 4);
   assert.deepEqual(client.lastMutationTags, ['Rust', sourceTag, oldSync]);
   assert.equal(result.slug, 'renamed');
 });
@@ -193,9 +244,9 @@ test('changed Ghost HTML-card body fails before identity recheck or sync stampin
   });
   await assert.rejects(
     synchronizePost({ source: source(), action: 'draft', client, repoRoot: ROOT, renderMarkdown: render }),
-    /HTML card content differs/
+    /Lexical document differs/
   );
-  assert.equal(client.identityReads, 1);
+  assert.equal(client.identityReads, 2);
   assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update', 'fresh']);
   assert.ok(!client.calls.includes('stamp'));
 });
@@ -210,7 +261,7 @@ test('source identity race after mutation fails before sync stamping', async () 
     synchronizePost({ source: source(), action: 'draft', client, repoRoot: ROOT, renderMarkdown: render }),
     /source identity ownership changed/
   );
-  assert.equal(client.identityReads, 2);
+  assert.equal(client.identityReads, 3);
   assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update', 'fresh', 'slug', 'page']);
   assert.ok(!client.calls.includes('stamp'));
 });
@@ -225,7 +276,7 @@ test('final persisted sync stamp is re-read and managed drift fails closed', asy
     synchronizePost({ source: source(), action: 'draft', client, repoRoot: ROOT, renderMarkdown: render }),
     /changed outside ox0-blog/
   );
-  assert.equal(client.identityReads, 2);
+  assert.equal(client.identityReads, 3);
   assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update', 'fresh', 'slug', 'page', 'stamp', 'fresh']);
 });
 
@@ -243,7 +294,7 @@ test('source identity race after sync stamping fails before returning success', 
     synchronizePost({ source: source(), action: 'draft', client, repoRoot: ROOT, renderMarkdown: render }),
     /source identity ownership changed/
   );
-  assert.equal(client.identityReads, 3);
+  assert.equal(client.identityReads, 4);
   assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update', 'fresh', 'slug', 'page', 'stamp', 'fresh', 'slug', 'page']);
 });
 
