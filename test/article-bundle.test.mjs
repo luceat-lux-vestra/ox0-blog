@@ -10,6 +10,7 @@ import {
   invalidateArticleBundleReadiness,
   normalizeArticleBundle,
   recoverArticleBundleReviewState,
+  requestArticleBundleReadinessReview,
   resolveArticleBundleReadinessInvalidations
 } from '../src/article-bundle.mjs';
 import {
@@ -52,9 +53,9 @@ function readinessPass(sourceFingerprint) {
   };
 }
 
-function reviewedBundle(overrides = {}) {
+function translationCheckpoint() {
   const current = fingerprints();
-  const translationCheckpoint = createTranslationCheckpoint({
+  return createTranslationCheckpoint({
     requiredLocales: ['ko-KR', 'en'],
     currentFingerprints: current,
     review: {
@@ -64,6 +65,22 @@ function reviewedBundle(overrides = {}) {
       reviewedFingerprints: current
     }
   });
+}
+
+function translationReviewedDraftBundle(overrides = {}) {
+  return {
+    version: ARTICLE_BUNDLE_CONTRACT_VERSION,
+    article: article(),
+    translationCheckpoint: translationCheckpoint(),
+    readinessEpoch: 0,
+    readinessCheckpoint: null,
+    readinessInvalidations: [],
+    ...overrides
+  };
+}
+
+function reviewedBundle(overrides = {}) {
+  const current = fingerprints();
   const sourceFingerprint = articleSemanticSourceFingerprintV1({
     requiredLocales: ['ko-KR', 'en'],
     translationFingerprints: current
@@ -75,12 +92,8 @@ function reviewedBundle(overrides = {}) {
   });
 
   return {
-    version: ARTICLE_BUNDLE_CONTRACT_VERSION,
-    article: article(),
-    translationCheckpoint,
-    readinessEpoch: 0,
+    ...translationReviewedDraftBundle(),
     readinessCheckpoint,
-    readinessInvalidations: [],
     ...overrides
   };
 }
@@ -92,6 +105,78 @@ test('fresh session recovers SYNCED + READY from durable facts only', () => {
   assert.deepEqual(recovered.translation, { state: 'SYNCED' });
   assert.deepEqual(recovered.readiness, { state: 'READY' });
   assert.match(recovered.articleSourceFingerprint, /^sha256:[a-f0-9]{64}$/);
+});
+
+test('new translation-reviewed Article remains DRAFT until reviewable-shape event is recorded', () => {
+  const recovered = recoverArticleBundleReviewState(translationReviewedDraftBundle(), {
+    currentTranslationFingerprints: fingerprints()
+  });
+  assert.deepEqual(recovered.translation, { state: 'SYNCED' });
+  assert.deepEqual(recovered.readiness, { state: 'DRAFT' });
+});
+
+test('content reaches reviewable shape records SEMANTIC_REVIEW_REQUESTED and transitions DRAFT -> REVIEW_REQUIRED', () => {
+  const requested = requestArticleBundleReadinessReview(translationReviewedDraftBundle(), {
+    currentTranslationFingerprints: fingerprints(),
+    id: ID1,
+    origin: 'blog-audit',
+    reference: 'article-review:initial'
+  });
+  assert.equal(requested.readinessEpoch, 1);
+  assert.equal(requested.readinessInvalidations.length, 1);
+  assert.equal(requested.readinessInvalidations[0].reason, 'SEMANTIC_REVIEW_REQUESTED');
+  assert.deepEqual(
+    recoverArticleBundleReviewState(requested, {
+      currentTranslationFingerprints: fingerprints()
+    }).readiness,
+    {
+      state: 'REVIEW_REQUIRED',
+      reason: 'NO_READINESS_CHECKPOINT',
+      invalidations: requested.readinessInvalidations,
+      currentEpoch: 1
+    }
+  );
+});
+
+test('initial readiness review resolves review request and creates first READY checkpoint', () => {
+  const requested = requestArticleBundleReadinessReview(translationReviewedDraftBundle(), {
+    currentTranslationFingerprints: fingerprints(),
+    id: ID1
+  });
+  const before = recoverArticleBundleReviewState(requested, {
+    currentTranslationFingerprints: fingerprints()
+  });
+  const ready = resolveArticleBundleReadinessInvalidations(requested, {
+    currentTranslationFingerprints: fingerprints(),
+    review: readinessPass(before.articleSourceFingerprint)
+  });
+  assert.equal(ready.readinessCheckpoint.reviewedEpoch, 1);
+  assert.deepEqual(ready.readinessCheckpoint.resolvedInvalidationIds, [ID1]);
+  assert.deepEqual(ready.readinessInvalidations, []);
+  assert.deepEqual(
+    recoverArticleBundleReviewState(ready, {
+      currentTranslationFingerprints: fingerprints()
+    }).readiness,
+    { state: 'READY' }
+  );
+});
+
+test('DRAFT with incomplete locale source stays DRAFT and cannot request readiness review yet', () => {
+  const draft = {
+    ...translationReviewedDraftBundle({ translationCheckpoint: null })
+  };
+  const current = { 'ko-KR': KO };
+  assert.deepEqual(
+    recoverArticleBundleReviewState(draft, { currentTranslationFingerprints: current }).readiness,
+    { state: 'DRAFT' }
+  );
+  assert.throws(
+    () => requestArticleBundleReadinessReview(draft, {
+      currentTranslationFingerprints: current,
+      id: ID1
+    }),
+    /cannot be requested while required locale source is incomplete/
+  );
 });
 
 test('bundle refuses persisted derived workflow state and publication authorization', () => {
@@ -109,7 +194,7 @@ test('ambiguous LocaleVariant.status is rejected instead of becoming publish aut
   assert.throws(() => normalizeArticleBundle(value), /LocaleVariant.status is not v1 source state/);
 });
 
-test('missing current locale derives INCOMPLETE and cannot recover READY', () => {
+test('losing a required locale after readiness derives INCOMPLETE and REVIEW_REQUIRED', () => {
   const recovered = recoverArticleBundleReviewState(reviewedBundle(), {
     currentTranslationFingerprints: { 'ko-KR': KO }
   });
