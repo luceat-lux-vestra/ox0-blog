@@ -44,10 +44,10 @@ Rules:
 - absolute paths, path escape, symlinks, and unsupported image extensions fail validation;
 - PNG, JPEG, GIF, WebP, and SVG are supported;
 - an individual local body image is limited to 5 MiB;
-- total embedded source image bytes per render are limited to 15 MiB;
+- total embedded source image bytes per render are limited to 15 MiB across the complete post, including both language sections;
 - external body images are allowed only as valid HTTPS URLs and remain external;
 - authored `http:`, `data:`, `file:`, and protocol-relative image URLs are rejected;
-- raw HTML `<img>`, `<picture>`, and `<source>` are rejected so image handling cannot bypass the validator; use Markdown image syntax instead.
+- authored raw HTML is rejected entirely. This avoids alternate asset-loading paths such as style URLs, SVG/image elements, video posters, or arbitrary embeds bypassing the Markdown asset validator.
 
 `npm run validate` runs the same asset-aware renderer used by dry-run/publish, so missing or invalid body assets fail before Ghost access.
 
@@ -60,6 +60,7 @@ This policy applies to **body images only**. Frontmatter `feature_image` remains
 - frontmatter and path confinement;
 - local feature-image existence and symlink rejection;
 - body-image path confinement, symlink rejection, supported type, size limits, and HTTPS-only remote policy;
+- raw-HTML rejection;
 - bilingual grammar when language sections are used;
 - repository-wide duplicate slug rejection;
 - repository-wide case-insensitive duplicate title rejection after Unicode NFC normalization;
@@ -70,6 +71,15 @@ Validating one selected path still validates repository-wide invariants before r
 ## Dry-run
 
 `npm run dry-run -- posts/example.md` authenticates to Ghost and performs read-only inspection. It may issue GET requests, but must not upload images or create/update/stamp posts. The plan reports create/update intent, status transition, tags, rendered HTML size, source identity, and feature-image action. Body images are rendered as inline data URIs during this planning step, but that only reads repository files and does not mutate Ghost.
+
+## Live Ghost verification
+
+`npm run verify:ghost-live` is mutating and requires `OX0_GHOST_LIVE_VERIFY=1` plus authorized Ghost Admin credentials. In PR2 it runs two controlled verifiers in sequence:
+
+1. the inherited publisher/bilingual verifier;
+2. a body-image verifier that renders a repository-owned SVG to a `data:image/...` URL, writes it as a direct Lexical HTML card to a temporary draft page, rereads the page by ID, requires exact Lexical preservation, and performs ID-bound cleanup with persisted-absence verification.
+
+The existence of these scripts is not evidence by itself. A PASS is exact-commit-scoped and must be rerun whenever the candidate HEAD changes.
 
 ## Publication boundary
 
