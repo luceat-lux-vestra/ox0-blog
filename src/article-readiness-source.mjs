@@ -2,6 +2,10 @@ import { createHash } from 'node:crypto';
 
 export const ARTICLE_SOURCE_FINGERPRINT_VERSION = 1;
 
+function compareCodeUnits(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 function requireLocales(requiredLocales) {
   if (!Array.isArray(requiredLocales) || requiredLocales.length === 0) {
     throw new Error('requiredLocales must be a non-empty array');
@@ -15,7 +19,7 @@ function requireLocales(requiredLocales) {
   if (new Set(locales).size !== locales.length) {
     throw new Error('requiredLocales must not contain duplicates');
   }
-  return locales;
+  return locales.sort(compareCodeUnits);
 }
 
 function toMap(value) {
