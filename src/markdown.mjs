@@ -1,21 +1,28 @@
-import { marked } from 'marked';
 import { parseBilingualMarkdown } from './bilingual.mjs';
-import { createMarkdownAssetWalker } from './markdown-assets.mjs';
+import { MarkedCompiler } from './compiler/marked-compiler.mjs';
+import { createLegacyInlineImageResolver } from './markdown-assets.mjs';
 
-marked.use({
-  gfm: true,
-  breaks: false
-});
+const compiler = new MarkedCompiler();
 
-function isPromiseLike(value) {
-  return value != null && typeof value.then === 'function';
+function legacyLocale(lang) {
+  if (lang === 'ko') return 'ko-KR';
+  if (lang === 'en') return 'en';
+  return 'und';
 }
 
-function renderOne(markdown, walkAssetToken) {
-  const tokens = marked.lexer(markdown);
-  const pending = marked.walkTokens(tokens, walkAssetToken).filter(isPromiseLike);
-  if (pending.length === 0) return marked.parser(tokens);
-  return Promise.all(pending).then(() => marked.parser(tokens));
+async function compileOne(markdown, { locale, postPath, repoRoot, resolveResource }) {
+  const compiled = await compiler.compile(
+    {
+      locale,
+      body: markdown,
+      sourcePath: postPath ?? null
+    },
+    {
+      repoRoot,
+      resolveResource
+    }
+  );
+  return compiled.htmlFragment;
 }
 
 function wrapBilingual(renderedSections, bilingual) {
@@ -26,14 +33,22 @@ function wrapBilingual(renderedSections, bilingual) {
   return `<div class="ox0-bilingual" data-ox0-bilingual="true">\n${sections.join('\n')}\n</div>\n`;
 }
 
-export function renderMarkdown(markdown, { postPath, repoRoot } = {}) {
-  const walkAssetToken = createMarkdownAssetWalker({ postPath, repoRoot });
+// Transitional compatibility adapter for the pre-Article content model.
+// New compiler consumers should use DocumentCompiler directly on one LocaleVariant.
+export async function renderMarkdown(markdown, { postPath, repoRoot } = {}) {
+  const resolveResource = createLegacyInlineImageResolver({ sourcePath: postPath, repoRoot });
   const bilingual = parseBilingualMarkdown(markdown);
-  if (!bilingual) return renderOne(markdown, walkAssetToken);
-
-  const renderedSections = bilingual.map(({ markdown: sectionMarkdown }) => renderOne(sectionMarkdown, walkAssetToken));
-  if (renderedSections.some(isPromiseLike)) {
-    return Promise.all(renderedSections).then((resolved) => wrapBilingual(resolved, bilingual));
+  if (!bilingual) {
+    return compileOne(markdown, { locale: 'und', postPath, repoRoot, resolveResource });
   }
+
+  const renderedSections = await Promise.all(
+    bilingual.map(({ lang, markdown: sectionMarkdown }) => compileOne(sectionMarkdown, {
+      locale: legacyLocale(lang),
+      postPath,
+      repoRoot,
+      resolveResource
+    }))
+  );
   return wrapBilingual(renderedSections, bilingual);
 }
