@@ -137,8 +137,8 @@ export function createMarkdownAssetWalker({ postPath, repoRoot } = {}) {
   }
 
   return function walkAssetToken(token) {
-    if (token.type === 'html' && /<(?:img|picture|source)\b/i.test(token.raw ?? token.text ?? '')) {
-      throw new Error('raw HTML image elements are not supported; use Markdown image syntax so assets can be validated and inlined');
+    if (token.type === 'html') {
+      throw new Error('raw HTML is not supported in canonical Markdown; use Markdown syntax so content and assets stay within the validated authoring contract');
     }
     if (token.type !== 'image') return undefined;
 
