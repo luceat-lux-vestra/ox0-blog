@@ -1,4 +1,7 @@
-import { validateArticleReadinessInvalidation } from './article-readiness-invalidation.mjs';
+import {
+  isArticleReadinessInvalidationId,
+  validateArticleReadinessInvalidation
+} from './article-readiness-invalidation.mjs';
 import { ARTICLE_SOURCE_FINGERPRINT_VERSION } from './article-readiness-source.mjs';
 
 export const ARTICLE_READINESS_CHECKPOINT_VERSION = 1;
@@ -9,6 +12,14 @@ const REVIEW_KINDS = new Set(['agent', 'human']);
 function requireFingerprint(value, name) {
   if (typeof value !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(value)) {
     throw new Error(`${name} must be sha256:<64 lowercase hex>`);
+  }
+  return value;
+}
+
+function optionalResolvedInvalidationId(value) {
+  if (value == null) return null;
+  if (!isArticleReadinessInvalidationId(value)) {
+    throw new Error('resolvedInvalidationId must be a lowercase UUID v4 or null');
   }
   return value;
 }
@@ -32,7 +43,11 @@ function normalizeReview(review, { requirePass = false } = {}) {
   };
 }
 
-export function createArticleReadinessCheckpoint({ sourceFingerprint, review }) {
+export function createArticleReadinessCheckpoint({
+  sourceFingerprint,
+  review,
+  resolvedInvalidationId = null
+}) {
   const source = requireFingerprint(sourceFingerprint, 'sourceFingerprint');
   const normalizedReview = normalizeReview(review, { requirePass: true });
   const reviewedSource = requireFingerprint(review.reviewedSourceFingerprint, 'review.reviewedSourceFingerprint');
@@ -45,6 +60,7 @@ export function createArticleReadinessCheckpoint({ sourceFingerprint, review }) 
     version: ARTICLE_READINESS_CHECKPOINT_VERSION,
     sourceFingerprintVersion: ARTICLE_SOURCE_FINGERPRINT_VERSION,
     sourceFingerprint: source,
+    resolvedInvalidationId: optionalResolvedInvalidationId(resolvedInvalidationId),
     review: normalizedReview
   };
 }
@@ -60,12 +76,32 @@ export function validateArticleReadinessCheckpoint(checkpoint) {
     throw new Error(`unsupported Article source fingerprint version: ${checkpoint.sourceFingerprintVersion}`);
   }
   const sourceFingerprint = requireFingerprint(checkpoint.sourceFingerprint, 'Article readiness checkpoint sourceFingerprint');
+  const resolvedInvalidationId = optionalResolvedInvalidationId(checkpoint.resolvedInvalidationId ?? null);
   const review = normalizeReview(checkpoint.review);
   return {
     version: checkpoint.version,
     sourceFingerprintVersion: checkpoint.sourceFingerprintVersion,
     sourceFingerprint,
+    resolvedInvalidationId,
     review
+  };
+}
+
+export function resolveArticleReadinessInvalidation({
+  currentSourceFingerprint,
+  invalidation,
+  review
+}) {
+  const durableInvalidation = validateArticleReadinessInvalidation(invalidation);
+  const checkpoint = createArticleReadinessCheckpoint({
+    sourceFingerprint: currentSourceFingerprint,
+    review,
+    resolvedInvalidationId: durableInvalidation.id
+  });
+  return {
+    checkpoint,
+    invalidation: null,
+    resolvedInvalidationId: durableInvalidation.id
   };
 }
 
