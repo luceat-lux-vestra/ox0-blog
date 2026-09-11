@@ -51,7 +51,7 @@ function requireProjectionDescriptor(projection) {
 async function assertExclusiveProjectionIdentity(client, lookupTag, identityTags, postId) {
   const matches = await client.getPostsBySourceTag(lookupTag);
   if (matches.length !== 1 || matches[0]?.id !== postId) {
-    throw new Error('Ghost projection identity ownership changed during synchronization; refusing sync stamp');
+    throw new Error('Ghost source identity ownership changed during synchronization; projection identity is no longer exclusive; refusing sync stamp');
   }
   assertProjectionManagedAndUnchanged(matches[0], identityTags);
 }
@@ -60,13 +60,13 @@ async function assertProjectionIdentityStableBeforeMutation(client, lookupTag, i
   const matches = await client.getPostsBySourceTag(lookupTag);
   if (!existing) {
     if (matches.length !== 0) {
-      throw new Error('Ghost projection identity ownership changed before mutation; refusing write');
+      throw new Error('Ghost source identity ownership changed before mutation; projection identity is no longer unowned; refusing write');
     }
     return;
   }
 
   if (matches.length !== 1 || matches[0]?.id !== existing.id) {
-    throw new Error('Ghost projection identity ownership changed before mutation; refusing write');
+    throw new Error('Ghost source identity ownership changed before mutation; projection identity owner changed; refusing write');
   }
   assertProjectionManagedAndUnchanged(matches[0], identityTags);
   if (matches[0]?.updated_at !== existing.updated_at) {
@@ -85,7 +85,7 @@ async function inspectProjectionSynchronization({ projection: rawProjection, com
   const lexical = createHtmlCardLexical(compiledDocument.htmlFragment);
   const lookupTag = projectionLookupTag(projection.identityTags);
   const identityMatches = await client.getPostsBySourceTag(lookupTag);
-  if (identityMatches.length > 1) throw new Error('multiple Ghost posts claim the same ox0 projection identity');
+  if (identityMatches.length > 1) throw new Error('multiple Ghost posts claim the same ox0 source identity / projection identity');
   const existing = identityMatches[0] ?? null;
 
   if (action === 'draft' && existing?.status === 'published') {
@@ -195,7 +195,7 @@ export async function synchronizeProjection(args) {
 
   const ownershipMatches = await client.getPostsBySourceTag(inspected.lookupTag);
   if (ownershipMatches.length !== 1 || ownershipMatches[0]?.id !== fresh.id) {
-    throw new Error('Ghost projection identity ownership changed after content mutation; refusing sync stamp');
+    throw new Error('Ghost source identity ownership changed after mutation; projection identity owner changed; refusing sync stamp');
   }
 
   const hash = projectionSnapshotHash(fresh);
