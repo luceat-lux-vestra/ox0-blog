@@ -9,8 +9,7 @@ function variant(overrides = {}) {
     title: '제목',
     excerpt: '요약',
     slug: 'slug-a',
-    body: '# 본문\n\n문장  \
-다음 줄\n',
+    body: '# 본문\n\n문장  \n다음 줄\n',
     sourcePath: '/repo/posts/a/ko-KR.md',
     ...overrides
   };
