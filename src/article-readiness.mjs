@@ -123,18 +123,28 @@ export function validateArticleReadinessCheckpoint(checkpoint) {
 
 export function resolveArticleReadinessInvalidations({
   currentSourceFingerprint,
+  priorReviewedEpoch = 0,
   currentEpoch,
   invalidations,
   review
 }) {
+  const priorEpoch = requireEpoch(priorReviewedEpoch, 'priorReviewedEpoch');
   const epoch = requireEpoch(currentEpoch, 'currentEpoch');
+  if (priorEpoch > epoch) throw new Error('priorReviewedEpoch cannot exceed currentEpoch');
   if (!Array.isArray(invalidations) || invalidations.length === 0) {
     throw new Error('at least one Article readiness invalidation is required to resolve');
   }
   const durableInvalidations = invalidations.map(validateArticleReadinessInvalidation);
-  if (durableInvalidations.some((entry) => entry.epoch > epoch)) {
-    throw new Error('Article readiness invalidation epoch cannot exceed current readiness epoch');
+  const expectedCount = epoch - priorEpoch;
+  if (durableInvalidations.length !== expectedCount) {
+    throw new Error('Article readiness invalidation evidence does not cover every unreviewed epoch');
   }
+  durableInvalidations.forEach((entry, index) => {
+    const expectedEpoch = priorEpoch + index + 1;
+    if (entry.epoch !== expectedEpoch) {
+      throw new Error('Article readiness invalidation evidence must be contiguous from prior reviewed epoch');
+    }
+  });
   const ids = durableInvalidations.map((entry) => entry.id);
   if (new Set(ids).size !== ids.length) {
     throw new Error('Article readiness invalidations must not contain duplicate ids');
