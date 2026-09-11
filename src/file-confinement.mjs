@@ -1,4 +1,5 @@
-import { lstat, realpath } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { lstat, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 
 function isOutside(root, candidate) {
@@ -57,4 +58,18 @@ export async function requireRepositoryAssetFile(filePath, repoRoot, name = 'loc
     throw new Error(`repoRoot is required to validate ${name}`);
   }
   return requireConfinedRegularFile(filePath, path.resolve(repoRoot, 'assets'), name);
+}
+
+export async function readRepositoryAssetSnapshot(filePath, repoRoot, name = 'local asset') {
+  const confined = await requireRepositoryAssetFile(filePath, repoRoot, name);
+  const bytes = await readFile(confined.realPath);
+  if (bytes.length !== confined.size) {
+    throw new Error(`${name} changed while snapshotting: ${confined.absolutePath}`);
+  }
+  return {
+    ...confined,
+    bytes,
+    filename: path.basename(confined.absolutePath),
+    fingerprint: `sha256:${createHash('sha256').update(bytes).digest('hex')}`
+  };
 }
