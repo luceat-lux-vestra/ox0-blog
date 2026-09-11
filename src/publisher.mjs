@@ -3,6 +3,7 @@ import { requireCompiledDocument } from './compiler/document-compiler.mjs';
 import { readRepositoryAssetSnapshot } from './file-confinement.mjs';
 import { createHtmlCardLexical } from './lexical.mjs';
 import { sourceTagForPath } from './post.mjs';
+import { projectionSourceFingerprintV1 } from './projection-fingerprint.mjs';
 import {
   REVISION_TAG_PREFIX,
   assertProjectionManagedAndUnchanged,
@@ -67,13 +68,31 @@ function requireProjectionDescriptor(projection) {
     throw new Error('projection.featureImageFingerprint is only valid for a local featureImage');
   }
 
+  const materialAssets = projection.materialAssets ?? [];
+  if (!Array.isArray(materialAssets)) throw new Error('projection.materialAssets must be an array');
+  if (identityTags.length === 1 && materialAssets.length > 0) {
+    throw new Error('legacy source-only projection cannot carry stable material asset fingerprint evidence');
+  }
+
   return {
     identityTags,
     sourceFingerprint,
     featureImageFingerprint,
+    materialAssets: materialAssets.map((asset) => ({ ...asset })),
     locale: projection.locale ?? null,
     ...metadata
   };
+}
+
+function assertProjectionFingerprintIntegrity(projection, compiledDocument) {
+  if (projection.identityTags.length === 1) return;
+  const recomputed = projectionSourceFingerprintV1(projection, compiledDocument, {
+    materialAssets: projection.materialAssets,
+    featureImageFingerprint: projection.featureImageFingerprint
+  });
+  if (recomputed !== projection.sourceFingerprint) {
+    throw new Error(`projection.sourceFingerprint does not match current compiled projection: expected ${recomputed}, got ${projection.sourceFingerprint}`);
+  }
 }
 
 async function snapshotStableLocalFeatureImage(projection, repoRoot) {
@@ -131,6 +150,7 @@ async function inspectProjectionSynchronization({ projection: rawProjection, com
   if (projection.locale != null && compiledDocument.locale !== projection.locale) {
     throw new Error(`CompiledDocument.locale=${compiledDocument.locale} does not match projection.locale=${projection.locale}`);
   }
+  assertProjectionFingerprintIntegrity(projection, compiledDocument);
 
   const featureImageSnapshot = await snapshotStableLocalFeatureImage(projection, repoRoot);
 
