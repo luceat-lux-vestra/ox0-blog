@@ -49,6 +49,7 @@ function isAbsoluteOnAnyPlatform(value) {
 function normalizeFeatureImage(value) {
   const image = optionalString(value, 'featureImage');
   if (!image) return null;
+  if (image.startsWith('//')) throw new Error('protocol-relative featureImage URLs are not allowed');
   if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(image)) {
     let parsed;
     try { parsed = new URL(image); } catch { throw new Error('remote featureImage must be a valid URL'); }
