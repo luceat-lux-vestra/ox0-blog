@@ -151,7 +151,13 @@ export function deriveReviewedArticleReadiness({
   const active = invalidations.map(validateArticleReadinessInvalidation);
 
   if (checkpoint == null) {
-    return { state: 'REVIEW_REQUIRED', reason: 'NO_READINESS_CHECKPOINT' };
+    if (epoch === 0 && active.length === 0) return { state: 'DRAFT' };
+    return {
+      state: 'REVIEW_REQUIRED',
+      reason: 'NO_READINESS_CHECKPOINT',
+      ...(active.length > 0 ? { invalidations: active } : {}),
+      currentEpoch: epoch
+    };
   }
   const accepted = validateArticleReadinessCheckpoint(checkpoint);
   if (accepted.sourceFingerprint !== source) {
