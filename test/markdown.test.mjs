@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { MAX_INLINE_IMAGE_BYTES } from '../src/markdown-assets.mjs';
+import { MAX_INLINE_ASSET_BYTES, MAX_INLINE_IMAGE_BYTES } from '../src/markdown-assets.mjs';
 import { renderMarkdown } from '../src/markdown.mjs';
 
 async function fixture() {
@@ -14,6 +14,12 @@ async function fixture() {
   await mkdir(assetDir, { recursive: true });
   return { repoRoot, postPath: path.join(postDir, 'example.md'), assetDir };
 }
+
+test('text-only rendering remains synchronous for existing callers', () => {
+  const html = renderMarkdown('# body');
+  assert.equal(typeof html, 'string');
+  assert.match(html, /<h1>body<\/h1>/);
+});
 
 test('bilingual rendering emits accessible language wrappers', async () => {
   const html = await renderMarkdown(`:::lang ko\n한국어\n:::\n:::lang en\nEnglish\n:::\n`);
@@ -73,11 +79,14 @@ test('local Markdown image symlinks are rejected', async () => {
   );
 });
 
-test('raw HTML image elements are rejected instead of bypassing asset validation', async () => {
-  await assert.rejects(
-    renderMarkdown('<img src="../assets/example/diagram.png" alt="diagram">'),
-    /use Markdown image syntax/
-  );
+test('raw HTML is rejected instead of creating an unvalidated asset escape hatch', async () => {
+  for (const html of [
+    '<img src="../assets/example/diagram.png" alt="diagram">',
+    '<div style="background-image:url(../assets/example/diagram.png)">x</div>',
+    '<video poster="../assets/example/diagram.png"></video>'
+  ]) {
+    await assert.rejects(renderMarkdown(html), /raw HTML is not supported/);
+  }
 });
 
 test('an individual embedded image is size bounded', async () => {
@@ -87,5 +96,18 @@ test('an individual embedded image is size bounded', async () => {
   await assert.rejects(
     renderMarkdown('![huge](../assets/example/huge.png)', { postPath, repoRoot }),
     /exceeds/
+  );
+});
+
+test('the total embedded-byte budget is shared across bilingual sections', async () => {
+  const { repoRoot, postPath, assetDir } = await fixture();
+  const perReferenceBytes = Math.floor(MAX_INLINE_ASSET_BYTES / 4) + 1;
+  assert.ok(perReferenceBytes < MAX_INLINE_IMAGE_BYTES);
+  await writeFile(path.join(assetDir, 'shared.png'), Buffer.alloc(perReferenceBytes));
+
+  const markdown = `:::lang ko\n\n![one](../assets/example/shared.png)\n![two](../assets/example/shared.png)\n\n:::\n\n:::lang en\n\n![three](../assets/example/shared.png)\n![four](../assets/example/shared.png)\n\n:::\n`;
+  await assert.rejects(
+    renderMarkdown(markdown, { postPath, repoRoot }),
+    /embedded image total exceeds/
   );
 });
