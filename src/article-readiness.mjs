@@ -16,12 +16,26 @@ function requireFingerprint(value, name) {
   return value;
 }
 
-function optionalResolvedInvalidationId(value) {
-  if (value == null) return null;
-  if (!isArticleReadinessInvalidationId(value)) {
-    throw new Error('resolvedInvalidationId must be a lowercase UUID v4 or null');
+function requireEpoch(value, name) {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`${name} must be a non-negative safe integer`);
   }
   return value;
+}
+
+function normalizeResolvedInvalidationIds(value) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) throw new Error('resolvedInvalidationIds must be an array');
+  const ids = value.map((id) => {
+    if (!isArticleReadinessInvalidationId(id)) {
+      throw new Error('resolvedInvalidationIds must contain lowercase UUID v4 values');
+    }
+    return id;
+  });
+  if (new Set(ids).size !== ids.length) {
+    throw new Error('resolvedInvalidationIds must not contain duplicates');
+  }
+  return ids;
 }
 
 function normalizeReview(review, { requirePass = false } = {}) {
@@ -46,11 +60,14 @@ function normalizeReview(review, { requirePass = false } = {}) {
 export function createArticleReadinessCheckpoint({
   sourceFingerprint,
   review,
-  resolvedInvalidationId = null
+  reviewedEpoch = 0,
+  resolvedInvalidationIds = []
 }) {
   const source = requireFingerprint(sourceFingerprint, 'sourceFingerprint');
   const normalizedReview = normalizeReview(review, { requirePass: true });
   const reviewedSource = requireFingerprint(review.reviewedSourceFingerprint, 'review.reviewedSourceFingerprint');
+  const epoch = requireEpoch(reviewedEpoch, 'reviewedEpoch');
+  const resolvedIds = normalizeResolvedInvalidationIds(resolvedInvalidationIds);
 
   if (reviewedSource !== source) {
     throw new Error('Article readiness review does not cover the exact current source fingerprint');
@@ -60,7 +77,8 @@ export function createArticleReadinessCheckpoint({
     version: ARTICLE_READINESS_CHECKPOINT_VERSION,
     sourceFingerprintVersion: ARTICLE_SOURCE_FINGERPRINT_VERSION,
     sourceFingerprint: source,
-    resolvedInvalidationId: optionalResolvedInvalidationId(resolvedInvalidationId),
+    reviewedEpoch: epoch,
+    resolvedInvalidationIds: resolvedIds,
     review: normalizedReview
   };
 }
@@ -76,56 +94,83 @@ export function validateArticleReadinessCheckpoint(checkpoint) {
     throw new Error(`unsupported Article source fingerprint version: ${checkpoint.sourceFingerprintVersion}`);
   }
   const sourceFingerprint = requireFingerprint(checkpoint.sourceFingerprint, 'Article readiness checkpoint sourceFingerprint');
-  const resolvedInvalidationId = optionalResolvedInvalidationId(checkpoint.resolvedInvalidationId ?? null);
+  const reviewedEpoch = requireEpoch(checkpoint.reviewedEpoch, 'Article readiness checkpoint reviewedEpoch');
+  const resolvedInvalidationIds = normalizeResolvedInvalidationIds(checkpoint.resolvedInvalidationIds);
   const review = normalizeReview(checkpoint.review);
   return {
     version: checkpoint.version,
     sourceFingerprintVersion: checkpoint.sourceFingerprintVersion,
     sourceFingerprint,
-    resolvedInvalidationId,
+    reviewedEpoch,
+    resolvedInvalidationIds,
     review
   };
 }
 
-export function resolveArticleReadinessInvalidation({
+export function resolveArticleReadinessInvalidations({
   currentSourceFingerprint,
-  invalidation,
+  currentEpoch,
+  invalidations,
   review
 }) {
-  const durableInvalidation = validateArticleReadinessInvalidation(invalidation);
+  const epoch = requireEpoch(currentEpoch, 'currentEpoch');
+  if (!Array.isArray(invalidations) || invalidations.length === 0) {
+    throw new Error('at least one Article readiness invalidation is required to resolve');
+  }
+  const durableInvalidations = invalidations.map(validateArticleReadinessInvalidation);
+  if (durableInvalidations.some((entry) => entry.epoch > epoch)) {
+    throw new Error('Article readiness invalidation epoch cannot exceed current readiness epoch');
+  }
+  const ids = durableInvalidations.map((entry) => entry.id);
+  if (new Set(ids).size !== ids.length) {
+    throw new Error('Article readiness invalidations must not contain duplicate ids');
+  }
+
   const checkpoint = createArticleReadinessCheckpoint({
     sourceFingerprint: currentSourceFingerprint,
     review,
-    resolvedInvalidationId: durableInvalidation.id
+    reviewedEpoch: epoch,
+    resolvedInvalidationIds: ids
   });
   return {
     checkpoint,
-    invalidation: null,
-    resolvedInvalidationId: durableInvalidation.id
+    invalidations: [],
+    resolvedInvalidationIds: ids
   };
 }
 
 export function deriveReviewedArticleReadiness({
   currentSourceFingerprint,
+  currentEpoch = 0,
   checkpoint = null,
-  invalidation = null
+  invalidations = []
 }) {
   const source = requireFingerprint(currentSourceFingerprint, 'currentSourceFingerprint');
+  const epoch = requireEpoch(currentEpoch, 'currentEpoch');
+  if (!Array.isArray(invalidations)) throw new Error('invalidations must be an array');
+  const active = invalidations.map(validateArticleReadinessInvalidation);
 
   if (checkpoint == null) {
     return { state: 'REVIEW_REQUIRED', reason: 'NO_READINESS_CHECKPOINT' };
   }
   const accepted = validateArticleReadinessCheckpoint(checkpoint);
-  if (invalidation != null) {
-    const durable = validateArticleReadinessInvalidation(invalidation);
+  if (accepted.sourceFingerprint !== source) {
+    return { state: 'REVIEW_REQUIRED', reason: 'SOURCE_CHANGED' };
+  }
+  if (active.length > 0) {
     return {
       state: 'REVIEW_REQUIRED',
       reason: 'DURABLE_INVALIDATION',
-      invalidation: durable
+      invalidations: active
     };
   }
-  if (accepted.sourceFingerprint !== source) {
-    return { state: 'REVIEW_REQUIRED', reason: 'SOURCE_CHANGED' };
+  if (accepted.reviewedEpoch !== epoch) {
+    return {
+      state: 'REVIEW_REQUIRED',
+      reason: 'UNREVIEWED_INVALIDATION_EPOCH',
+      reviewedEpoch: accepted.reviewedEpoch,
+      currentEpoch: epoch
+    };
   }
   return { state: 'READY' };
 }
