@@ -5,6 +5,7 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createHtmlCardLexical } from '../src/lexical.mjs';
+import { projectionSourceFingerprintV1 } from '../src/projection-fingerprint.mjs';
 import { projectionIdentityTags } from '../src/projection-identity.mjs';
 import {
   getProjectionSourceFingerprint,
@@ -18,7 +19,6 @@ const IDENTITY = projectionIdentityTags({
   variantId: 'variant-ko-1',
   locale: 'ko-KR'
 });
-const SOURCE_FP = `sha256:${'a'.repeat(64)}`;
 
 function compiled() {
   return {
@@ -30,9 +30,8 @@ function compiled() {
 }
 
 function projection(overrides = {}) {
-  return {
+  const value = {
     identityTags: IDENTITY,
-    sourceFingerprint: SOURCE_FP,
     locale: 'ko-KR',
     title: '제목',
     slug: 'article-ko',
@@ -43,8 +42,16 @@ function projection(overrides = {}) {
     featured: false,
     visibility: 'public',
     canonicalUrl: null,
+    materialAssets: [],
     ...overrides
   };
+  if (!Object.hasOwn(overrides, 'sourceFingerprint')) {
+    value.sourceFingerprint = projectionSourceFingerprintV1(value, compiled(), {
+      materialAssets: value.materialAssets,
+      featureImageFingerprint: value.featureImageFingerprint ?? null
+    });
+  }
+  return value;
 }
 
 function ghostPost(overrides = {}) {
@@ -66,7 +73,7 @@ function ghostPost(overrides = {}) {
   };
 }
 
-function seal(post, sourceFingerprint = SOURCE_FP) {
+function seal(post, sourceFingerprint = projection().sourceFingerprint) {
   const hash = projectionSnapshotHash(post);
   post.tags = replaceProjectionPublisherTags(post.tags, IDENTITY, hash, { sourceFingerprint })
     .map((name) => ({ name }));
@@ -138,11 +145,12 @@ class FakeClient {
 }
 
 test('same revision + same desired status plans and verifies a true no-op', async () => {
-  const existing = seal(ghostPost());
+  const source = projection();
+  const existing = seal(ghostPost(), source.sourceFingerprint);
   const client = new FakeClient(existing);
 
   const plan = await planProjectionSynchronization({
-    projection: projection(),
+    projection: source,
     compiledDocument: compiled(),
     action: 'draft',
     client,
@@ -151,7 +159,7 @@ test('same revision + same desired status plans and verifies a true no-op', asyn
   assert.equal(plan.operation, 'noop');
 
   const result = await synchronizeProjection({
-    projection: projection(),
+    projection: source,
     compiledDocument: compiled(),
     action: 'draft',
     client,
@@ -173,10 +181,13 @@ test('same revision draft -> publish performs status-only promotion and preserve
   const bytes = Buffer.from('stable-cover-bytes');
   await writeFile(cover, bytes);
   const featureImageFingerprint = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
-
-  const existing = seal(ghostPost({ feature_image: 'https://ghost.example/content/images/cover.png' }));
-  const client = new FakeClient(existing);
   const source = projection({ featureImage: cover, featureImageFingerprint });
+
+  const existing = seal(
+    ghostPost({ feature_image: 'https://ghost.example/content/images/cover.png' }),
+    source.sourceFingerprint
+  );
+  const client = new FakeClient(existing);
 
   const plan = await planProjectionSynchronization({
     projection: source,
@@ -202,7 +213,7 @@ test('same revision draft -> publish performs status-only promotion and preserve
   assert.deepEqual(Object.keys(client.lastUpdatePayload).sort(), ['status', 'updated_at']);
   assert.equal(client.lastUpdatePayload.status, 'published');
   assert.equal(result.status, 'published');
-  assert.equal(getProjectionSourceFingerprint(result), SOURCE_FP);
+  assert.equal(getProjectionSourceFingerprint(result), source.sourceFingerprint);
   assert.equal(client.calls.filter((call) => call === 'update').length, 1);
   assert.equal(client.calls.filter((call) => call === 'stamp').length, 1);
   assert.ok(!client.calls.includes('upload-bytes'));
@@ -210,14 +221,15 @@ test('same revision draft -> publish performs status-only promotion and preserve
 });
 
 test('status-only promotion fails before sync stamp if Ghost changes another managed field', async () => {
-  const existing = seal(ghostPost());
+  const source = projection();
+  const existing = seal(ghostPost(), source.sourceFingerprint);
   const client = new FakeClient(existing, {
     mutateStatusSideEffect: (post) => ({ ...post, title: 'Unexpected mutation' })
   });
 
   await assert.rejects(
     synchronizeProjection({
-      projection: projection(),
+      projection: source,
       compiledDocument: compiled(),
       action: 'publish',
       client,
