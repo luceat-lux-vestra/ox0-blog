@@ -110,7 +110,7 @@ test('page slug race observed after content mutation fails before sync stamping'
     synchronizePost({ source: source(), action: 'draft', client, repoRoot: ROOT, renderMarkdown: render }),
     /occupied by a page/
   );
-  assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'update', 'fresh', 'slug', 'page']);
+  assert.deepEqual(client.calls, ['identity', 'slug', 'page', 'identity', 'update', 'fresh', 'slug', 'page']);
   assert.ok(!client.calls.includes('stamp'));
 });
 
@@ -121,7 +121,7 @@ test('page slug race observed after sync stamping fails before returning success
     /occupied by a page/
   );
   assert.deepEqual(client.calls, [
-    'identity', 'slug', 'page',
+    'identity', 'slug', 'page', 'identity',
     'update', 'fresh', 'slug', 'page', 'identity',
     'stamp', 'fresh', 'slug', 'page'
   ]);
