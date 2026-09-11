@@ -61,17 +61,30 @@ function normalizeReview(review, { requirePass = false } = {}) {
   };
 }
 
+function requireEpochSpan(priorReviewedEpoch, reviewedEpoch, resolvedInvalidationIds) {
+  const prior = requireEpoch(priorReviewedEpoch, 'priorReviewedEpoch');
+  const reviewed = requireEpoch(reviewedEpoch, 'reviewedEpoch');
+  if (prior > reviewed) {
+    throw new Error('priorReviewedEpoch cannot exceed reviewedEpoch');
+  }
+  if (resolvedInvalidationIds.length !== reviewed - prior) {
+    throw new Error('resolvedInvalidationIds must exactly cover the reviewed readiness epoch span');
+  }
+  return { prior, reviewed };
+}
+
 export function createArticleReadinessCheckpoint({
   sourceFingerprint,
   review,
+  priorReviewedEpoch = 0,
   reviewedEpoch = 0,
   resolvedInvalidationIds = []
 }) {
   const source = requireFingerprint(sourceFingerprint, 'sourceFingerprint');
   const normalizedReview = normalizeReview(review, { requirePass: true });
   const reviewedSource = requireFingerprint(review.reviewedSourceFingerprint, 'review.reviewedSourceFingerprint');
-  const epoch = requireEpoch(reviewedEpoch, 'reviewedEpoch');
   const resolvedIds = normalizeInvalidationIds(resolvedInvalidationIds, 'resolvedInvalidationIds');
+  const span = requireEpochSpan(priorReviewedEpoch, reviewedEpoch, resolvedIds);
   const reviewedInvalidationIds = normalizeInvalidationIds(
     review.reviewedInvalidationIds,
     'review.reviewedInvalidationIds'
@@ -88,7 +101,8 @@ export function createArticleReadinessCheckpoint({
     version: ARTICLE_READINESS_CHECKPOINT_VERSION,
     sourceFingerprintVersion: ARTICLE_SOURCE_FINGERPRINT_VERSION,
     sourceFingerprint: source,
-    reviewedEpoch: epoch,
+    priorReviewedEpoch: span.prior,
+    reviewedEpoch: span.reviewed,
     resolvedInvalidationIds: resolvedIds,
     review: normalizedReview
   };
@@ -105,17 +119,22 @@ export function validateArticleReadinessCheckpoint(checkpoint) {
     throw new Error(`unsupported Article source fingerprint version: ${checkpoint.sourceFingerprintVersion}`);
   }
   const sourceFingerprint = requireFingerprint(checkpoint.sourceFingerprint, 'Article readiness checkpoint sourceFingerprint');
-  const reviewedEpoch = requireEpoch(checkpoint.reviewedEpoch, 'Article readiness checkpoint reviewedEpoch');
   const resolvedInvalidationIds = normalizeInvalidationIds(
     checkpoint.resolvedInvalidationIds,
     'Article readiness checkpoint resolvedInvalidationIds'
+  );
+  const span = requireEpochSpan(
+    checkpoint.priorReviewedEpoch,
+    checkpoint.reviewedEpoch,
+    resolvedInvalidationIds
   );
   const review = normalizeReview(checkpoint.review);
   return {
     version: checkpoint.version,
     sourceFingerprintVersion: checkpoint.sourceFingerprintVersion,
     sourceFingerprint,
-    reviewedEpoch,
+    priorReviewedEpoch: span.prior,
+    reviewedEpoch: span.reviewed,
     resolvedInvalidationIds,
     review
   };
@@ -153,6 +172,7 @@ export function resolveArticleReadinessInvalidations({
   const checkpoint = createArticleReadinessCheckpoint({
     sourceFingerprint: currentSourceFingerprint,
     review,
+    priorReviewedEpoch: priorEpoch,
     reviewedEpoch: epoch,
     resolvedInvalidationIds: ids
   });
