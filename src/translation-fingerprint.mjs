@@ -19,6 +19,12 @@ function appendField(hash, name, value) {
   hash.update('\0', 'utf8');
 }
 
+function compareCodeUnits(a, b) {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
 function normalizeAssets(materialAssets) {
   if (materialAssets == null) return [];
   if (!Array.isArray(materialAssets)) throw new Error('materialAssets must be an array');
@@ -38,7 +44,7 @@ function normalizeAssets(materialAssets) {
     return { ref, sha256: asset.sha256 };
   });
 
-  return assets.sort((a, b) => a.ref.localeCompare(b.ref, 'en'));
+  return assets.sort((a, b) => compareCodeUnits(a.ref, b.ref));
 }
 
 export function translationFingerprintV1(rawVariant, { materialAssets = [] } = {}) {
