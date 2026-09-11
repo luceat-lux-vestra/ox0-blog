@@ -48,6 +48,10 @@ function parseScalar(raw, lineNumber) {
 
   if (value.startsWith("'")) return parseSingleQuoted(value, lineNumber);
 
+  if (/(?:^|\s)#/.test(value)) {
+    throw new Error(`inline YAML comments are not supported at frontmatter line ${lineNumber}; quote the value or use a standalone comment line`);
+  }
+
   return value;
 }
 
