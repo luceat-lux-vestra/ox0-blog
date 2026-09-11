@@ -10,7 +10,7 @@
     "test": "node --test",
     "validate": "node scripts/validate-post.mjs",
     "dry-run": "node scripts/plan-post.mjs",
-    "verify:ghost-live": "node scripts/verify-ghost-live.mjs"
+    "verify:ghost-live": "node scripts/verify-ghost-live.mjs && node scripts/verify-body-image-live.mjs"
   },
   "dependencies": {
     "marked": "18.0.11"
