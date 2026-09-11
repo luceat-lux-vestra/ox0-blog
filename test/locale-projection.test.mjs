@@ -98,9 +98,10 @@ test('compile boundary is async, validates locale ownership, and attaches source
   assert.equal(result.projection.locale, 'ko-KR');
   assert.match(result.sourceFingerprint, /^sha256:[a-f0-9]{64}$/);
   assert.equal(result.projection.sourceFingerprint, result.sourceFingerprint);
+  assert.equal(Object.hasOwn(result.projection, 'featureImageFingerprint'), false);
 });
 
-test('local feature image needs stable content evidence before projection revision can be computed', async () => {
+test('local feature image needs stable content evidence and carries it into publisher handoff', async () => {
   const compiler = {
     async compile(variant) {
       return {
@@ -121,14 +122,16 @@ test('local feature image needs stable content evidence before projection revisi
     /requires featureImageFingerprint/
   );
 
+  const featureImageFingerprint = `sha256:${'c'.repeat(64)}`;
   const result = await compileLocaleProjection({
     article: article(),
     locale: 'ko-KR',
     publication: { featureImage: '/repo/assets/cover.png' },
     compiler,
-    fingerprintEvidence: { featureImageFingerprint: `sha256:${'c'.repeat(64)}` }
+    fingerprintEvidence: { featureImageFingerprint }
   });
   assert.match(result.sourceFingerprint, /^sha256:[a-f0-9]{64}$/);
+  assert.equal(result.projection.featureImageFingerprint, featureImageFingerprint);
 });
 
 test('compiler returning a different locale fails before publisher handoff', async () => {
