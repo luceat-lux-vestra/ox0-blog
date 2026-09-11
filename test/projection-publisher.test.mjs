@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createHtmlCardLexical } from '../src/lexical.mjs';
 import { projectionIdentityTags } from '../src/projection-identity.mjs';
 import {
+  REVISION_TAG_PREFIX,
   projectionSnapshotHash,
   replaceProjectionPublisherTags,
   SYNC_TAG_PREFIX
@@ -14,10 +15,12 @@ const identityTags = projectionIdentityTags({
   variantId: 'variant-ko-1',
   locale: 'ko-KR'
 });
+const SOURCE_FP = `sha256:${'a'.repeat(64)}`;
 
 function projection(overrides = {}) {
   return {
     identityTags,
+    sourceFingerprint: SOURCE_FP,
     locale: 'ko-KR',
     title: '제목',
     slug: 'article-ko',
@@ -61,9 +64,9 @@ function ghostPost(overrides = {}) {
   };
 }
 
-function seal(value, identity = identityTags) {
+function seal(value, identity = identityTags, sourceFingerprint = identity.length === 3 ? SOURCE_FP : null) {
   const hash = projectionSnapshotHash(value);
-  value.tags = replaceProjectionPublisherTags(value.tags, identity, hash).map((name) => ({ name }));
+  value.tags = replaceProjectionPublisherTags(value.tags, identity, hash, { sourceFingerprint }).map((name) => ({ name }));
   return value;
 }
 
@@ -134,7 +137,7 @@ class FakeClient {
   }
 }
 
-test('read-only projection plan carries stable identity and compiler observations', async () => {
+test('read-only projection plan carries stable identity, source revision, and compiler observations', async () => {
   const client = new FakeClient();
   const plan = await planProjectionSynchronization({
     projection: projection(),
@@ -147,13 +150,15 @@ test('read-only projection plan carries stable identity and compiler observation
   assert.equal(plan.operation, 'create');
   assert.deepEqual(plan.identityTags, identityTags);
   assert.equal(plan.sourceIdentity, identityTags[2]);
+  assert.equal(plan.sourceFingerprint, SOURCE_FP);
+  assert.equal(plan.projectedSourceFingerprint, null);
   assert.equal(plan.locale, 'ko-KR');
   assert.deepEqual(plan.referencedAssets, compiled().referencedAssets);
   assert.deepEqual(plan.diagnostics, []);
   assert.ok(client.calls.every(([kind]) => ['identity', 'slug', 'page'].includes(kind)));
 });
 
-test('compiled projection create stamps article + locale + variant identity after exact mutation verification', async () => {
+test('compiled projection create stamps article + locale + variant identity and source revision after exact mutation verification', async () => {
   const client = new FakeClient();
   const result = await synchronizeProjection({
     projection: projection(),
@@ -167,7 +172,24 @@ test('compiled projection create stamps article + locale + variant identity afte
   assert.equal(client.lastMutationPayload.lexical, createHtmlCardLexical('<h1>본문</h1>'));
   const finalNames = result.tags.map((tag) => tag.name);
   assert.deepEqual(finalNames.slice(0, 4), ['Rust', ...identityTags]);
+  assert.equal(finalNames.at(-2), `${REVISION_TAG_PREFIX}${SOURCE_FP.slice('sha256:'.length)}`);
   assert.match(finalNames.at(-1), new RegExp(`^${SYNC_TAG_PREFIX.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[a-f0-9]{64}$`));
+});
+
+test('stable Article projection without source revision evidence is rejected before Ghost access', async () => {
+  const client = new FakeClient();
+  const noRevision = projection({ sourceFingerprint: null });
+  await assert.rejects(
+    planProjectionSynchronization({
+      projection: noRevision,
+      compiledDocument: compiled(),
+      action: 'draft',
+      client,
+      repoRoot: '/repo'
+    }),
+    /requires projection.sourceFingerprint/
+  );
+  assert.deepEqual(client.calls, []);
 });
 
 test('projection locale mismatch fails before Ghost access', async () => {
@@ -187,7 +209,7 @@ test('projection locale mismatch fails before Ghost access', async () => {
 
 test('matching variant source tag without matching article/locale ownership fails closed', async () => {
   const legacyIdentityOnly = [identityTags[2]];
-  const existing = seal(ghostPost(), legacyIdentityOnly);
+  const existing = seal(ghostPost(), legacyIdentityOnly, null);
   const client = new FakeClient({ identity: [existing] });
 
   await assert.rejects(
