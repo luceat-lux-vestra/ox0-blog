@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createArticleReadinessInvalidation } from '../src/article-readiness-invalidation.mjs';
 import { articleSemanticSourceFingerprintV1 } from '../src/article-readiness-source.mjs';
 import {
   ARTICLE_READINESS_REVIEW_CONTRACT_VERSION,
@@ -17,7 +18,6 @@ import {
 
 const KO = `sha256:${'a'.repeat(64)}`;
 const EN = `sha256:${'b'.repeat(64)}`;
-const EVIDENCE = `sha256:${'c'.repeat(64)}`;
 
 function article() {
   return {
@@ -50,7 +50,7 @@ function fingerprints() {
   return { 'ko-KR': KO, en: EN };
 }
 
-function reviewedBundle() {
+function reviewedBundle(overrides = {}) {
   const current = fingerprints();
   const translationCheckpoint = createTranslationCheckpoint({
     requiredLocales: ['ko-KR', 'en'],
@@ -68,13 +68,11 @@ function reviewedBundle() {
   });
   const readinessCheckpoint = createArticleReadinessCheckpoint({
     sourceFingerprint,
-    evidenceFingerprint: EVIDENCE,
     review: {
       result: 'PASS',
       kind: 'agent',
       contractVersion: ARTICLE_READINESS_REVIEW_CONTRACT_VERSION,
-      reviewedSourceFingerprint: sourceFingerprint,
-      reviewedEvidenceFingerprint: EVIDENCE
+      reviewedSourceFingerprint: sourceFingerprint
     }
   });
 
@@ -82,14 +80,15 @@ function reviewedBundle() {
     version: ARTICLE_BUNDLE_CONTRACT_VERSION,
     article: article(),
     translationCheckpoint,
-    readinessCheckpoint
+    readinessCheckpoint,
+    readinessInvalidation: null,
+    ...overrides
   };
 }
 
 test('fresh session recovers SYNCED + READY from durable facts only', () => {
   const recovered = recoverArticleBundleReviewState(reviewedBundle(), {
-    currentTranslationFingerprints: fingerprints(),
-    currentEvidenceFingerprint: EVIDENCE
+    currentTranslationFingerprints: fingerprints()
   });
 
   assert.deepEqual(recovered.translation, { state: 'SYNCED' });
@@ -100,10 +99,7 @@ test('fresh session recovers SYNCED + READY from durable facts only', () => {
 test('bundle refuses persisted derived workflow state and publication authorization', () => {
   for (const field of ['translationState', 'readinessState', 'ghostProjectionState', 'gitState', 'publicationAuthorization']) {
     assert.throws(
-      () => normalizeArticleBundle({
-        ...reviewedBundle(),
-        [field]: 'SHOULD_NOT_PERSIST'
-      }),
+      () => normalizeArticleBundle({ ...reviewedBundle(), [field]: 'SHOULD_NOT_PERSIST' }),
       new RegExp(`must not persist derived/ephemeral field: ${field}`)
     );
   }
@@ -112,36 +108,22 @@ test('bundle refuses persisted derived workflow state and publication authorizat
 test('ambiguous LocaleVariant.status is rejected instead of becoming publish authorization', () => {
   const value = reviewedBundle();
   value.article.variants[0].status = 'published';
-  assert.throws(
-    () => normalizeArticleBundle(value),
-    /LocaleVariant.status is not v1 source state/
-  );
+  assert.throws(() => normalizeArticleBundle(value), /LocaleVariant.status is not v1 source state/);
 });
 
 test('missing current locale derives INCOMPLETE and cannot recover READY', () => {
   const recovered = recoverArticleBundleReviewState(reviewedBundle(), {
-    currentTranslationFingerprints: { 'ko-KR': KO },
-    currentEvidenceFingerprint: EVIDENCE
+    currentTranslationFingerprints: { 'ko-KR': KO }
   });
-  assert.deepEqual(recovered.translation, {
-    state: 'INCOMPLETE',
-    missingLocales: ['en']
-  });
+  assert.deepEqual(recovered.translation, { state: 'INCOMPLETE', missingLocales: ['en'] });
   assert.equal(recovered.articleSourceFingerprint, null);
-  assert.deepEqual(recovered.readiness, {
-    state: 'REVIEW_REQUIRED',
-    reason: 'SOURCE_INCOMPLETE'
-  });
+  assert.deepEqual(recovered.readiness, { state: 'REVIEW_REQUIRED', reason: 'SOURCE_INCOMPLETE' });
 });
 
 test('one locale semantic change makes translation STALE and invalidates readiness independently', () => {
-  const changed = {
-    'ko-KR': `sha256:${'d'.repeat(64)}`,
-    en: EN
-  };
+  const changed = { 'ko-KR': `sha256:${'d'.repeat(64)}`, en: EN };
   const recovered = recoverArticleBundleReviewState(reviewedBundle(), {
-    currentTranslationFingerprints: changed,
-    currentEvidenceFingerprint: EVIDENCE
+    currentTranslationFingerprints: changed
   });
 
   assert.deepEqual(recovered.translation, {
@@ -149,23 +131,41 @@ test('one locale semantic change makes translation STALE and invalidates readine
     changedLocales: ['ko-KR'],
     staleLocales: ['en']
   });
-  assert.deepEqual(recovered.readiness, {
-    state: 'REVIEW_REQUIRED',
-    reason: 'SOURCE_CHANGED'
-  });
+  assert.deepEqual(recovered.readiness, { state: 'REVIEW_REQUIRED', reason: 'SOURCE_CHANGED' });
 });
 
-test('evidence drift invalidates readiness while translation remains SYNCED', () => {
-  const recovered = recoverArticleBundleReviewState(reviewedBundle(), {
-    currentTranslationFingerprints: fingerprints(),
-    currentEvidenceFingerprint: `sha256:${'e'.repeat(64)}`
+test('durable RTA invalidation survives fresh-session recovery while translation remains SYNCED', () => {
+  const invalidation = createArticleReadinessInvalidation({
+    reason: 'EXTERNAL_EVIDENCE_CHANGED',
+    origin: 'rta',
+    reference: 'rta:luceat-lux-vestra/research-to-action#22'
   });
+  const recovered = recoverArticleBundleReviewState(
+    reviewedBundle({ readinessInvalidation: invalidation }),
+    { currentTranslationFingerprints: fingerprints() }
+  );
 
   assert.deepEqual(recovered.translation, { state: 'SYNCED' });
   assert.deepEqual(recovered.readiness, {
     state: 'REVIEW_REQUIRED',
-    reason: 'EVIDENCE_CHANGED'
+    reason: 'DURABLE_INVALIDATION',
+    invalidation
   });
+});
+
+test('clearing a resolved invalidation restores READY only when reviewed source is still exact', () => {
+  const invalidated = reviewedBundle({
+    readinessInvalidation: createArticleReadinessInvalidation({
+      reason: 'PROVENANCE_WEAKENED',
+      origin: 'blog-audit',
+      reference: 'article-audit:claim-set-1'
+    })
+  });
+  const normalized = normalizeArticleBundle({ ...invalidated, readinessInvalidation: null });
+  const recovered = recoverArticleBundleReviewState(normalized, {
+    currentTranslationFingerprints: fingerprints()
+  });
+  assert.deepEqual(recovered.readiness, { state: 'READY' });
 });
 
 test('unsupported future bundle version fails closed', () => {
