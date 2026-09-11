@@ -21,6 +21,20 @@ Then recover the current repository/Article/RTA/PR state before mutating anythin
 - Conversation is the normal interactive control surface. It is not a durable source of truth by default.
 - Production publication requires explicit authorization unless a separately approved automation policy exists.
 
+## State-model ownership
+
+The durable docs implement the orthogonal state-machine design owned by issue #7 and the fresh-session bootstrap/governance requirements owned by issue #8.
+
+Keep the machines separate:
+
+- Article content readiness;
+- translation synchronization;
+- Git/PR work-unit state;
+- per-locale Ghost projection state;
+- RTA lifecycle under RTA's own authority.
+
+Conversation remains an intent/event control surface rather than a persistent lifecycle object.
+
 ## Core workflow principle
 
 The normal user interface is intent-level language such as:
@@ -30,15 +44,19 @@ The normal user interface is intent-level language such as:
 "RTA에 남겨"
 "지난 글 업데이트해"
 "이 RTA들로 글 써"
+"merge 준비해"
+"merge해"
 "발행 준비해"
 "발행해"
 ```
 
 The agent owns routine document editing, translation synchronization, reviewed checkpoints, branch/commit/PR mechanics, validation, dry-run, and authorized Ghost mutation.
 
+`merge 준비해` and similar preparation/review requests do not authorize merge. Strict exact-HEAD merge judgment begins only when the active task explicitly asks to merge or explicitly asks to begin merge judgment.
+
 ## Current implementation vs target architecture
 
-Current authoring work may still contain transitional one-file `:::lang` and body-image behavior. Issues #3, #4, #5, #6, and #8 define the target Article/LocaleVariant, compiler, integration, and bootstrap architecture. Do not extend transitional mechanisms into new long-term contracts without reconciling those issues first.
+Current authoring work may still contain transitional one-file `:::lang` and body-image behavior. Issues #3, #4, #5, #6, #7, and #8 define the target Article/LocaleVariant, compiler, integration, state-machine, and bootstrap architecture. Do not extend transitional mechanisms into new long-term contracts without reconciling those issues first.
 
 ## Fail-closed bootstrap
 
