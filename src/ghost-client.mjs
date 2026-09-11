@@ -117,7 +117,7 @@ export class GhostAdminClient {
 
   async getPostsBySourceTag(sourceTag) {
     const payload = await this.request('tags/', {
-      query: { filter: `tags.name:${nqlString(sourceTag)}`, limit: 2 }
+      query: { filter: `name:${nqlString(sourceTag)}`, limit: 2 }
     });
     const tags = (payload.tags ?? []).filter((tag) => tag?.name === sourceTag);
     if (tags.length > 1) throw new Error('multiple Ghost tags claim the same ox0 source identity');
