@@ -30,7 +30,8 @@ function passReview(source, overrides = {}) {
     result: 'PASS',
     kind: overrides.kind ?? 'agent',
     contractVersion: ARTICLE_READINESS_REVIEW_CONTRACT_VERSION,
-    reviewedSourceFingerprint: source
+    reviewedSourceFingerprint: source,
+    reviewedInvalidationIds: overrides.reviewedInvalidationIds ?? []
   };
 }
 
@@ -148,7 +149,7 @@ test('clearing invalidation records without advancing reviewedEpoch cannot resto
   );
 });
 
-test('resolving invalidations records reviewed epoch and all resolved event ids', () => {
+test('resolving invalidations records reviewed epoch and all exact reviewed event ids', () => {
   const source = sourceFingerprint();
   const invalidations = [
     createArticleReadinessInvalidation({
@@ -168,7 +169,7 @@ test('resolving invalidations records reviewed epoch and all resolved event ids'
     currentSourceFingerprint: source,
     currentEpoch: 2,
     invalidations,
-    review: passReview(source)
+    review: passReview(source, { reviewedInvalidationIds: [ID1, ID2] })
   });
   assert.equal(resolution.checkpoint.reviewedEpoch, 2);
   assert.deepEqual(resolution.checkpoint.resolvedInvalidationIds, [ID1, ID2]);
@@ -181,6 +182,25 @@ test('resolving invalidations records reviewed epoch and all resolved event ids'
       invalidations: []
     }),
     { state: 'READY' }
+  );
+});
+
+test('review cannot resolve invalidations it did not explicitly cover', () => {
+  const source = sourceFingerprint();
+  const invalidation = createArticleReadinessInvalidation({
+    id: ID1,
+    epoch: 1,
+    reason: 'EXTERNAL_EVIDENCE_CHANGED',
+    origin: 'rta'
+  });
+  assert.throws(
+    () => resolveArticleReadinessInvalidations({
+      currentSourceFingerprint: source,
+      currentEpoch: 1,
+      invalidations: [invalidation],
+      review: passReview(source)
+    }),
+    /does not cover the exact resolved invalidation id set/
   );
 });
 
