@@ -9,11 +9,14 @@ import {
   ARTICLE_READINESS_REVIEW_CONTRACT_VERSION,
   createArticleReadinessCheckpoint,
   deriveReviewedArticleReadiness,
+  resolveArticleReadinessInvalidations,
   validateArticleReadinessCheckpoint
 } from '../src/article-readiness.mjs';
 
 const KO = `sha256:${'a'.repeat(64)}`;
 const EN = `sha256:${'b'.repeat(64)}`;
+const ID1 = '11111111-1111-4111-8111-111111111111';
+const ID2 = '22222222-2222-4222-8222-222222222222';
 
 function sourceFingerprint(overrides = {}) {
   return articleSemanticSourceFingerprintV1({
@@ -62,16 +65,22 @@ test('missing or unexpected locale fingerprint fails closed', () => {
   );
 });
 
-test('READY is recoverable from exact reviewed source with no active invalidation', () => {
+test('READY is recoverable from exact reviewed source and reviewed epoch', () => {
   const source = sourceFingerprint();
   const checkpoint = createArticleReadinessCheckpoint({
     sourceFingerprint: source,
+    reviewedEpoch: 0,
     review: passReview(source)
   });
 
   assert.deepEqual(validateArticleReadinessCheckpoint(checkpoint), checkpoint);
   assert.deepEqual(
-    deriveReviewedArticleReadiness({ currentSourceFingerprint: source, checkpoint }),
+    deriveReviewedArticleReadiness({
+      currentSourceFingerprint: source,
+      currentEpoch: 0,
+      checkpoint,
+      invalidations: []
+    }),
     { state: 'READY' }
   );
 });
@@ -89,19 +98,89 @@ test('source change invalidates READY without mutating translation or Ghost stat
   );
 });
 
-test('durable RTA evidence invalidation survives session loss even when Article source is unchanged', () => {
+test('multiple durable invalidations survive session loss while source remains unchanged', () => {
   const source = sourceFingerprint();
   const checkpoint = createArticleReadinessCheckpoint({ sourceFingerprint: source, review: passReview(source) });
-  const invalidation = createArticleReadinessInvalidation({
-    reason: 'EXTERNAL_EVIDENCE_CHANGED',
-    origin: 'rta',
-    reference: 'rta:luceat-lux-vestra/research-to-action#22'
-  });
+  const invalidations = [
+    createArticleReadinessInvalidation({
+      id: ID1,
+      epoch: 1,
+      reason: 'EXTERNAL_EVIDENCE_CHANGED',
+      origin: 'rta',
+      reference: 'rta:luceat-lux-vestra/research-to-action#22'
+    }),
+    createArticleReadinessInvalidation({
+      id: ID2,
+      epoch: 2,
+      reason: 'SEMANTIC_REVIEW_REQUESTED',
+      origin: 'user'
+    })
+  ];
 
-  assert.deepEqual(validateArticleReadinessInvalidation(invalidation), invalidation);
+  assert.deepEqual(validateArticleReadinessInvalidation(invalidations[0]), invalidations[0]);
   assert.deepEqual(
-    deriveReviewedArticleReadiness({ currentSourceFingerprint: source, checkpoint, invalidation }),
-    { state: 'REVIEW_REQUIRED', reason: 'DURABLE_INVALIDATION', invalidation }
+    deriveReviewedArticleReadiness({
+      currentSourceFingerprint: source,
+      currentEpoch: 2,
+      checkpoint,
+      invalidations
+    }),
+    { state: 'REVIEW_REQUIRED', reason: 'DURABLE_INVALIDATION', invalidations }
+  );
+});
+
+test('clearing invalidation records without advancing reviewedEpoch cannot restore READY', () => {
+  const source = sourceFingerprint();
+  const checkpoint = createArticleReadinessCheckpoint({ sourceFingerprint: source, review: passReview(source) });
+  assert.deepEqual(
+    deriveReviewedArticleReadiness({
+      currentSourceFingerprint: source,
+      currentEpoch: 1,
+      checkpoint,
+      invalidations: []
+    }),
+    {
+      state: 'REVIEW_REQUIRED',
+      reason: 'UNREVIEWED_INVALIDATION_EPOCH',
+      reviewedEpoch: 0,
+      currentEpoch: 1
+    }
+  );
+});
+
+test('resolving invalidations records reviewed epoch and all resolved event ids', () => {
+  const source = sourceFingerprint();
+  const invalidations = [
+    createArticleReadinessInvalidation({
+      id: ID1,
+      epoch: 1,
+      reason: 'EXTERNAL_EVIDENCE_CHANGED',
+      origin: 'rta'
+    }),
+    createArticleReadinessInvalidation({
+      id: ID2,
+      epoch: 2,
+      reason: 'PROVENANCE_WEAKENED',
+      origin: 'blog-audit'
+    })
+  ];
+  const resolution = resolveArticleReadinessInvalidations({
+    currentSourceFingerprint: source,
+    currentEpoch: 2,
+    invalidations,
+    review: passReview(source)
+  });
+  assert.equal(resolution.checkpoint.reviewedEpoch, 2);
+  assert.deepEqual(resolution.checkpoint.resolvedInvalidationIds, [ID1, ID2]);
+  assert.deepEqual(resolution.invalidations, []);
+  assert.deepEqual(
+    deriveReviewedArticleReadiness({
+      currentSourceFingerprint: source,
+      currentEpoch: 2,
+      checkpoint: resolution.checkpoint,
+      invalidations: []
+    }),
+    { state: 'READY' }
   );
 });
 
@@ -109,6 +188,8 @@ test('readiness invalidation refuses chat/session/model identifiers as durable r
   for (const reference of ['chat:123', 'session:abc', 'model:gpt']) {
     assert.throws(
       () => createArticleReadinessInvalidation({
+        id: ID1,
+        epoch: 1,
         reason: 'SEMANTIC_REVIEW_REQUESTED',
         origin: 'user',
         reference
@@ -155,6 +236,8 @@ test('unsupported readiness contract and invalidation versions fail closed', () 
   assert.throws(
     () => validateArticleReadinessInvalidation({
       version: 999,
+      id: ID1,
+      epoch: 1,
       reason: 'EXTERNAL_EVIDENCE_CHANGED',
       origin: 'rta',
       reference: null
