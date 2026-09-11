@@ -23,19 +23,23 @@ function requireEpoch(value, name) {
   return value;
 }
 
-function normalizeResolvedInvalidationIds(value) {
+function normalizeInvalidationIds(value, name) {
   if (value == null) return [];
-  if (!Array.isArray(value)) throw new Error('resolvedInvalidationIds must be an array');
+  if (!Array.isArray(value)) throw new Error(`${name} must be an array`);
   const ids = value.map((id) => {
     if (!isArticleReadinessInvalidationId(id)) {
-      throw new Error('resolvedInvalidationIds must contain lowercase UUID v4 values');
+      throw new Error(`${name} must contain lowercase UUID v4 values`);
     }
     return id;
   });
   if (new Set(ids).size !== ids.length) {
-    throw new Error('resolvedInvalidationIds must not contain duplicates');
+    throw new Error(`${name} must not contain duplicates`);
   }
   return ids;
+}
+
+function sameOrderedValues(left, right) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function normalizeReview(review, { requirePass = false } = {}) {
@@ -67,10 +71,17 @@ export function createArticleReadinessCheckpoint({
   const normalizedReview = normalizeReview(review, { requirePass: true });
   const reviewedSource = requireFingerprint(review.reviewedSourceFingerprint, 'review.reviewedSourceFingerprint');
   const epoch = requireEpoch(reviewedEpoch, 'reviewedEpoch');
-  const resolvedIds = normalizeResolvedInvalidationIds(resolvedInvalidationIds);
+  const resolvedIds = normalizeInvalidationIds(resolvedInvalidationIds, 'resolvedInvalidationIds');
+  const reviewedInvalidationIds = normalizeInvalidationIds(
+    review.reviewedInvalidationIds,
+    'review.reviewedInvalidationIds'
+  );
 
   if (reviewedSource !== source) {
     throw new Error('Article readiness review does not cover the exact current source fingerprint');
+  }
+  if (!sameOrderedValues(reviewedInvalidationIds, resolvedIds)) {
+    throw new Error('Article readiness review does not cover the exact resolved invalidation id set');
   }
 
   return {
@@ -95,7 +106,10 @@ export function validateArticleReadinessCheckpoint(checkpoint) {
   }
   const sourceFingerprint = requireFingerprint(checkpoint.sourceFingerprint, 'Article readiness checkpoint sourceFingerprint');
   const reviewedEpoch = requireEpoch(checkpoint.reviewedEpoch, 'Article readiness checkpoint reviewedEpoch');
-  const resolvedInvalidationIds = normalizeResolvedInvalidationIds(checkpoint.resolvedInvalidationIds);
+  const resolvedInvalidationIds = normalizeInvalidationIds(
+    checkpoint.resolvedInvalidationIds,
+    'Article readiness checkpoint resolvedInvalidationIds'
+  );
   const review = normalizeReview(checkpoint.review);
   return {
     version: checkpoint.version,
