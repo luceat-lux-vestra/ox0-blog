@@ -97,6 +97,27 @@ async function getTagById(id) {
   }
 }
 
+async function assertOwnedTemporaryPageById(id) {
+  let page;
+  try {
+    const payload = await client.request(`pages/${encodeURIComponent(id)}/`, {
+      query: { formats: 'lexical' }
+    });
+    page = payload?.pages?.[0] ?? null;
+  } catch (error) {
+    if (error?.status === 404) return null;
+    throw error;
+  }
+
+  if (
+    !page || page.id !== id || page.title !== pageTitle || page.slug !== pageSlug ||
+    page.lexical !== lexical || page.status !== 'draft'
+  ) {
+    throw new Error('temporary page id resolves to unexpected page state; refusing cleanup');
+  }
+  return page;
+}
+
 async function assertResourceMissingById(resource, id) {
   try {
     await client.request(`${resource}/${encodeURIComponent(id)}/`, {
@@ -198,8 +219,11 @@ async function cleanup() {
 
   if (knownPageId) {
     try {
-      await ignoreMissingDelete(`pages/${encodeURIComponent(knownPageId)}/`);
-      await assertResourceMissingById('pages', knownPageId);
+      const ownedPage = await assertOwnedTemporaryPageById(knownPageId);
+      if (ownedPage) {
+        await ignoreMissingDelete(`pages/${encodeURIComponent(knownPageId)}/`);
+        await assertResourceMissingById('pages', knownPageId);
+      }
     } catch (error) {
       errors.push(error);
     }
