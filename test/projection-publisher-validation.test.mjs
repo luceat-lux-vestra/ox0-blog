@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { projectionSourceFingerprintV1 } from '../src/projection-fingerprint.mjs';
 import { projectionIdentityTags } from '../src/projection-identity.mjs';
 import { planProjectionSynchronization } from '../src/publisher.mjs';
 
@@ -12,17 +13,22 @@ const IDENTITY = projectionIdentityTags({
   variantId: 'variant-ko-1',
   locale: 'ko-KR'
 });
-const SOURCE_FP = `sha256:${'a'.repeat(64)}`;
 const ANY_IMAGE_FP = `sha256:${'b'.repeat(64)}`;
 
 function fingerprint(bytes) {
   return `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 }
 
+const compiledDocument = {
+  htmlFragment: '<h1>본문</h1>',
+  locale: 'ko-KR',
+  referencedAssets: [],
+  diagnostics: []
+};
+
 function projection(overrides = {}) {
-  return {
+  const value = {
     identityTags: IDENTITY,
-    sourceFingerprint: SOURCE_FP,
     locale: 'ko-KR',
     title: '제목',
     slug: 'article-ko',
@@ -33,16 +39,17 @@ function projection(overrides = {}) {
     featured: false,
     visibility: 'public',
     canonicalUrl: null,
+    materialAssets: [],
     ...overrides
   };
+  if (!Object.hasOwn(overrides, 'sourceFingerprint')) {
+    value.sourceFingerprint = projectionSourceFingerprintV1(value, compiledDocument, {
+      materialAssets: value.materialAssets,
+      featureImageFingerprint: value.featureImageFingerprint ?? null
+    });
+  }
+  return value;
 }
-
-const compiledDocument = {
-  htmlFragment: '<h1>본문</h1>',
-  locale: 'ko-KR',
-  referencedAssets: [],
-  diagnostics: []
-};
 
 class ProbeClient {
   constructor() { this.calls = []; }
