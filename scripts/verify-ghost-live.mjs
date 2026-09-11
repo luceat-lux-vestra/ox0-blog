@@ -80,7 +80,7 @@ function nqlString(value) {
 
 async function findExactTag(name) {
   const payload = await client.request('tags/', {
-    query: { filter: `tags.name:${nqlString(name)}`, limit: 2 }
+    query: { filter: `name:${nqlString(name)}`, limit: 2 }
   });
   const matches = (payload?.tags ?? []).filter((tag) => tag?.name === name);
   if (matches.length > 1) throw new Error(`multiple Ghost tags found during cleanup/verification: ${name}`);
