@@ -24,7 +24,9 @@ Then recover current repository, Article, RTA, PR, and Ghost-related state relev
 
 During development, normal branch/HEAD movement and fix commits are allowed. Do not rerun the complete strict merge gate after every edit or restack stacked PRs after every upstream commit.
 
-At merge judgment, correctness/safety not proven is FAIL. `UNKNOWN`, `UNVERIFIED`, and `INSUFFICIENT EVIDENCE` are FAIL. Exact final HEAD is the evidence unit; if it moves, exact-HEAD merge evidence is invalidated. Use squash merge and exact reviewed-head locking where supported.
+A coherent PR may reach `CANDIDATE` without beginning strict merge judgment. Do **not** enter exact-HEAD `MERGE_REVIEW`, and do not merge, unless the active user/task instruction explicitly asks to merge or explicitly asks to begin merge judgment.
+
+At merge judgment, correctness/safety not proven is FAIL. `UNKNOWN`, `UNVERIFIED`, and `INSUFFICIENT EVIDENCE` are FAIL. Exact final HEAD is the evidence unit; if it moves, exact-HEAD merge evidence is invalidated. Use squash merge and exact reviewed-head locking (`expected_head_sha`) where supported.
 
 ## Authoring safety
 
@@ -33,6 +35,7 @@ At merge judgment, correctness/safety not proven is FAIL. `UNKNOWN`, `UNVERIFIED
 - Preserve publisher-owned `#ox0-*` state tags; authors must not add them manually.
 - Never put Ghost Admin credentials in source, logs, examples, issues, or pull requests.
 - Use dry-run/read-only planning before first mutation when the publication workflow supports it.
+- Ghost projection state is per locale variant. Never claim whole-Article publication success after a partial multi-locale mutation; fresh-read and recover the actual state of every targeted projection.
 
 ## Transitional implementation warning
 
@@ -44,6 +47,7 @@ Target architecture is tracked by:
 - #4 — compiler boundary and staged Marked -> Arkst migration
 - #5 — agent-operated authoring/Git/publication workflow
 - #6 — independent Conversation <-> Blog <-> RTA edge contracts
+- #7 — orthogonal workflow state machines, events, and guards
 - #8 — durable bootstrap/state-machine governance
 
 Do not extend transitional bilingual/image mechanisms as new long-term invariants without reconciling those target issues and workflow docs first.
