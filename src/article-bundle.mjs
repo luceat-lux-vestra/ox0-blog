@@ -229,6 +229,7 @@ export function acceptArticleBundleReadinessReview(
     }
     readinessCheckpoint = createArticleReadinessCheckpoint({
       sourceFingerprint: recovered.articleSourceFingerprint,
+      priorReviewedEpoch,
       reviewedEpoch: recovered.bundle.readinessEpoch,
       resolvedInvalidationIds: [],
       review
