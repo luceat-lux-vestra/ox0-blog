@@ -1,7 +1,11 @@
 import { normalizeArticle } from './article.mjs';
 import { validateArticleReadinessInvalidation } from './article-readiness-invalidation.mjs';
 import { articleSemanticSourceFingerprintV1 } from './article-readiness-source.mjs';
-import { deriveReviewedArticleReadiness, validateArticleReadinessCheckpoint } from './article-readiness.mjs';
+import {
+  deriveReviewedArticleReadiness,
+  resolveArticleReadinessInvalidation,
+  validateArticleReadinessCheckpoint
+} from './article-readiness.mjs';
 import {
   acceptedFingerprintsFromCheckpoint,
   validateTranslationCheckpoint
@@ -43,6 +47,13 @@ export function normalizeArticleBundle(raw) {
   const readinessInvalidation = raw.readinessInvalidation == null
     ? null
     : validateArticleReadinessInvalidation(raw.readinessInvalidation);
+
+  if (
+    readinessInvalidation != null
+    && readinessCheckpoint?.resolvedInvalidationId === readinessInvalidation.id
+  ) {
+    throw new Error('Article bundle cannot keep an invalidation active after the readiness checkpoint resolves that event');
+  }
 
   return {
     version: ARTICLE_BUNDLE_CONTRACT_VERSION,
@@ -91,4 +102,30 @@ export function recoverArticleBundleReviewState(rawBundle, { currentTranslationF
     articleSourceFingerprint,
     readiness
   };
+}
+
+export function resolveArticleBundleReadinessInvalidation(
+  rawBundle,
+  {
+    currentTranslationFingerprints,
+    review
+  }
+) {
+  const recovered = recoverArticleBundleReviewState(rawBundle, { currentTranslationFingerprints });
+  if (recovered.bundle.readinessInvalidation == null) {
+    throw new Error('Article bundle has no active readiness invalidation to resolve');
+  }
+  if (recovered.translation.state !== 'SYNCED') {
+    throw new Error('Article readiness invalidation cannot resolve while translation state is not SYNCED');
+  }
+  const resolution = resolveArticleReadinessInvalidation({
+    currentSourceFingerprint: recovered.articleSourceFingerprint,
+    invalidation: recovered.bundle.readinessInvalidation,
+    review
+  });
+  return normalizeArticleBundle({
+    ...recovered.bundle,
+    readinessCheckpoint: resolution.checkpoint,
+    readinessInvalidation: null
+  });
 }
