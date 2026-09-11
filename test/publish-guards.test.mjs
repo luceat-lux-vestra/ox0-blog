@@ -98,7 +98,7 @@ test('slug preflight rejects an occupied page slug', async () => {
   assert.deepEqual(calls, ['post', 'page']);
 });
 
-test('mutation postcondition accepts exact managed metadata, tag order, and HTML-card content', () => {
+test('mutation postcondition accepts exact managed metadata, tag order, and direct Lexical representation', () => {
   assert.doesNotThrow(() => assertMutationApplied(basePost(), payload()));
 });
 
@@ -113,10 +113,16 @@ test('mutation postcondition rejects Ghost tag reordering', () => {
   ), /tag order/);
 });
 
-test('mutation postcondition rejects changed or non-HTML-card lexical body', () => {
+test('mutation postcondition rejects any change to the direct Lexical representation', () => {
   assert.throws(() => assertMutationApplied(
     basePost({ lexical: createHtmlCardLexical('<h1>changed</h1>') }),
     payload()
-  ), /HTML card content differs/);
-  assert.throws(() => assertMutationApplied(basePost({ lexical: '{"root":{"children":[]}}' }), payload()), /root HTML card/);
+  ), /direct Lexical representation exactly/);
+
+  const changedVisibility = JSON.parse(LEXICAL);
+  changedVisibility.root.children[0].visibility.web.nonMember = false;
+  assert.throws(() => assertMutationApplied(
+    basePost({ lexical: JSON.stringify(changedVisibility) }),
+    payload()
+  ), /direct Lexical representation exactly/);
 });
