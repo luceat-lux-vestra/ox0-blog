@@ -15,9 +15,19 @@ function requirePublicationOptions(publication) {
   return publication;
 }
 
-function localFeatureImageFingerprint(projection, fingerprintEvidence) {
-  if (!projection.featureImage || /^https:\/\//.test(projection.featureImage)) return null;
-  return fingerprintEvidence.featureImageFingerprint ?? null;
+function normalizeFingerprintEvidence(projection, fingerprintEvidence) {
+  if (!fingerprintEvidence || typeof fingerprintEvidence !== 'object' || Array.isArray(fingerprintEvidence)) {
+    throw new Error('fingerprintEvidence must be an object');
+  }
+  const materialAssets = fingerprintEvidence.materialAssets ?? [];
+  if (!Array.isArray(materialAssets)) throw new Error('fingerprintEvidence.materialAssets must be an array');
+  const featureImageFingerprint = !projection.featureImage || /^https:\/\//.test(projection.featureImage)
+    ? null
+    : fingerprintEvidence.featureImageFingerprint ?? null;
+  return {
+    materialAssets: materialAssets.map((asset) => ({ ...asset })),
+    featureImageFingerprint
+  };
 }
 
 export function localeVariantFor(article, locale) {
@@ -73,12 +83,21 @@ export async function compileLocaleProjection({
   if (compiledDocument.locale !== resolved.variant.locale) {
     throw new Error(`compiler returned locale=${compiledDocument.locale} for LocaleVariant.locale=${resolved.variant.locale}`);
   }
-  const sourceFingerprint = projectionSourceFingerprintV1(baseProjection, compiledDocument, fingerprintEvidence);
-  const featureImageFingerprint = localFeatureImageFingerprint(baseProjection, fingerprintEvidence);
+  const normalizedEvidence = normalizeFingerprintEvidence(baseProjection, fingerprintEvidence);
+  const sourceFingerprint = projectionSourceFingerprintV1(baseProjection, compiledDocument, normalizedEvidence);
   const projection = {
     ...baseProjection,
     sourceFingerprint,
-    ...(featureImageFingerprint ? { featureImageFingerprint } : {})
+    materialAssets: normalizedEvidence.materialAssets,
+    ...(normalizedEvidence.featureImageFingerprint
+      ? { featureImageFingerprint: normalizedEvidence.featureImageFingerprint }
+      : {})
   };
-  return { projection, compiledDocument, variant: resolved.variant, sourceFingerprint };
+  return {
+    projection,
+    compiledDocument,
+    variant: resolved.variant,
+    sourceFingerprint,
+    fingerprintEvidence: normalizedEvidence
+  };
 }
