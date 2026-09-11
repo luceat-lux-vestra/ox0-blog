@@ -39,6 +39,14 @@ function requireKnownLocales(map, requiredLocales, name) {
   }
 }
 
+function requireCompleteAcceptedMap(accepted, required) {
+  requireKnownLocales(accepted, required, 'acceptedFingerprints');
+  const missingAccepted = required.filter((locale) => !accepted.has(locale));
+  if (missingAccepted.length > 0) {
+    throw new Error(`acceptedFingerprints is malformed; missing required locales: ${missingAccepted.join(', ')}`);
+  }
+}
+
 export function deriveTranslationState({
   requiredLocales,
   currentFingerprints,
@@ -48,20 +56,16 @@ export function deriveTranslationState({
   const current = toFingerprintMap(currentFingerprints, 'currentFingerprints') ?? new Map();
   requireKnownLocales(current, required, 'currentFingerprints');
 
+  const accepted = toFingerprintMap(acceptedFingerprints, 'acceptedFingerprints');
+  if (accepted != null) requireCompleteAcceptedMap(accepted, required);
+
   const missingLocales = required.filter((locale) => !current.has(locale));
   if (missingLocales.length > 0) {
     return { state: 'INCOMPLETE', missingLocales };
   }
 
-  const accepted = toFingerprintMap(acceptedFingerprints, 'acceptedFingerprints');
   if (accepted == null) {
     return { state: 'UNREVIEWED' };
-  }
-  requireKnownLocales(accepted, required, 'acceptedFingerprints');
-
-  const missingAccepted = required.filter((locale) => !accepted.has(locale));
-  if (missingAccepted.length > 0) {
-    throw new Error(`acceptedFingerprints is malformed; missing required locales: ${missingAccepted.join(', ')}`);
   }
 
   const changedLocales = required.filter((locale) => current.get(locale) !== accepted.get(locale));
