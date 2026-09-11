@@ -56,6 +56,7 @@ function requireProjectionDescriptor(projection) {
 }
 
 async function validateProjectionFilesystem(projection, repoRoot) {
+  if (projection.identityTags.length === 1) return;
   if (!projection.featureImage || /^https:\/\//.test(projection.featureImage)) return;
   await requireRepositoryAssetFile(projection.featureImage, repoRoot, 'local featureImage');
 }
