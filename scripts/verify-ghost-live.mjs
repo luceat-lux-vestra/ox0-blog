@@ -235,18 +235,15 @@ async function cleanup() {
   const errors = [];
   let postCleanupSafeForTags = false;
 
-  try {
-    if (!knownPageId) {
-      const recoveredPage = await client.getPageBySlug(pageSlug);
-      if (recoveredPage?.id) {
-        if (recoveredPage.title !== pageTitle || recoveredPage.lexical !== lexical || recoveredPage.status !== 'draft') {
-          throw new Error('temporary page slug resolves to unexpected page state; refusing cleanup');
-        }
-        knownPageId = recoveredPage.id;
+  if (!knownPageId) {
+    try {
+      const unresolvedPage = await client.getPageBySlug(pageSlug);
+      if (unresolvedPage) {
+        throw new Error('temporary page exists without a proven owned id; refusing slug-only cleanup; manual reconciliation required');
       }
+    } catch (error) {
+      errors.push(error);
     }
-  } catch (error) {
-    errors.push(error);
   }
 
   try {
