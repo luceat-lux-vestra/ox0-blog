@@ -1,5 +1,6 @@
 import { normalizeArticle } from './article.mjs';
 import { requireCompiledDocument, requireDocumentCompiler } from './compiler/document-compiler.mjs';
+import { projectionSourceFingerprintV1 } from './projection-fingerprint.mjs';
 import { projectionIdentityTags } from './projection-identity.mjs';
 
 function requirePublicationOptions(publication) {
@@ -51,13 +52,22 @@ export function createLocaleProjectionDescriptor({ article: rawArticle, locale, 
   };
 }
 
-export async function compileLocaleProjection({ article, locale, publication = {}, compiler, projectContext = {} }) {
+export async function compileLocaleProjection({
+  article,
+  locale,
+  publication = {},
+  compiler,
+  projectContext = {},
+  fingerprintEvidence = {}
+}) {
   requireDocumentCompiler(compiler);
   const resolved = localeVariantFor(article, locale);
-  const projection = createLocaleProjectionDescriptor({ article: resolved.article, locale, publication });
+  const baseProjection = createLocaleProjectionDescriptor({ article: resolved.article, locale, publication });
   const compiledDocument = requireCompiledDocument(await compiler.compile(resolved.variant, projectContext));
   if (compiledDocument.locale !== resolved.variant.locale) {
     throw new Error(`compiler returned locale=${compiledDocument.locale} for LocaleVariant.locale=${resolved.variant.locale}`);
   }
-  return { projection, compiledDocument, variant: resolved.variant };
+  const sourceFingerprint = projectionSourceFingerprintV1(baseProjection, compiledDocument, fingerprintEvidence);
+  const projection = { ...baseProjection, sourceFingerprint };
+  return { projection, compiledDocument, variant: resolved.variant, sourceFingerprint };
 }
