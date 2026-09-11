@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto';
 
+const LOCALE_RE = /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/;
+const MAX_LOCALE_LENGTH = 64;
+
 function requireIdentity(value, name) {
   if (typeof value !== 'string' || value.trim() === '') {
     throw new Error(`${name} must be a non-empty string`);
@@ -25,6 +28,9 @@ export function variantIdentityTag(variantId) {
 
 export function localeIdentityTag(locale) {
   const value = requireIdentity(locale, 'locale');
+  if (value.length > MAX_LOCALE_LENGTH || !LOCALE_RE.test(value)) {
+    throw new Error('locale must be a compact BCP47-style token');
+  }
   return `#ox0-locale-${value}`;
 }
 
