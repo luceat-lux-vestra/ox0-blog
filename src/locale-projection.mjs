@@ -2,6 +2,7 @@ import { normalizeArticle } from './article.mjs';
 import { requireCompiledDocument, requireDocumentCompiler } from './compiler/document-compiler.mjs';
 import { projectionSourceFingerprintV1 } from './projection-fingerprint.mjs';
 import { projectionIdentityTags } from './projection-identity.mjs';
+import { normalizeProjectionMetadata } from './projection-metadata.mjs';
 
 function requirePublicationOptions(publication) {
   if (publication == null) return {};
@@ -10,9 +11,6 @@ function requirePublicationOptions(publication) {
   }
   if (Object.hasOwn(publication, 'status')) {
     throw new Error('publication.status is not source state; draft/publish must be an explicit operation');
-  }
-  if (publication.tags != null && (!Array.isArray(publication.tags) || publication.tags.some((tag) => typeof tag !== 'string' || tag.trim() === ''))) {
-    throw new Error('publication.tags must be an array of non-empty strings');
   }
   return publication;
 }
@@ -32,6 +30,17 @@ export function localeVariantFor(article, locale) {
 export function createLocaleProjectionDescriptor({ article: rawArticle, locale, publication: rawPublication = {} }) {
   const { article, variant } = localeVariantFor(rawArticle, locale);
   const publication = requirePublicationOptions(rawPublication);
+  const metadata = normalizeProjectionMetadata({
+    title: variant.title,
+    slug: variant.slug,
+    excerpt: variant.excerpt,
+    tags: publication.tags,
+    featureImage: publication.featureImage,
+    featureImageAlt: publication.featureImageAlt,
+    featured: publication.featured,
+    visibility: publication.visibility,
+    canonicalUrl: publication.canonicalUrl
+  });
 
   return {
     identityTags: projectionIdentityTags({
@@ -40,15 +49,7 @@ export function createLocaleProjectionDescriptor({ article: rawArticle, locale, 
       locale: variant.locale
     }),
     locale: variant.locale,
-    title: variant.title,
-    slug: variant.slug,
-    excerpt: variant.excerpt,
-    tags: [...(publication.tags ?? [])],
-    featureImage: publication.featureImage ?? null,
-    featureImageAlt: publication.featureImageAlt ?? null,
-    featured: publication.featured ?? false,
-    visibility: publication.visibility ?? 'public',
-    canonicalUrl: publication.canonicalUrl ?? null
+    ...metadata
   };
 }
 
