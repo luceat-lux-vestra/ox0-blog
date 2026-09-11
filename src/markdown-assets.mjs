@@ -115,17 +115,19 @@ async function readConfinedImage(candidate, assetRoot, realAssetRoot) {
   return { bytes, mime };
 }
 
-export function createMarkdownAssetWalker({ postPath, repoRoot } = {}) {
+// Transitional compatibility policy only. Long-term asset publication belongs to a
+// host-owned AssetPublisher/resource contract and must not become part of DocumentCompiler.
+export function createLegacyInlineImageResolver({ sourcePath, repoRoot } = {}) {
   const cache = new Map();
   let totalEmbeddedBytes = 0;
   let realAssetRootPromise;
 
   async function loadLocalImage(href) {
-    if (!postPath || !repoRoot) {
-      throw new Error('postPath and repoRoot are required to inline local Markdown images');
+    if (!sourcePath || !repoRoot) {
+      throw new Error('sourcePath and repoRoot are required to inline local Markdown images');
     }
     const assetRoot = path.resolve(repoRoot, 'assets');
-    const candidate = path.resolve(path.dirname(postPath), href);
+    const candidate = path.resolve(path.dirname(sourcePath), href);
     realAssetRootPromise ??= requireAssetRoot(assetRoot);
     const realAssetRoot = await realAssetRootPromise;
     let pending = cache.get(candidate);
@@ -136,21 +138,16 @@ export function createMarkdownAssetWalker({ postPath, repoRoot } = {}) {
     return pending;
   }
 
-  return function walkAssetToken(token) {
-    if (token.type === 'html') {
-      throw new Error('raw HTML is not supported in canonical Markdown; use Markdown syntax so content and assets stay within the validated authoring contract');
+  return async function resolveResource(resource) {
+    if (!resource || resource.kind !== 'image') return null;
+    const parsed = parseImageHref(resource.href);
+    if (parsed.kind === 'remote') return { href: parsed.value };
+
+    const { bytes, mime } = await loadLocalImage(parsed.value);
+    totalEmbeddedBytes += bytes.length;
+    if (totalEmbeddedBytes > MAX_INLINE_ASSET_BYTES) {
+      throw new Error(`Markdown embedded image total exceeds ${MAX_INLINE_ASSET_BYTES} bytes`);
     }
-    if (token.type !== 'image') return undefined;
-
-    const parsed = parseImageHref(token.href);
-    if (parsed.kind === 'remote') return undefined;
-
-    return loadLocalImage(parsed.value).then(({ bytes, mime }) => {
-      totalEmbeddedBytes += bytes.length;
-      if (totalEmbeddedBytes > MAX_INLINE_ASSET_BYTES) {
-        throw new Error(`Markdown embedded image total exceeds ${MAX_INLINE_ASSET_BYTES} bytes`);
-      }
-      token.href = `data:${mime};base64,${bytes.toString('base64')}`;
-    });
+    return { href: `data:${mime};base64,${bytes.toString('base64')}` };
   };
 }
