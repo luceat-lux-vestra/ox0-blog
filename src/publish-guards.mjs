@@ -1,5 +1,3 @@
-import { htmlFromSingleCardLexical } from './lexical.mjs';
-
 function tagNames(tags) {
   return (tags ?? []).map((tag) => typeof tag === 'string' ? tag : tag?.name).filter(Boolean);
 }
@@ -49,9 +47,7 @@ export function assertMutationApplied(post, payload) {
     throw new Error('Ghost mutation did not preserve managed tag order exactly; refusing sync stamp');
   }
 
-  const expectedHtml = htmlFromSingleCardLexical(payload.lexical);
-  const actualHtml = htmlFromSingleCardLexical(post.lexical);
-  if (actualHtml !== expectedHtml) {
-    throw new Error('Ghost lexical HTML card content differs from rendered source; refusing sync stamp');
+  if (post.lexical !== payload.lexical) {
+    throw new Error('Ghost mutation did not preserve the requested direct Lexical representation exactly; refusing sync stamp');
   }
 }
