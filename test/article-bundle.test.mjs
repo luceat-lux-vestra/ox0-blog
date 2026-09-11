@@ -9,7 +9,8 @@ import {
 import {
   ARTICLE_BUNDLE_CONTRACT_VERSION,
   normalizeArticleBundle,
-  recoverArticleBundleReviewState
+  recoverArticleBundleReviewState,
+  resolveArticleBundleReadinessInvalidation
 } from '../src/article-bundle.mjs';
 import {
   TRANSLATION_REVIEW_CONTRACT_VERSION,
@@ -86,11 +87,19 @@ function reviewedBundle(overrides = {}) {
   };
 }
 
+function readinessPass(sourceFingerprint) {
+  return {
+    result: 'PASS',
+    kind: 'agent',
+    contractVersion: ARTICLE_READINESS_REVIEW_CONTRACT_VERSION,
+    reviewedSourceFingerprint: sourceFingerprint
+  };
+}
+
 test('fresh session recovers SYNCED + READY from durable facts only', () => {
   const recovered = recoverArticleBundleReviewState(reviewedBundle(), {
     currentTranslationFingerprints: fingerprints()
   });
-
   assert.deepEqual(recovered.translation, { state: 'SYNCED' });
   assert.deepEqual(recovered.readiness, { state: 'READY' });
   assert.match(recovered.articleSourceFingerprint, /^sha256:[a-f0-9]{64}$/);
@@ -121,11 +130,9 @@ test('missing current locale derives INCOMPLETE and cannot recover READY', () =>
 });
 
 test('one locale semantic change makes translation STALE and invalidates readiness independently', () => {
-  const changed = { 'ko-KR': `sha256:${'d'.repeat(64)}`, en: EN };
   const recovered = recoverArticleBundleReviewState(reviewedBundle(), {
-    currentTranslationFingerprints: changed
+    currentTranslationFingerprints: { 'ko-KR': `sha256:${'d'.repeat(64)}`, en: EN }
   });
-
   assert.deepEqual(recovered.translation, {
     state: 'STALE',
     changedLocales: ['ko-KR'],
@@ -144,7 +151,6 @@ test('durable RTA invalidation survives fresh-session recovery while translation
     reviewedBundle({ readinessInvalidation: invalidation }),
     { currentTranslationFingerprints: fingerprints() }
   );
-
   assert.deepEqual(recovered.translation, { state: 'SYNCED' });
   assert.deepEqual(recovered.readiness, {
     state: 'REVIEW_REQUIRED',
@@ -153,19 +159,80 @@ test('durable RTA invalidation survives fresh-session recovery while translation
   });
 });
 
-test('clearing a resolved invalidation restores READY only when reviewed source is still exact', () => {
-  const invalidated = reviewedBundle({
-    readinessInvalidation: createArticleReadinessInvalidation({
-      reason: 'PROVENANCE_WEAKENED',
-      origin: 'blog-audit',
-      reference: 'article-audit:claim-set-1'
-    })
+test('readiness invalidation resolves only through exact-source PASS and records resolved event id', () => {
+  const invalidation = createArticleReadinessInvalidation({
+    reason: 'PROVENANCE_WEAKENED',
+    origin: 'blog-audit',
+    reference: 'article-audit:claim-set-1'
   });
-  const normalized = normalizeArticleBundle({ ...invalidated, readinessInvalidation: null });
-  const recovered = recoverArticleBundleReviewState(normalized, {
+  const invalidated = reviewedBundle({ readinessInvalidation: invalidation });
+  const before = recoverArticleBundleReviewState(invalidated, {
     currentTranslationFingerprints: fingerprints()
   });
-  assert.deepEqual(recovered.readiness, { state: 'READY' });
+
+  const resolved = resolveArticleBundleReadinessInvalidation(invalidated, {
+    currentTranslationFingerprints: fingerprints(),
+    review: readinessPass(before.articleSourceFingerprint)
+  });
+  assert.equal(resolved.readinessInvalidation, null);
+  assert.equal(resolved.readinessCheckpoint.resolvedInvalidationId, invalidation.id);
+  assert.deepEqual(
+    recoverArticleBundleReviewState(resolved, { currentTranslationFingerprints: fingerprints() }).readiness,
+    { state: 'READY' }
+  );
+});
+
+test('manual invalidation removal without a resolving checkpoint leaves no false persisted proof', () => {
+  const invalidation = createArticleReadinessInvalidation({
+    reason: 'SEMANTIC_REVIEW_REQUESTED',
+    origin: 'user'
+  });
+  const value = reviewedBundle({ readinessInvalidation: invalidation });
+  const manuallyCleared = normalizeArticleBundle({ ...value, readinessInvalidation: null });
+  assert.notEqual(manuallyCleared.readinessCheckpoint.resolvedInvalidationId, invalidation.id);
+});
+
+test('bundle rejects keeping an invalidation active after its event id was resolved', () => {
+  const invalidation = createArticleReadinessInvalidation({
+    reason: 'EXTERNAL_EVIDENCE_CHANGED',
+    origin: 'rta',
+    reference: 'rta:repo#1'
+  });
+  const base = reviewedBundle();
+  const sourceFingerprint = base.readinessCheckpoint.sourceFingerprint;
+  const resolvedCheckpoint = createArticleReadinessCheckpoint({
+    sourceFingerprint,
+    resolvedInvalidationId: invalidation.id,
+    review: readinessPass(sourceFingerprint)
+  });
+  assert.throws(
+    () => normalizeArticleBundle({
+      ...base,
+      readinessCheckpoint: resolvedCheckpoint,
+      readinessInvalidation: invalidation
+    }),
+    /cannot keep an invalidation active after the readiness checkpoint resolves that event/
+  );
+});
+
+test('invalidation resolution refuses non-SYNCED translation state', () => {
+  const invalidation = createArticleReadinessInvalidation({
+    reason: 'EXTERNAL_EVIDENCE_CHANGED',
+    origin: 'rta'
+  });
+  assert.throws(
+    () => resolveArticleBundleReadinessInvalidation(
+      reviewedBundle({ readinessInvalidation: invalidation }),
+      {
+        currentTranslationFingerprints: { 'ko-KR': `sha256:${'f'.repeat(64)}`, en: EN },
+        review: readinessPass(articleSemanticSourceFingerprintV1({
+          requiredLocales: ['ko-KR', 'en'],
+          translationFingerprints: { 'ko-KR': `sha256:${'f'.repeat(64)}`, en: EN }
+        }))
+      }
+    ),
+    /cannot resolve while translation state is not SYNCED/
+  );
 });
 
 test('unsupported future bundle version fails closed', () => {
