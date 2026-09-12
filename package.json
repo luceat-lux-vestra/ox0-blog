@@ -11,6 +11,7 @@
     "validate": "node scripts/validate-post.mjs",
     "validate:articles": "node scripts/validate-articles.mjs",
     "dry-run": "node scripts/plan-post.mjs",
+    "dry-run:article": "node scripts/plan-article.mjs",
     "verify:ghost-live": "node scripts/verify-ghost-live.mjs && node scripts/verify-body-image-live.mjs"
   },
   "dependencies": {
