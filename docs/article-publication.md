@@ -1,8 +1,8 @@
 # Target Article publication orchestration
 
-This document describes the target Article-level mutation library currently implemented on the authoring branch.
+This document describes the target Article-level mutation library and low-level execution CLI on the authoring branch.
 
-It is not yet exposed as a production CLI. The durable workflow policy in `docs/workflow/` remains authoritative for deciding whether a task is authorized to mutate Ghost.
+The durable workflow policy in `docs/workflow/` remains authoritative for deciding whether a task is authorized to mutate Ghost. The CLI consumes authorization; it does not create evidence of user intent.
 
 ## High-level invariant
 
@@ -59,7 +59,7 @@ A production `publish` mutation requires all of:
 - authorization `articleId` equal to the prepared Article;
 - authorization source fingerprint for every required locale equal to the exact prepared projection source fingerprint.
 
-The library does not create that authorization assertion itself. Doing so would let repository code manufacture evidence of user intent. The conversation/control layer owns the statement “the user explicitly requested production publication”.
+The publication library does not create that authorization assertion itself. Doing so would let repository mechanics manufacture evidence of user intent. The conversation/control layer owns the statement “the user explicitly requested production publication”.
 
 The authorization object is ephemeral. It is not persisted in `article.json`, Ghost, Git, or RTA.
 
@@ -67,13 +67,15 @@ The authorization object is ephemeral. It is not persisted in `article.json`, Gh
 
 Article publication must use the same compiler host context semantics as validation/review.
 
-The workflow therefore resolves ProjectContext once per LocaleVariant evaluation snapshot and retains that resolved context as runtime evidence.
+The workflow resolves ProjectContext once per LocaleVariant evaluation snapshot and retains that resolved context as runtime evidence.
 
 When a local body asset requires recompilation with an AssetPublisher delivery URL, the workflow reuses the exact resolved ProjectContext and overrides only `resolveResource`.
 
 This is important for future compiler backends such as Arkst/VirtualProject: resource delivery must not silently discard unrelated compiler/project context merely because Marked currently does not use it.
 
 The same ProjectContext is threaded through the post-asset source revalidation pass. A backend/context change that affects the compiled projection therefore changes the projection source fingerprint and fails the stability check rather than being ignored.
+
+Target scripts may load deployment-specific ProjectContext/AssetPublisher dependencies through an operator-controlled `OX0_HOST_RUNTIME_MODULE=host/...mjs`. Article source cannot select this runtime module, and path/symlink escapes are rejected.
 
 ## Plan binding
 
@@ -102,6 +104,8 @@ All unique planned body assets are handled before any Ghost mutation.
 - `publish`: exact planned source bytes are re-snapshotted and sent to AssetPublisher; returned URL must equal planned URL.
 
 If body-asset publication fails, Ghost remains untouched. The error reports which earlier assets were successfully published so cleanup/reuse can be reasoned about explicitly.
+
+The repository includes a vendor-neutral content-addressed AssetPublisher adapter over abstract object-store `headObject`/`putObject` callbacks. It requires exact stored size/SHA-256 metadata for reuse and verifies storage metadata again after publish. Cloud/vendor binding remains host configuration.
 
 ## Source revalidation after asset side effects
 
@@ -202,10 +206,34 @@ The target library distinguishes at least:
 
 Errors may contain successfully published body-asset records, feature-image upload side-effect evidence, and fresh projection recovery state to support safe continuation/reconciliation.
 
-## CLI boundary
+## Low-level CLI boundary
 
-No target mutating Article CLI is currently exposed.
+The target mutation library is exposed through:
 
-That is intentional. Library mechanics are being validated before wiring them to a user-facing command because the CLI/control layer must preserve the explicit publication-authorization contract rather than accepting a convenient `--force` or source metadata flag.
+```bash
+npm run sync:article -- posts/example/article.json draft
+npm run sync:article -- posts/example/article.json publish
+```
 
-The existing target `dry-run:article` remains read-only. Legacy publication commands remain compatibility paths and are not the target Article mutation interface.
+The CLI is deliberately thin. It loads Ghost credentials plus optional host runtime dependencies and delegates to the guarded Article publication library.
+
+For `publish`, it requires:
+
+```text
+OX0_ARTICLE_PUBLICATION_AUTHORIZATION_JSON
+```
+
+The value must come from an external control surface that already owns explicit publication intent and has bound that intent to the exact Article/current locale projection fingerprints.
+
+The CLI:
+
+- parses the envelope with the strict JSON parser;
+- rejects missing/malformed authorization before source/Ghost work;
+- never creates authorization from Article `READY` state;
+- never derives authorization from a dry-run by itself;
+- rejects a production authorization envelope on `draft` rather than silently ignoring it;
+- reports Article publication failures as structured JSON with stage/side-effect/recovery evidence.
+
+This CLI being executable does not mean the agent may invoke `publish` without a user's explicit publication instruction. The workflow authorization contract remains above the CLI.
+
+No target production GitHub Actions workflow is enabled yet. `.github/workflows/ghost-publish.yml` remains explicitly named **Legacy Publish to Ghost (compatibility)** and must not be treated as the target Article publication surface.
