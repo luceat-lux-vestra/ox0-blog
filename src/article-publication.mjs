@@ -7,14 +7,26 @@ import { deriveProjectionState } from './projection-state.mjs';
 export const ARTICLE_PUBLICATION_AUTHORIZATION_VERSION = 1;
 
 export class ArticlePublicationError extends Error {
-  constructor(message, { stage, cause = null, recovery = null, publishedAssets = [] } = {}) {
+  constructor(message, {
+    stage,
+    cause = null,
+    recovery = null,
+    publishedAssets = [],
+    featureImageUploads = []
+  } = {}) {
     super(message);
     this.name = 'ArticlePublicationError';
     this.stage = stage ?? 'UNKNOWN';
     this.cause = cause;
     this.recovery = recovery;
     this.publishedAssets = publishedAssets;
+    this.featureImageUploads = featureImageUploads;
   }
+}
+
+function featureImageUploadsFromCause(cause) {
+  if (!Array.isArray(cause?.featureImageUploads)) return [];
+  return cause.featureImageUploads.map((entry) => ({ ...entry }));
 }
 
 function requireAuthorizationShape(authorization) {
@@ -290,6 +302,7 @@ export async function synchronizeArticlePublication({
           stage: 'GHOST_MUTATION',
           cause,
           publishedAssets,
+          featureImageUploads: featureImageUploadsFromCause(cause),
           recovery: await recoverProjectionStates(runtime, client, successfulLocales)
         }
       );
