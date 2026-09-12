@@ -29,6 +29,14 @@ function requireVariant(variant) {
   return variant;
 }
 
+function requireHttpsUrl(value, name) {
+  if (typeof value !== 'string' || value.trim() === '') throw new Error(`${name} must be a non-empty URL`);
+  let parsed;
+  try { parsed = new URL(value); } catch { throw new Error(`${name} must be a valid URL`); }
+  if (parsed.protocol !== 'https:') throw new Error(`${name} must use https`);
+  return parsed.href;
+}
+
 function requirePlannedAsset(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('planned material asset must be an object');
@@ -39,13 +47,17 @@ function requirePlannedAsset(value) {
   if (typeof value.fingerprint !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(value.fingerprint)) {
     throw new Error(`planned material asset fingerprint is invalid for ${value.ref}`);
   }
+  if (!['publish', 'reuse'].includes(value.action)) {
+    throw new Error(`planned material asset action is invalid for ${value.ref}`);
+  }
+  const url = requireHttpsUrl(value.url, `planned material asset url for ${value.ref}`);
   if (!Number.isSafeInteger(value.size) || value.size < 0) {
     throw new Error(`planned material asset size is invalid for ${value.ref}`);
   }
   if (typeof value.filename !== 'string' || value.filename.trim() === '') {
     throw new Error(`planned material asset filename is invalid for ${value.ref}`);
   }
-  return value;
+  return { ...value, url };
 }
 
 export async function planMaterialResourceDelivery({
@@ -146,6 +158,10 @@ export async function publishPlannedMaterialAssets({ plans, repoRoot, assetPubli
         `material asset changed after planning: ${plan.ref}; expected ${plan.fingerprint}/${plan.size}, got ${snapshot.fingerprint}/${snapshot.size}`
       );
     }
+    if (plan.action === 'reuse') {
+      published.push({ ref: plan.ref, url: plan.url, fingerprint: plan.fingerprint, action: 'reuse' });
+      continue;
+    }
     const result = await publishAssetDelivery(
       assetPublisher,
       {
@@ -157,7 +173,7 @@ export async function publishPlannedMaterialAssets({ plans, repoRoot, assetPubli
       snapshot.bytes,
       plan
     );
-    published.push({ ref: plan.ref, url: result.url, fingerprint: plan.fingerprint });
+    published.push({ ref: plan.ref, url: result.url, fingerprint: plan.fingerprint, action: 'publish' });
   }
   return published;
 }
