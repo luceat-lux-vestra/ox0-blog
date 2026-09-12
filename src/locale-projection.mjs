@@ -68,20 +68,18 @@ export function createLocaleProjectionDescriptor({ article: rawArticle, locale, 
   };
 }
 
-export async function compileLocaleProjection({
+export function createLocaleProjectionFromCompiledDocument({
   article,
   locale,
   publication = {},
-  compiler,
-  projectContext = {},
+  compiledDocument: rawCompiledDocument,
   fingerprintEvidence = {}
 }) {
-  requireDocumentCompiler(compiler);
   const resolved = localeVariantFor(article, locale);
   const baseProjection = createLocaleProjectionDescriptor({ article: resolved.article, locale, publication });
-  const compiledDocument = requireCompiledDocument(await compiler.compile(resolved.variant, projectContext));
+  const compiledDocument = requireCompiledDocument(rawCompiledDocument);
   if (compiledDocument.locale !== resolved.variant.locale) {
-    throw new Error(`compiler returned locale=${compiledDocument.locale} for LocaleVariant.locale=${resolved.variant.locale}`);
+    throw new Error(`CompiledDocument.locale=${compiledDocument.locale} for LocaleVariant.locale=${resolved.variant.locale}`);
   }
   const normalizedEvidence = normalizeFingerprintEvidence(baseProjection, fingerprintEvidence);
   const sourceFingerprint = projectionSourceFingerprintV1(baseProjection, compiledDocument, normalizedEvidence);
@@ -100,4 +98,24 @@ export async function compileLocaleProjection({
     sourceFingerprint,
     fingerprintEvidence: normalizedEvidence
   };
+}
+
+export async function compileLocaleProjection({
+  article,
+  locale,
+  publication = {},
+  compiler,
+  projectContext = {},
+  fingerprintEvidence = {}
+}) {
+  requireDocumentCompiler(compiler);
+  const resolved = localeVariantFor(article, locale);
+  const compiledDocument = requireCompiledDocument(await compiler.compile(resolved.variant, projectContext));
+  return createLocaleProjectionFromCompiledDocument({
+    article: resolved.article,
+    locale,
+    publication,
+    compiledDocument,
+    fingerprintEvidence
+  });
 }
