@@ -8,11 +8,13 @@
   },
   "scripts": {
     "test": "node --test",
-    "validate": "node scripts/validate-post.mjs",
+    "validate": "npm run validate:legacy && npm run validate:articles",
+    "validate:legacy": "node scripts/validate-post.mjs",
     "validate:articles": "node scripts/validate-articles.mjs",
-    "dry-run": "node scripts/plan-post.mjs",
+    "dry-run": "node scripts/plan-article.mjs",
     "dry-run:article": "node scripts/plan-article.mjs",
-    "verify:ghost-live": "node scripts/verify-ghost-live.mjs && node scripts/verify-body-image-live.mjs"
+    "dry-run:legacy": "node scripts/plan-post.mjs",
+    "verify:ghost-live:legacy": "node scripts/verify-ghost-live.mjs && node scripts/verify-body-image-live.mjs"
   },
   "dependencies": {
     "marked": "18.0.11"
