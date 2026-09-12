@@ -12,6 +12,19 @@ class ReadOnlyGhostClient {
   async getPageBySlug(slug) { this.calls.push(['page-slug', slug]); return null; }
 }
 
+class DeterministicAssetPublisher {
+  constructor() { this.calls = []; }
+  async planAsset(asset) {
+    this.calls.push({ ...asset });
+    return {
+      action: 'publish',
+      url: `https://assets.example/${asset.fingerprint.slice('sha256:'.length)}/${asset.filename}`,
+      ref: asset.ref,
+      fingerprint: asset.fingerprint
+    };
+  }
+}
+
 function publication() {
   return {
     tags: [], featureImage: null, featureImageAlt: null,
@@ -62,10 +75,11 @@ test('aggregate draft planning returns one bound read-only plan per required loc
   assert.deepEqual(plan.variants.map((entry) => entry.locale), ['ko-KR', 'en']);
   assert.ok(plan.variants.every((entry) => entry.ghost.operation === 'create'));
   assert.ok(plan.variants.every((entry) => entry.ghost.observed === null));
+  assert.ok(plan.variants.every((entry) => entry.assetPlans.length === 0));
   assert.equal(client.calls.filter(([kind]) => kind === 'identity').length, 4);
 });
 
-test('aggregate planning preflights every locale before the first Ghost read', async () => {
+test('aggregate planning preflights every locale before the first Ghost read when AssetPublisher is absent', async () => {
   const value = await fixture({ englishLocalAsset: true });
   const client = new ReadOnlyGhostClient();
   await assert.rejects(
@@ -75,12 +89,41 @@ test('aggregate planning preflights every locale before the first Ghost read', a
   assert.deepEqual(client.calls, []);
 });
 
-test('aggregate publish planning enforces Article readiness before Ghost reads', async () => {
-  const value = await fixture();
+test('AssetPublisher enables local body asset dry-run with planned HTTPS compiled projection', async () => {
+  const value = await fixture({ englishLocalAsset: true });
   const client = new ReadOnlyGhostClient();
+  const assetPublisher = new DeterministicAssetPublisher();
+  const plan = await planArticlePublication({
+    ...value,
+    action: 'draft',
+    client,
+    assetPublisher
+  });
+
+  const english = plan.variants.find((entry) => entry.locale === 'en');
+  assert.equal(assetPublisher.calls.length, 1);
+  assert.equal(assetPublisher.calls[0].ref, 'assets/article/diagram.png');
+  assert.equal(english.assetPlans.length, 1);
+  assert.equal(english.assetPlans[0].ref, 'assets/article/diagram.png');
+  assert.match(english.assetPlans[0].url, /^https:\/\/assets\.example\//);
+  assert.deepEqual(english.ghost.referencedAssets, [{
+    kind: 'image',
+    href: '../../assets/article/diagram.png',
+    alt: 'diagram',
+    title: null,
+    resolvedHref: english.assetPlans[0].url
+  }]);
+  assert.ok(client.calls.length > 0);
+});
+
+test('aggregate publish planning enforces Article readiness before AssetPublisher or Ghost reads', async () => {
+  const value = await fixture({ englishLocalAsset: true });
+  const client = new ReadOnlyGhostClient();
+  const assetPublisher = new DeterministicAssetPublisher();
   await assert.rejects(
-    planArticlePublication({ ...value, action: 'publish', client }),
+    planArticlePublication({ ...value, action: 'publish', client, assetPublisher }),
     /requires translation SYNCED/
   );
+  assert.deepEqual(assetPublisher.calls, []);
   assert.deepEqual(client.calls, []);
 });
