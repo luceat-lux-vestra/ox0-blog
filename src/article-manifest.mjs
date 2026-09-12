@@ -52,6 +52,21 @@ function resolvePortablePath(root, ref) {
   return path.resolve(root, ...ref.split('/'));
 }
 
+function portableRelativePath(root, target, name) {
+  const absoluteRoot = path.resolve(requireString(root, `${name} root`));
+  const absoluteTarget = path.resolve(requireString(target, name));
+  const nativeRelative = path.relative(absoluteRoot, absoluteTarget);
+  if (
+    nativeRelative === ''
+    || nativeRelative === '..'
+    || nativeRelative.startsWith(`..${path.sep}`)
+    || path.isAbsolute(nativeRelative)
+  ) {
+    throw new Error(`${name} must resolve inside ${absoluteRoot}`);
+  }
+  return requirePortableRelativePath(nativeRelative.split(path.sep).join('/'), name);
+}
+
 async function readConfinedUtf8(filePath, rootPath, name) {
   const confined = await requireConfinedRegularFile(filePath, rootPath, name);
   const bytes = await readFile(confined.realPath);
@@ -134,6 +149,43 @@ async function normalizePublication(raw, variant, repoRoot, locale) {
   return {
     tags: normalized.tags,
     featureImage: normalized.featureImage,
+    featureImageAlt: normalized.featureImageAlt,
+    featured: normalized.featured,
+    visibility: normalized.visibility,
+    canonicalUrl: normalized.canonicalUrl
+  };
+}
+
+async function publicationForManifest(raw, variant, repoRoot, locale) {
+  const name = `publicationByLocale[${locale}]`;
+  const value = requireExactKeys(raw, name, [
+    'tags',
+    'featureImage',
+    'featureImageAlt',
+    'featured',
+    'visibility',
+    'canonicalUrl'
+  ]);
+  const normalized = normalizeProjectionMetadata({
+    title: variant.title,
+    slug: variant.slug,
+    excerpt: variant.excerpt,
+    ...value
+  });
+
+  let featureImage = normalized.featureImage;
+  if (featureImage && !/^https:\/\//.test(featureImage)) {
+    const confined = await requireRepositoryAssetFile(featureImage, repoRoot, `${name}.featureImage`);
+    const ref = portableRelativePath(repoRoot, confined.absolutePath, `${name}.featureImage`);
+    if (!ref.startsWith('assets/')) {
+      throw new Error(`${name}.featureImage must serialize under assets/`);
+    }
+    featureImage = ref;
+  }
+
+  return {
+    tags: normalized.tags,
+    featureImage,
     featureImageAlt: normalized.featureImageAlt,
     featured: normalized.featured,
     visibility: normalized.visibility,
@@ -242,4 +294,60 @@ export async function loadArticleManifest({ manifestPath, repoRoot }) {
     bundle,
     publicationByLocale
   };
+}
+
+export async function serializeArticleManifest({ bundle: rawBundle, publicationByLocale, repoRoot, articleDir }) {
+  const bundle = normalizeArticleBundle(rawBundle);
+  if (!(publicationByLocale instanceof Map)) {
+    throw new Error('publicationByLocale must be a Map keyed by LocaleVariant.locale');
+  }
+  const root = path.resolve(requireString(repoRoot, 'repoRoot'));
+  const sourceRoot = path.resolve(requireString(articleDir, 'articleDir'));
+  const variantsByLocale = new Map(bundle.article.variants.map((variant) => [variant.locale, variant]));
+  if (publicationByLocale.size !== variantsByLocale.size) {
+    throw new Error('publicationByLocale must contain exactly one entry per present LocaleVariant');
+  }
+  for (const locale of publicationByLocale.keys()) {
+    if (!variantsByLocale.has(locale)) throw new Error(`publicationByLocale contains unexpected locale: ${locale}`);
+  }
+
+  const variants = [];
+  for (const locale of bundle.article.requiredLocales) {
+    const variant = variantsByLocale.get(locale);
+    if (!variant) continue;
+    if (!variant.sourcePath) throw new Error(`LocaleVariant.sourcePath is required to serialize locale: ${locale}`);
+    const source = portableRelativePath(sourceRoot, variant.sourcePath, `LocaleVariant.sourcePath[${locale}]`);
+    if (path.posix.extname(source) !== '.md') {
+      throw new Error(`LocaleVariant.sourcePath[${locale}] must use lowercase .md extension`);
+    }
+    const publication = await publicationForManifest(
+      publicationByLocale.get(locale),
+      variant,
+      root,
+      locale
+    );
+    variants.push({
+      variantId: variant.variantId,
+      locale: variant.locale,
+      source,
+      title: variant.title,
+      excerpt: variant.excerpt,
+      slug: variant.slug,
+      publication
+    });
+  }
+
+  const manifest = {
+    version: ARTICLE_MANIFEST_VERSION,
+    articleId: bundle.article.articleId,
+    requiredLocales: [...bundle.article.requiredLocales],
+    variants,
+    translationCheckpoint: bundle.translationCheckpoint,
+    readiness: {
+      epoch: bundle.readinessEpoch,
+      checkpoint: bundle.readinessCheckpoint,
+      invalidations: bundle.readinessInvalidations
+    }
+  };
+  return `${JSON.stringify(manifest, null, 2)}\n`;
 }
