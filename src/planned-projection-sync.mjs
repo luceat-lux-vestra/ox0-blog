@@ -5,6 +5,15 @@ import {
 } from './projection-managed-state.mjs';
 import { synchronizeProjection } from './publisher.mjs';
 
+export class PlannedProjectionSynchronizationError extends Error {
+  constructor(message, { cause = null, featureImageUploads = [] } = {}) {
+    super(message);
+    this.name = 'PlannedProjectionSynchronizationError';
+    this.cause = cause;
+    this.featureImageUploads = featureImageUploads;
+  }
+}
+
 function tagNames(tags) {
   return (tags ?? [])
     .map((tag) => typeof tag === 'string' ? tag : tag?.name)
@@ -43,8 +52,9 @@ function validateExpectedObservation(matches, expected) {
   }
 }
 
-function bindExpectedIdentityRead(client, sourceIdentity, expectedObserved) {
+function bindPlannedClient(client, sourceIdentity, expectedObserved) {
   let checked = false;
+  const featureImageUploads = [];
   const proxy = new Proxy(client, {
     get(target, property) {
       if (property === 'getPostsBySourceTag') {
@@ -57,12 +67,24 @@ function bindExpectedIdentityRead(client, sourceIdentity, expectedObserved) {
           return matches;
         };
       }
+      if (property === 'uploadImageBytes' || property === 'uploadImage') {
+        return async (...args) => {
+          const result = await target[property](...args);
+          featureImageUploads.push({
+            method: property,
+            ref: typeof args[1] === 'string' ? args[1] : null,
+            url: typeof result?.url === 'string' ? result.url : null
+          });
+          return result;
+        };
+      }
       const value = Reflect.get(target, property, target);
       return typeof value === 'function' ? value.bind(target) : value;
     }
   });
   return {
     client: proxy,
+    featureImageUploads,
     assertChecked() {
       if (!checked) throw new Error('planned Ghost observation was not checked before projection mutation');
     }
@@ -89,14 +111,27 @@ export async function synchronizePlannedProjection({
     throw new Error('variant publication plan source identity does not match prepared projection');
   }
 
-  const bound = bindExpectedIdentityRead(client, sourceIdentity, variantPlan.ghost.observed ?? null);
-  const result = await synchronizeProjection({
-    projection: prepared.projection,
-    compiledDocument: prepared.compiledDocument,
-    action,
-    client: bound.client,
-    repoRoot
-  });
-  bound.assertChecked();
-  return result;
+  const bound = bindPlannedClient(client, sourceIdentity, variantPlan.ghost.observed ?? null);
+  try {
+    const result = await synchronizeProjection({
+      projection: prepared.projection,
+      compiledDocument: prepared.compiledDocument,
+      action,
+      client: bound.client,
+      repoRoot
+    });
+    bound.assertChecked();
+    return result;
+  } catch (cause) {
+    if (bound.featureImageUploads.length > 0) {
+      throw new PlannedProjectionSynchronizationError(
+        cause instanceof Error ? cause.message : String(cause),
+        {
+          cause,
+          featureImageUploads: bound.featureImageUploads.map((entry) => ({ ...entry }))
+        }
+      );
+    }
+    throw cause;
+  }
 }
