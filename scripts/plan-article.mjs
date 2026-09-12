@@ -2,6 +2,7 @@
 import path from 'node:path';
 import { planArticlePublication } from '../src/article-planning.mjs';
 import { GhostAdminClient } from '../src/ghost-client.mjs';
+import { loadHostRuntime } from '../src/host-runtime.mjs';
 
 const [manifestRef, action, ...extra] = process.argv.slice(2);
 if (!manifestRef || !action || extra.length > 0) {
@@ -15,11 +16,14 @@ if (!url || !key) throw new Error('GHOST_ADMIN_URL and GHOST_ADMIN_API_KEY are r
 
 const repoRoot = process.cwd();
 const manifestPath = path.resolve(repoRoot, manifestRef);
+const hostRuntime = await loadHostRuntime({ repoRoot });
 const client = new GhostAdminClient({ url, key });
 const plan = await planArticlePublication({
   manifestPath,
   action,
   client,
-  repoRoot
+  repoRoot,
+  assetPublisher: hostRuntime.assetPublisher,
+  projectContext: hostRuntime.projectContext
 });
 process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
