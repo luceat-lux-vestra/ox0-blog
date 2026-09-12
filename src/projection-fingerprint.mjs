@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { requireCompiledDocument } from './compiler/document-compiler.mjs';
+import { isHttpsUrl } from './projection-metadata.mjs';
 
 export const PROJECTION_FINGERPRINT_VERSION = 1;
 
@@ -66,7 +67,7 @@ function appendFeatureImage(hash, featureImage, featureImageFingerprint) {
     return;
   }
   if (typeof featureImage !== 'string') throw new Error('projection.featureImage must be a string or null');
-  if (/^https:\/\//.test(featureImage)) {
+  if (isHttpsUrl(featureImage)) {
     appendField(hash, 'feature-image-kind', 'https');
     appendField(hash, 'feature-image-url', featureImage);
     return;
