@@ -2,7 +2,7 @@ import { normalizeArticle } from './article.mjs';
 import { requireCompiledDocument, requireDocumentCompiler } from './compiler/document-compiler.mjs';
 import { projectionSourceFingerprintV1 } from './projection-fingerprint.mjs';
 import { projectionIdentityTags } from './projection-identity.mjs';
-import { normalizeProjectionMetadata } from './projection-metadata.mjs';
+import { isHttpsUrl, normalizeProjectionMetadata } from './projection-metadata.mjs';
 
 function requirePublicationOptions(publication) {
   if (publication == null) return {};
@@ -21,7 +21,7 @@ function normalizeFingerprintEvidence(projection, fingerprintEvidence) {
   }
   const materialAssets = fingerprintEvidence.materialAssets ?? [];
   if (!Array.isArray(materialAssets)) throw new Error('fingerprintEvidence.materialAssets must be an array');
-  const featureImageFingerprint = !projection.featureImage || /^https:\/\//.test(projection.featureImage)
+  const featureImageFingerprint = !projection.featureImage || isHttpsUrl(projection.featureImage)
     ? null
     : fingerprintEvidence.featureImageFingerprint ?? null;
   return {
