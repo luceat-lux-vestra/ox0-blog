@@ -49,23 +49,22 @@ function errorReport(error) {
   };
 }
 
-const [manifestRef, action, ...extra] = process.argv.slice(2);
-if (!manifestRef || !action || extra.length > 0) {
-  throw new Error('usage: node scripts/sync-article.mjs <posts/.../article.json> <draft|publish>');
-}
-if (!['draft', 'publish'].includes(action)) throw new Error('action must be draft or publish');
+async function main() {
+  const [manifestRef, action, ...extra] = process.argv.slice(2);
+  if (!manifestRef || !action || extra.length > 0) {
+    throw new Error('usage: node scripts/sync-article.mjs <posts/.../article.json> <draft|publish>');
+  }
+  if (!['draft', 'publish'].includes(action)) throw new Error('action must be draft or publish');
 
-const authorization = authorizationForAction(action);
-const url = process.env.GHOST_ADMIN_URL;
-const key = process.env.GHOST_ADMIN_API_KEY;
-if (!url || !key) throw new Error('GHOST_ADMIN_URL and GHOST_ADMIN_API_KEY are required');
+  const authorization = authorizationForAction(action);
+  const url = process.env.GHOST_ADMIN_URL;
+  const key = process.env.GHOST_ADMIN_API_KEY;
+  if (!url || !key) throw new Error('GHOST_ADMIN_URL and GHOST_ADMIN_API_KEY are required');
 
-const repoRoot = process.cwd();
-const manifestPath = path.resolve(repoRoot, manifestRef);
-const hostRuntime = await loadHostRuntime({ repoRoot });
-const client = new GhostAdminClient({ url, key });
-
-try {
+  const repoRoot = process.cwd();
+  const manifestPath = path.resolve(repoRoot, manifestRef);
+  const hostRuntime = await loadHostRuntime({ repoRoot });
+  const client = new GhostAdminClient({ url, key });
   const result = await synchronizeArticlePublication({
     manifestPath,
     action,
@@ -76,6 +75,10 @@ try {
     authorization
   });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+}
+
+try {
+  await main();
 } catch (error) {
   process.stderr.write(`${JSON.stringify(errorReport(error), null, 2)}\n`);
   process.exitCode = 1;
