@@ -4,27 +4,12 @@ import { requireCompiledDocument, requireDocumentCompiler } from './compiler/doc
 import { readRepositoryAssetSnapshot } from './file-confinement.mjs';
 import { collectMaterialAssetEvidence } from './material-asset-evidence.mjs';
 import { isHttpsUrl } from './projection-metadata.mjs';
+import { resolveProjectContext } from './project-context.mjs';
 import { translationFingerprintV1 } from './translation-fingerprint.mjs';
 
 function requireRepoRoot(repoRoot) {
   if (typeof repoRoot !== 'string' || repoRoot.trim() === '') throw new Error('repoRoot is required');
   return path.resolve(repoRoot);
-}
-
-function projectContextFor(projectContext, variant) {
-  if (projectContext == null) return {};
-  if (typeof projectContext === 'function') {
-    const resolved = projectContext(variant);
-    if (resolved == null) return {};
-    if (typeof resolved !== 'object' || Array.isArray(resolved)) {
-      throw new Error('projectContext factory must return an object');
-    }
-    return resolved;
-  }
-  if (typeof projectContext !== 'object' || Array.isArray(projectContext)) {
-    throw new Error('projectContext must be an object or function');
-  }
-  return projectContext;
 }
 
 function publicationEntries(publicationByLocale) {
@@ -117,8 +102,9 @@ export async function evaluateArticleBundle({
   const currentTranslationFingerprints = {};
 
   for (const variant of bundle.article.variants) {
+    const resolvedProjectContext = resolveProjectContext(projectContext, variant);
     const compiledDocument = requireCompiledDocument(
-      await compiler.compile(variant, projectContextFor(projectContext, variant))
+      await compiler.compile(variant, resolvedProjectContext)
     );
     if (compiledDocument.locale !== variant.locale) {
       throw new Error(`CompiledDocument.locale=${compiledDocument.locale} does not match LocaleVariant.locale=${variant.locale}`);
@@ -143,7 +129,8 @@ export async function evaluateArticleBundle({
       materialAssets: resourceEvidence.materialAssets,
       remoteResources: resourceEvidence.remoteResources,
       semanticPublication,
-      translationFingerprint
+      translationFingerprint,
+      resolvedProjectContext
     });
   }
 
