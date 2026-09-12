@@ -18,14 +18,7 @@ function assertPublishReady(evaluation, manifestPath) {
   }
 }
 
-export async function planArticleProjection({
-  manifestPath,
-  locale,
-  action,
-  client,
-  repoRoot,
-  compiler = new MarkedCompiler()
-}) {
+async function loadPlanningContext({ manifestPath, action, repoRoot, compiler }) {
   const desiredAction = requireAction(action);
   const loaded = await loadArticleManifest({ manifestPath, repoRoot });
   const evaluation = await evaluateArticleBundle({
@@ -34,9 +27,11 @@ export async function planArticleProjection({
     repoRoot,
     publicationByLocale: loaded.publicationByLocale
   });
-
   if (desiredAction === 'publish') assertPublishReady(evaluation, loaded.manifestPath);
+  return { desiredAction, loaded, evaluation };
+}
 
+function prepareLocaleProjection({ loaded, evaluation, locale }) {
   const variantEvidence = evaluation.variantEvidence.get(locale);
   if (!variantEvidence) {
     if (loaded.bundle.article.requiredLocales.includes(locale)) {
@@ -53,7 +48,7 @@ export async function planArticleProjection({
   const publication = loaded.publicationByLocale.get(locale);
   if (!publication) throw new Error(`publication metadata is missing for LocaleVariant: ${locale}`);
   const featureFingerprint = variantEvidence.semanticPublication?.featureImageFingerprint ?? null;
-  const prepared = createLocaleProjectionFromCompiledDocument({
+  return createLocaleProjectionFromCompiledDocument({
     article: loaded.bundle.article,
     locale,
     publication,
@@ -63,23 +58,93 @@ export async function planArticleProjection({
       ...(featureFingerprint ? { featureImageFingerprint: featureFingerprint } : {})
     }
   });
+}
 
-  const ghostPlan = await planProjectionSynchronization({
+async function planPreparedProjection({ prepared, action, client, repoRoot }) {
+  const ghost = await planProjectionSynchronization({
     projection: prepared.projection,
     compiledDocument: prepared.compiledDocument,
-    action: desiredAction,
+    action,
+    client,
+    repoRoot
+  });
+  return {
+    locale: prepared.variant.locale,
+    variantId: prepared.variant.variantId,
+    sourceFingerprint: prepared.sourceFingerprint,
+    ghost
+  };
+}
+
+export async function planArticleProjection({
+  manifestPath,
+  locale,
+  action,
+  client,
+  repoRoot,
+  compiler = new MarkedCompiler()
+}) {
+  const context = await loadPlanningContext({ manifestPath, action, repoRoot, compiler });
+  const prepared = prepareLocaleProjection({
+    loaded: context.loaded,
+    evaluation: context.evaluation,
+    locale
+  });
+  const planned = await planPreparedProjection({
+    prepared,
+    action: context.desiredAction,
     client,
     repoRoot
   });
 
   return {
-    articleId: loaded.bundle.article.articleId,
-    manifestPath: loaded.manifestPath,
+    articleId: context.loaded.bundle.article.articleId,
+    manifestPath: context.loaded.manifestPath,
     locale,
-    action: desiredAction,
-    translation: evaluation.translation,
-    readiness: evaluation.readiness,
-    sourceFingerprint: prepared.sourceFingerprint,
-    ghost: ghostPlan
+    action: context.desiredAction,
+    translation: context.evaluation.translation,
+    readiness: context.evaluation.readiness,
+    sourceFingerprint: planned.sourceFingerprint,
+    ghost: planned.ghost
+  };
+}
+
+export async function planArticlePublication({
+  manifestPath,
+  action,
+  client,
+  repoRoot,
+  compiler = new MarkedCompiler()
+}) {
+  const context = await loadPlanningContext({ manifestPath, action, repoRoot, compiler });
+
+  // Preflight every required locale before the first Ghost read. PREPARE_PUBLISH
+  // must not produce a partial plan merely because one sibling projection cannot
+  // be represented by the current host policy.
+  const prepared = context.loaded.bundle.article.requiredLocales.map((locale) =>
+    prepareLocaleProjection({
+      loaded: context.loaded,
+      evaluation: context.evaluation,
+      locale
+    })
+  );
+
+  const variants = [];
+  for (const projection of prepared) {
+    variants.push(await planPreparedProjection({
+      prepared: projection,
+      action: context.desiredAction,
+      client,
+      repoRoot
+    }));
+  }
+
+  return {
+    articleId: context.loaded.bundle.article.articleId,
+    manifestPath: context.loaded.manifestPath,
+    action: context.desiredAction,
+    translation: context.evaluation.translation,
+    readiness: context.evaluation.readiness,
+    variants
   };
 }
