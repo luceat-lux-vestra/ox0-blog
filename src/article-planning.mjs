@@ -1,9 +1,7 @@
 import { evaluateArticleBundle } from './article-evaluation.mjs';
 import { loadArticleManifest } from './article-manifest.mjs';
 import { MarkedCompiler } from './compiler/marked-compiler.mjs';
-import { readRepositoryAssetSnapshot } from './file-confinement.mjs';
 import { createLocaleProjectionFromCompiledDocument } from './locale-projection.mjs';
-import { isHttpsUrl } from './projection-metadata.mjs';
 import { planProjectionSynchronization } from './publisher.mjs';
 
 function requireAction(action) {
@@ -20,15 +18,6 @@ function assertPublishReady(evaluation, manifestPath) {
   }
 }
 
-async function featureImageFingerprint(publication, repoRoot) {
-  if (!publication.featureImage || isHttpsUrl(publication.featureImage)) return null;
-  return (await readRepositoryAssetSnapshot(
-    publication.featureImage,
-    repoRoot,
-    'Article featureImage'
-  )).fingerprint;
-}
-
 export async function planArticleProjection({
   manifestPath,
   locale,
@@ -42,7 +31,8 @@ export async function planArticleProjection({
   const evaluation = await evaluateArticleBundle({
     bundle: loaded.bundle,
     compiler,
-    repoRoot
+    repoRoot,
+    publicationByLocale: loaded.publicationByLocale
   });
 
   if (desiredAction === 'publish') assertPublishReady(evaluation, loaded.manifestPath);
@@ -62,7 +52,7 @@ export async function planArticleProjection({
 
   const publication = loaded.publicationByLocale.get(locale);
   if (!publication) throw new Error(`publication metadata is missing for LocaleVariant: ${locale}`);
-  const featureFingerprint = await featureImageFingerprint(publication, repoRoot);
+  const featureFingerprint = variantEvidence.semanticPublication?.featureImageFingerprint ?? null;
   const prepared = createLocaleProjectionFromCompiledDocument({
     article: loaded.bundle.article,
     locale,
