@@ -1,14 +1,14 @@
-name: Publish to Ghost
+name: Legacy Publish to Ghost (compatibility)
 
 on:
   workflow_dispatch:
     inputs:
       post_path:
-        description: Repository-relative Markdown file under posts/
+        description: Legacy repository-relative one-file Markdown source under posts/
         required: true
         type: string
       action:
-        description: Preview, synchronize as draft, or explicitly publish
+        description: Legacy compatibility preview/draft/publish action
         required: true
         default: dry-run
         type: choice
@@ -21,11 +21,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: ghost-publish
+  group: ghost-publish-legacy
   cancel-in-progress: false
 
 jobs:
   publish:
+    name: Legacy one-file Ghost compatibility path
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     environment: ox0-blog
@@ -43,18 +44,18 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Test publisher
         run: npm test
-      - name: Validate repository and selected post
+      - name: Validate legacy repository and selected post
         env:
           POST_PATH: ${{ inputs.post_path }}
         run: node scripts/validate-post.mjs "$POST_PATH"
-      - name: Preview Ghost changes
+      - name: Preview legacy Ghost changes
         if: inputs.action == 'dry-run'
         env:
           GHOST_ADMIN_URL: ${{ vars.GHOST_ADMIN_URL || secrets.GHOST_ADMIN_URL }}
           GHOST_ADMIN_API_KEY: ${{ secrets.GHOST_ADMIN_API_KEY }}
           POST_PATH: ${{ inputs.post_path }}
         run: node scripts/plan-post.mjs "$POST_PATH"
-      - name: Synchronize post
+      - name: Synchronize legacy post
         if: inputs.action != 'dry-run'
         env:
           GHOST_ADMIN_URL: ${{ vars.GHOST_ADMIN_URL || secrets.GHOST_ADMIN_URL }}
