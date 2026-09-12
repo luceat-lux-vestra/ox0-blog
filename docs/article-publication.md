@@ -63,6 +63,18 @@ The library does not create that authorization assertion itself. Doing so would 
 
 The authorization object is ephemeral. It is not persisted in `article.json`, Ghost, Git, or RTA.
 
+## ProjectContext preservation
+
+Article publication must use the same compiler host context semantics as validation/review.
+
+The workflow therefore resolves ProjectContext once per LocaleVariant evaluation snapshot and retains that resolved context as runtime evidence.
+
+When a local body asset requires recompilation with an AssetPublisher delivery URL, the workflow reuses the exact resolved ProjectContext and overrides only `resolveResource`.
+
+This is important for future compiler backends such as Arkst/VirtualProject: resource delivery must not silently discard unrelated compiler/project context merely because Marked currently does not use it.
+
+The same ProjectContext is threaded through the post-asset source revalidation pass. A backend/context change that affects the compiled projection therefore changes the projection source fingerprint and fails the stability check rather than being ignored.
+
 ## Plan binding
 
 The normal read-only PREPARE_PUBLISH operation binds each locale plan to observed Ghost state including:
@@ -129,6 +141,26 @@ Each locale still gets low-level safeguards such as:
 
 Sequential mutation does not imply transactionality across Ghost posts. The orchestration therefore treats partial failure as a first-class state rather than pretending distributed rollback exists.
 
+## Feature-image side-effect observability
+
+Local feature images are still uploaded through Ghost's Image API inside the low-level projection synchronization path.
+
+That upload is not transactional with subsequent Ghost post creation/update. A successful image upload followed by a post mutation failure can therefore leave an orphan Ghost media object.
+
+The target planned-projection wrapper records each successful `uploadImage` / `uploadImageBytes` result before returning control to the publisher. If a later projection step fails, the Article-level `GHOST_MUTATION` error exposes:
+
+```text
+featureImageUploads[] = {
+  method,
+  ref,
+  url
+}
+```
+
+This is observability, not rollback. The system does not claim that the uploaded media was deleted or that cleanup is safe automatically.
+
+A future deterministic prepublication/cleanup contract may reduce this side effect, but current correctness depends on reporting it rather than hiding it.
+
 ## Partial failure recovery
 
 If locale N fails after earlier locale mutations succeeded:
@@ -137,7 +169,8 @@ If locale N fails after earlier locale mutations succeeded:
 2. the error stage is `GHOST_MUTATION`;
 3. every target locale is fresh-read by stable projection identity;
 4. current per-locale projection state is derived using the exact prepared source fingerprint;
-5. the recovery payload may therefore report mixed states such as:
+5. successful feature-image uploads from the failing locale are retained as explicit side-effect evidence;
+6. the recovery payload may therefore report mixed states such as:
 
 ```text
 ko-KR -> PUBLISHED_CURRENT
@@ -151,7 +184,7 @@ ko-KR -> DRAFT_CURRENT
 en    -> NOT_PROJECTED
 ```
 
-Ambiguous ownership, missing previously managed target, unmanaged drift, unsupported status, or recovery-read failure are represented as reconciliation-required outcomes. The system never implicitly adopts a conflicting unmanaged post.
+Ambiguous ownership, missing operation-known managed target, unmanaged drift, unsupported status, or recovery-read failure are represented as reconciliation-required outcomes. The system never implicitly adopts a conflicting unmanaged post.
 
 The explicit production authorization may remain conceptually valid only for the same intended active operation/source, but the next attempt must re-run source, asset, identity and plan guards. A stale PublicationPlan is never replayed blindly.
 
@@ -167,7 +200,7 @@ The target library distinguishes at least:
 - `GHOST_MUTATION` — one locale mutation failed; fresh all-locale recovery attached;
 - `POST_VERIFY` — mutations returned but fresh aggregate recovery is not the requested current state.
 
-Errors may contain successfully published body-asset records and fresh projection recovery state to support safe continuation/reconciliation.
+Errors may contain successfully published body-asset records, feature-image upload side-effect evidence, and fresh projection recovery state to support safe continuation/reconciliation.
 
 ## CLI boundary
 
