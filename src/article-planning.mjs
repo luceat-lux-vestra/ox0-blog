@@ -9,6 +9,7 @@ import {
   getProjectionSourceFingerprint,
   getProjectionSyncHash
 } from './projection-managed-state.mjs';
+import { withProjectResourceResolver } from './project-context.mjs';
 import { planProjectionSynchronization } from './publisher.mjs';
 
 function requireAction(action) {
@@ -25,13 +26,14 @@ function assertPublishReady(evaluation, manifestPath) {
   }
 }
 
-async function loadPlanningContext({ manifestPath, action, repoRoot, compiler }) {
+async function loadPlanningContext({ manifestPath, action, repoRoot, compiler, projectContext }) {
   const desiredAction = requireAction(action);
   const loaded = await loadArticleManifest({ manifestPath, repoRoot });
   const evaluation = await evaluateArticleBundle({
     bundle: loaded.bundle,
     compiler,
     repoRoot,
+    projectContext,
     publicationByLocale: loaded.publicationByLocale
   });
   if (desiredAction === 'publish') assertPublishReady(evaluation, loaded.manifestPath);
@@ -71,9 +73,10 @@ async function prepareLocaleProjection({
       repoRoot,
       assetPublisher
     });
-    compiledDocument = requireCompiledDocument(await compiler.compile(variant, {
-      resolveResource: delivery.resolveResource
-    }));
+    compiledDocument = requireCompiledDocument(await compiler.compile(
+      variant,
+      withProjectResourceResolver(variantEvidence.resolvedProjectContext, delivery.resolveResource)
+    ));
     if (compiledDocument.locale !== variant.locale) {
       throw new Error(`compiler returned locale=${compiledDocument.locale} for LocaleVariant.locale=${variant.locale}`);
     }
@@ -165,9 +168,10 @@ export async function planArticleProjection({
   client,
   repoRoot,
   compiler = new MarkedCompiler(),
+  projectContext = {},
   assetPublisher = null
 }) {
-  const context = await loadPlanningContext({ manifestPath, action, repoRoot, compiler });
+  const context = await loadPlanningContext({ manifestPath, action, repoRoot, compiler, projectContext });
   const prepared = await prepareLocaleProjection({
     loaded: context.loaded,
     evaluation: context.evaluation,
@@ -202,9 +206,10 @@ export async function prepareArticlePublicationOperation({
   client,
   repoRoot,
   compiler = new MarkedCompiler(),
+  projectContext = {},
   assetPublisher = null
 }) {
-  const context = await loadPlanningContext({ manifestPath, action, repoRoot, compiler });
+  const context = await loadPlanningContext({ manifestPath, action, repoRoot, compiler, projectContext });
 
   // Preflight every required locale before the first Ghost read. PREPARE_PUBLISH
   // must not produce a partial plan merely because one sibling projection cannot
