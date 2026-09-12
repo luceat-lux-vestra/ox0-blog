@@ -81,6 +81,45 @@ function uniqueAssetPlans(plan) {
   return [...byRef.values()].sort((a, b) => a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0);
 }
 
+function stableAssetTarget(asset) {
+  return {
+    ref: asset.ref,
+    fingerprint: asset.fingerprint,
+    url: asset.url,
+    size: asset.size,
+    filename: asset.filename
+  };
+}
+
+function sourceSnapshot(runtime) {
+  return {
+    articleId: runtime.plan.articleId,
+    requiredLocales: [...runtime.loaded.bundle.article.requiredLocales],
+    currentTranslationFingerprints: Object.fromEntries(
+      runtime.loaded.bundle.article.requiredLocales.map((locale) => [
+        locale,
+        runtime.evaluation.currentTranslationFingerprints[locale] ?? null
+      ])
+    ),
+    translation: runtime.plan.translation,
+    readiness: runtime.plan.readiness,
+    variants: runtime.plan.variants.map((variant) => ({
+      locale: variant.locale,
+      variantId: variant.variantId,
+      sourceFingerprint: variant.sourceFingerprint,
+      assets: (variant.assetPlans ?? []).map(stableAssetTarget).sort((a, b) => a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0)
+    }))
+  };
+}
+
+function assertSourceSnapshotStable(initial, refreshed) {
+  const before = JSON.stringify(sourceSnapshot(initial));
+  const after = JSON.stringify(sourceSnapshot(refreshed));
+  if (before !== after) {
+    throw new Error('Article source/evidence or planned asset target changed after publication preflight');
+  }
+}
+
 async function recoverProjectionStates(runtime, client, successfulLocales = new Set()) {
   const states = [];
   for (let index = 0; index < runtime.prepared.length; index += 1) {
@@ -176,7 +215,17 @@ export async function synchronizeArticlePublication({
     }
   }
 
-  const assetPlans = uniqueAssetPlans(runtime.plan);
+  let assetPlans;
+  try {
+    assetPlans = uniqueAssetPlans(runtime.plan);
+  } catch (cause) {
+    throw new ArticlePublicationError('Article material asset plans conflict across required locales', {
+      stage: 'ASSET_PLANNING',
+      cause,
+      recovery: await recoverProjectionStates(runtime, client)
+    });
+  }
+
   const publishedAssets = [];
   try {
     for (const assetPlan of assetPlans) {
@@ -195,6 +244,28 @@ export async function synchronizeArticlePublication({
       recovery: await recoverProjectionStates(runtime, client)
     });
   }
+
+  let refreshed;
+  try {
+    refreshed = await prepareArticlePublicationOperation({
+      manifestPath,
+      action,
+      client,
+      repoRoot,
+      ...(compiler ? { compiler } : {}),
+      assetPublisher
+    });
+    assertSourceSnapshotStable(runtime, refreshed);
+    if (action === 'publish') validateAuthorizationForPlan(authorization, refreshed.plan);
+  } catch (cause) {
+    throw new ArticlePublicationError('Article source changed after preflight; refusing Ghost mutation', {
+      stage: 'SOURCE_REVALIDATION',
+      cause,
+      publishedAssets,
+      recovery: await recoverProjectionStates(refreshed ?? runtime, client)
+    });
+  }
+  runtime = refreshed;
 
   const successfulLocales = new Set();
   for (let index = 0; index < runtime.prepared.length; index += 1) {
