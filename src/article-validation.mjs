@@ -19,7 +19,7 @@ async function requirePostsRoot(repoRoot) {
 
 async function collectManifestFiles(dir, repoRoot) {
   const entries = await readdir(dir, { withFileTypes: true });
-  entries.sort((a, b) => a.name.localeCompare(b.name));
+  entries.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
   const manifests = [];
   for (const entry of entries) {
     const absolute = path.join(dir, entry.name);
@@ -87,7 +87,8 @@ export async function validateArticleRepository(
       bundle: loaded.bundle,
       compiler,
       repoRoot: root,
-      projectContext
+      projectContext,
+      publicationByLocale: loaded.publicationByLocale
     });
     articles.push({ ...loaded, evaluation, repositoryPath: manifestPath });
   }
