@@ -15,16 +15,19 @@ Then recover current repository, Article, RTA, PR, and Ghost-related state relev
 ## Authority
 
 - Git repository policy is canonical. Account memory and prior chat context are bootstrap aids only.
-- `posts/` / future Article-bundle source is canonical public-content source; Ghost is a projection target, not an editing source.
+- Target public-content source is the Article bundle under `posts/<article>/`: strict `article.json` plus locale Markdown files. Ghost is a projection target, not an editing source.
 - `research-to-action` owns research/evidence/promotion governance. RTA state does not authorize Blog publication or project mutation.
 - The user normally supplies intent and material decisions. The agent owns routine editing, translation synchronization/review/checkpoints, Git/PR mechanics, validation, and authorized Ghost mechanics.
 - Production publication requires an explicit publication instruction unless a separately approved automation policy exists.
+- Production publication authorization is task-scoped/transient and must not be reconstructed merely from Article `READY`, Git state, RTA state, or Ghost state after session loss.
 
 ## Development and merge policy
 
 During development, normal branch/HEAD movement and fix commits are allowed. Do not rerun the complete strict merge gate after every edit or restack stacked PRs after every upstream commit.
 
-At merge judgment, correctness/safety not proven is FAIL. `UNKNOWN`, `UNVERIFIED`, and `INSUFFICIENT EVIDENCE` are FAIL. Exact final HEAD is the evidence unit; if it moves, exact-HEAD merge evidence is invalidated. Use squash merge and exact reviewed-head locking where supported.
+Preparing a coherent candidate is not the same as starting merge judgment. Do **not** enter strict merge judgment or merge unless the user/task explicitly requests merge or explicitly requests merge judgment.
+
+Once merge judgment has explicitly started, correctness/safety not proven is FAIL. `UNKNOWN`, `UNVERIFIED`, and `INSUFFICIENT EVIDENCE` are FAIL. Exact final HEAD is the evidence unit; if it moves, exact-HEAD merge evidence is invalidated. Use squash merge and exact reviewed-head locking where supported.
 
 ## Authoring safety
 
@@ -32,21 +35,36 @@ At merge judgment, correctness/safety not proven is FAIL. `UNKNOWN`, `UNVERIFIED
 - Do not publish credentials, personal secrets, private/customer/company details, or raw chat transcripts merely because they appeared in source conversation/RTA context.
 - Preserve publisher-owned `#ox0-*` state tags; authors must not add them manually.
 - Never put Ghost Admin credentials in source, logs, examples, issues, or pull requests.
-- Use dry-run/read-only planning before first mutation when the publication workflow supports it.
+- Use Article-wide dry-run/read-only planning before first target mutation when the publication workflow supports it.
+- Treat translation checkpoint, Article semantic readiness, projection revision, and production authorization as separate proofs. None substitutes for another.
+
+## Target Article contract
+
+For new architecture work, prefer the Article path documented by:
+
+- `docs/article-manifest-v1.md`
+- `docs/translation-fingerprint-v1.md`
+- `docs/article-readiness-v1.md`
+- `docs/article-operations.md`
+- `docs/asset-publisher.md`
+- `docs/article-publication.md`
+
+`npm run dry-run` is the target Article planner. `npm run validate` currently checks both migration-era models. Legacy one-file commands/workflows are explicitly marked compatibility-only.
 
 ## Transitional implementation warning
 
-The current authoring branch still contains one-file `:::lang ko/en` and self-contained data-URI body-image mechanisms. They are **transitional implementation**, not the long-term content-model contract.
+The authoring branch still contains one-file `:::lang ko/en`, path-derived source identity, source publication `status`, and data-URI body-image mechanisms. They are **transitional compatibility implementation**, not the target content-model contract.
 
-Target architecture is tracked by:
+Target architecture/state owners are:
 
-- #3 — Article + LocaleVariant + reviewed translation checkpoints
-- #4 — compiler boundary and staged Marked -> Arkst migration
+- #3 — Article + LocaleVariant + reviewed translation checkpoints / manifest semantics
+- #4 — compiler/ProjectContext/resource boundary and staged Marked -> Arkst migration
 - #5 — agent-operated authoring/Git/publication workflow
 - #6 — independent Conversation <-> Blog <-> RTA edge contracts
-- #8 — durable bootstrap/state-machine governance
+- #7 — orthogonal workflow state machines and operation guards
+- #8 — durable bootstrap/governance
 
-Do not extend the transitional bilingual/image mechanism as a new long-term invariant without reconciling those target issues and workflow docs first.
+Do not extend the transitional bilingual/image/path-identity mechanism as a new target invariant without reconciling those owners and workflow docs first.
 
 ## Fail closed
 
