@@ -2,6 +2,11 @@ import { evaluateArticleBundle } from './article-evaluation.mjs';
 import { loadArticleManifest } from './article-manifest.mjs';
 import { MarkedCompiler } from './compiler/marked-compiler.mjs';
 import { createLocaleProjectionFromCompiledDocument } from './locale-projection.mjs';
+import {
+  assertProjectionManagedAndUnchanged,
+  getProjectionSourceFingerprint,
+  getProjectionSyncHash
+} from './projection-managed-state.mjs';
 import { planProjectionSynchronization } from './publisher.mjs';
 
 function requireAction(action) {
@@ -60,6 +65,50 @@ function prepareLocaleProjection({ loaded, evaluation, locale }) {
   });
 }
 
+function tagNames(tags) {
+  return (tags ?? [])
+    .map((tag) => typeof tag === 'string' ? tag : tag?.name)
+    .filter((tag) => typeof tag === 'string' && tag !== '');
+}
+
+async function bindObservedGhostState({ prepared, ghost, client }) {
+  const matches = await client.getPostsBySourceTag(ghost.sourceIdentity);
+  if (matches.length > 1) {
+    throw new Error('Ghost projection identity became ambiguous while binding publication plan');
+  }
+  const existing = matches[0] ?? null;
+  if (ghost.existingPostId == null) {
+    if (existing) {
+      throw new Error('Ghost projection identity became owned while binding publication plan; recompute plan');
+    }
+    return { ...ghost, observed: null };
+  }
+  if (!existing || existing.id !== ghost.existingPostId) {
+    throw new Error('Ghost projection identity owner changed while binding publication plan; recompute plan');
+  }
+
+  assertProjectionManagedAndUnchanged(existing, prepared.projection.identityTags, {
+    requireSourceFingerprint: true
+  });
+  const projectedSourceFingerprint = getProjectionSourceFingerprint(existing);
+  if (existing.status !== ghost.currentStatus || projectedSourceFingerprint !== ghost.projectedSourceFingerprint) {
+    throw new Error('Ghost managed projection changed while binding publication plan; recompute plan');
+  }
+
+  return {
+    ...ghost,
+    observed: {
+      postId: existing.id,
+      updatedAt: existing.updated_at ?? null,
+      status: existing.status ?? null,
+      slug: existing.slug ?? null,
+      tags: tagNames(existing.tags),
+      projectedSourceFingerprint,
+      syncHash: getProjectionSyncHash(existing)
+    }
+  };
+}
+
 async function planPreparedProjection({ prepared, action, client, repoRoot }) {
   const ghost = await planProjectionSynchronization({
     projection: prepared.projection,
@@ -68,11 +117,12 @@ async function planPreparedProjection({ prepared, action, client, repoRoot }) {
     client,
     repoRoot
   });
+  const boundGhost = await bindObservedGhostState({ prepared, ghost, client });
   return {
     locale: prepared.variant.locale,
     variantId: prepared.variant.variantId,
     sourceFingerprint: prepared.sourceFingerprint,
-    ghost
+    ghost: boundGhost
   };
 }
 
