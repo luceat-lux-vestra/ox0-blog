@@ -6,6 +6,7 @@ import path from 'node:path';
 import {
   acceptArticleSemanticReview,
   acceptArticleTranslationReview,
+  recordArticleReadinessInvalidation,
   requestArticleSemanticReview
 } from '../src/article-review-operations.mjs';
 import { evaluateArticleBundle } from '../src/article-evaluation.mjs';
@@ -78,6 +79,25 @@ function readinessPass(sourceFingerprint, reviewedInvalidationIds) {
   };
 }
 
+async function makeReady(value) {
+  const current = await currentEvaluation(value);
+  const translation = await acceptArticleTranslationReview({
+    ...value,
+    review: translationPass(current.currentTranslationFingerprints)
+  });
+  await writeFile(value.manifestPath, translation.manifestText, 'utf8');
+  const requested = await requestArticleSemanticReview({ ...value });
+  const invalidationId = requested.bundle.readinessInvalidations[0].id;
+  await writeFile(value.manifestPath, requested.manifestText, 'utf8');
+  const before = await currentEvaluation(value);
+  const accepted = await acceptArticleSemanticReview({
+    ...value,
+    review: readinessPass(before.articleSourceFingerprint, [invalidationId])
+  });
+  await writeFile(value.manifestPath, accepted.manifestText, 'utf8');
+  return accepted;
+}
+
 test('translation review acceptance persists exact checkpoint without auto-advancing Article readiness', async () => {
   const value = await fixture();
   const current = await currentEvaluation(value);
@@ -137,6 +157,27 @@ test('readiness request and acceptance remain separate durable operations', asyn
   assert.deepEqual(accepted.readiness, { state: 'READY' });
   assert.equal(accepted.bundle.readinessCheckpoint.reviewedEpoch, 1);
   assert.deepEqual(accepted.bundle.readinessCheckpoint.resolvedInvalidationIds, [invalidationId]);
+});
+
+test('durable RTA/external signal invalidates READY without rewriting Article content', async () => {
+  const value = await fixture();
+  await makeReady(value);
+  const signal = await recordArticleReadinessInvalidation({
+    ...value,
+    reason: 'EXTERNAL_EVIDENCE_CHANGED',
+    origin: 'rta',
+    reference: 'rta:luceat-lux-vestra/research-to-action#22'
+  });
+  assert.equal(signal.bundle.readinessEpoch, 2);
+  assert.equal(signal.invalidation.reason, 'EXTERNAL_EVIDENCE_CHANGED');
+  assert.equal(signal.invalidation.origin, 'rta');
+  await writeFile(value.manifestPath, signal.manifestText, 'utf8');
+
+  const recovered = await currentEvaluation(value);
+  assert.deepEqual(recovered.translation, { state: 'SYNCED' });
+  assert.equal(recovered.readiness.state, 'REVIEW_REQUIRED');
+  assert.equal(recovered.readiness.reason, 'DURABLE_INVALIDATION');
+  assert.equal(recovered.readiness.invalidations.at(-1).id, signal.invalidation.id);
 });
 
 test('Article semantic review cannot be accepted before translation is SYNCED', async () => {
