@@ -196,7 +196,7 @@ export async function planArticleProjection({
   };
 }
 
-export async function planArticlePublication({
+export async function prepareArticlePublicationOperation({
   manifestPath,
   action,
   client,
@@ -231,7 +231,7 @@ export async function planArticlePublication({
     }));
   }
 
-  return {
+  const plan = {
     articleId: context.loaded.bundle.article.articleId,
     manifestPath: context.loaded.manifestPath,
     action: context.desiredAction,
@@ -239,4 +239,15 @@ export async function planArticlePublication({
     readiness: context.evaluation.readiness,
     variants
   };
+  return {
+    plan,
+    prepared,
+    action: context.desiredAction,
+    loaded: context.loaded,
+    evaluation: context.evaluation
+  };
+}
+
+export async function planArticlePublication(args) {
+  return (await prepareArticlePublicationOperation(args)).plan;
 }
