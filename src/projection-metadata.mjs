@@ -63,7 +63,7 @@ function normalizeFeatureImage(value) {
     let parsed;
     try { parsed = new URL(image); } catch { throw new Error('remote featureImage must be a valid URL'); }
     if (parsed.protocol !== 'https:') throw new Error('remote featureImage must use https');
-    return maxLength(image, 'remote featureImage', MAX_FEATURE_IMAGE_URL_LENGTH);
+    return maxLength(parsed.href, 'remote featureImage', MAX_FEATURE_IMAGE_URL_LENGTH);
   }
   if (!isAbsoluteOnAnyPlatform(image)) {
     throw new Error('local featureImage must be an absolute resolved path before projection');
@@ -75,12 +75,12 @@ function normalizeFeatureImage(value) {
 }
 
 function normalizeCanonicalUrl(value) {
-  const canonicalUrl = maxLength(optionalString(value, 'canonicalUrl'), 'canonicalUrl', MAX_CANONICAL_URL_LENGTH);
+  const canonicalUrl = optionalString(value, 'canonicalUrl');
   if (!canonicalUrl) return null;
   let parsed;
   try { parsed = new URL(canonicalUrl); } catch { throw new Error('canonicalUrl must be a valid URL'); }
   if (parsed.protocol !== 'https:') throw new Error('canonicalUrl must use https');
-  return canonicalUrl;
+  return maxLength(parsed.href, 'canonicalUrl', MAX_CANONICAL_URL_LENGTH);
 }
 
 export function normalizeProjectionMetadata(raw) {
