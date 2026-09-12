@@ -66,9 +66,34 @@ function repositoryRef(repoRoot, absolutePath) {
   return relative.split(path.sep).join('/');
 }
 
+export function resolveMaterialImageReference({ variant: rawVariant, href, repoRoot }) {
+  const variant = requireVariant(rawVariant);
+  if (typeof repoRoot !== 'string' || repoRoot.trim() === '') throw new Error('repoRoot is required');
+  const root = path.resolve(repoRoot);
+  const parsed = parseImageHref(href);
+  if (parsed.kind === 'remote') return parsed;
+
+  const absolutePath = path.resolve(path.dirname(variant.sourcePath), parsed.decodedPath);
+  const extension = path.extname(absolutePath).toLowerCase();
+  if (!IMAGE_EXTENSIONS.has(extension)) {
+    throw new Error(`unsupported Markdown image extension: ${absolutePath}`);
+  }
+  const ref = repositoryRef(root, absolutePath);
+  if (!ref.startsWith('assets/')) {
+    throw new Error(`material Markdown image must resolve under repository assets/: ${absolutePath}`);
+  }
+  return {
+    kind: 'local',
+    href: parsed.href,
+    ref,
+    absolutePath
+  };
+}
+
 export async function collectMaterialAssetEvidence({ variant: rawVariant, compiledDocument: rawDocument, repoRoot }) {
   const variant = requireVariant(rawVariant);
   if (typeof repoRoot !== 'string' || repoRoot.trim() === '') throw new Error('repoRoot is required');
+  const root = path.resolve(repoRoot);
   const compiledDocument = requireCompiledDocument(rawDocument);
   if (compiledDocument.locale !== variant.locale) {
     throw new Error(`CompiledDocument.locale=${compiledDocument.locale} does not match LocaleVariant.locale=${variant.locale}`);
@@ -82,28 +107,19 @@ export async function collectMaterialAssetEvidence({ variant: rawVariant, compil
     if (resource.kind !== 'image') {
       throw new Error(`unsupported material resource kind: ${resource.kind ?? '<missing>'}`);
     }
-    const parsed = parseImageHref(resource.href);
-    if (parsed.kind === 'remote') {
-      remoteByUrl.set(parsed.href, { kind: 'image', href: parsed.href });
+    const resolved = resolveMaterialImageReference({ variant, href: resource.href, repoRoot: root });
+    if (resolved.kind === 'remote') {
+      remoteByUrl.set(resolved.href, { kind: 'image', href: resolved.href });
       continue;
     }
 
-    const candidate = path.resolve(path.dirname(variant.sourcePath), parsed.decodedPath);
-    const extension = path.extname(candidate).toLowerCase();
-    if (!IMAGE_EXTENSIONS.has(extension)) {
-      throw new Error(`unsupported Markdown image extension: ${candidate}`);
-    }
-    const snapshot = await readRepositoryAssetSnapshot(candidate, repoRoot, 'material Markdown image');
-    const ref = repositoryRef(repoRoot, snapshot.absolutePath);
-    if (!ref.startsWith('assets/')) {
-      throw new Error(`material Markdown image must resolve under repository assets/: ${snapshot.absolutePath}`);
-    }
+    const snapshot = await readRepositoryAssetSnapshot(resolved.absolutePath, root, 'material Markdown image');
     const sha256 = snapshot.fingerprint.slice('sha256:'.length);
-    const prior = localByRef.get(ref);
+    const prior = localByRef.get(resolved.ref);
     if (prior && prior.sha256 !== sha256) {
-      throw new Error(`material asset changed while collecting evidence: ${ref}`);
+      throw new Error(`material asset changed while collecting evidence: ${resolved.ref}`);
     }
-    localByRef.set(ref, { ref, sha256 });
+    localByRef.set(resolved.ref, { ref: resolved.ref, sha256 });
   }
 
   return {
