@@ -9,12 +9,13 @@ import { loadArticleManifest, serializeArticleManifest } from './article-manifes
 import { MarkedCompiler } from './compiler/marked-compiler.mjs';
 import { createTranslationCheckpoint } from './translation-checkpoint.mjs';
 
-async function loadEvaluatedArticle({ manifestPath, repoRoot, compiler }) {
+async function loadEvaluatedArticle({ manifestPath, repoRoot, compiler, projectContext }) {
   const loaded = await loadArticleManifest({ manifestPath, repoRoot });
   const evaluation = await evaluateArticleBundle({
     bundle: loaded.bundle,
     compiler,
     repoRoot,
+    projectContext,
     publicationByLocale: loaded.publicationByLocale
   });
   return { loaded, evaluation };
@@ -46,9 +47,15 @@ export async function acceptArticleTranslationReview({
   manifestPath,
   repoRoot,
   review,
-  compiler = new MarkedCompiler()
+  compiler = new MarkedCompiler(),
+  projectContext = {}
 }) {
-  const { loaded, evaluation } = await loadEvaluatedArticle({ manifestPath, repoRoot, compiler });
+  const { loaded, evaluation } = await loadEvaluatedArticle({
+    manifestPath,
+    repoRoot,
+    compiler,
+    projectContext
+  });
   const translationCheckpoint = createTranslationCheckpoint({
     requiredLocales: loaded.bundle.article.requiredLocales,
     currentFingerprints: evaluation.currentTranslationFingerprints,
@@ -72,9 +79,15 @@ export async function requestArticleSemanticReview({
   id,
   origin = 'blog-audit',
   reference = null,
-  compiler = new MarkedCompiler()
+  compiler = new MarkedCompiler(),
+  projectContext = {}
 }) {
-  const { loaded, evaluation } = await loadEvaluatedArticle({ manifestPath, repoRoot, compiler });
+  const { loaded, evaluation } = await loadEvaluatedArticle({
+    manifestPath,
+    repoRoot,
+    compiler,
+    projectContext
+  });
   const bundle = requestArticleBundleReadinessReview(loaded.bundle, {
     currentTranslationFingerprints: evaluation.currentTranslationFingerprints,
     id,
@@ -117,9 +130,15 @@ export async function acceptArticleSemanticReview({
   manifestPath,
   repoRoot,
   review,
-  compiler = new MarkedCompiler()
+  compiler = new MarkedCompiler(),
+  projectContext = {}
 }) {
-  const { loaded, evaluation } = await loadEvaluatedArticle({ manifestPath, repoRoot, compiler });
+  const { loaded, evaluation } = await loadEvaluatedArticle({
+    manifestPath,
+    repoRoot,
+    compiler,
+    projectContext
+  });
   const bundle = acceptArticleBundleReadinessReview(loaded.bundle, {
     currentTranslationFingerprints: evaluation.currentTranslationFingerprints,
     review
