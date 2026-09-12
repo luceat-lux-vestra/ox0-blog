@@ -46,10 +46,6 @@ export async function collectArticleManifestPaths(repoRoot = process.cwd()) {
   return manifests.map((absolute) => path.relative(root, absolute).split(path.sep).join('/'));
 }
 
-function titleKey(title) {
-  return title.trim().normalize('NFC').toLocaleLowerCase('en-US');
-}
-
 function rememberUnique(map, value, owner, label) {
   const prior = map.get(value);
   if (prior) throw new Error(`duplicate ${label} ${value}: ${prior} and ${owner}`);
@@ -96,14 +92,12 @@ export async function validateArticleRepository(
   const articleIds = new Map();
   const variantIds = new Map();
   const slugs = new Map();
-  const titles = new Map();
   for (const article of articles) {
     rememberUnique(articleIds, article.bundle.article.articleId, article.repositoryPath, 'articleId');
     for (const variant of article.bundle.article.variants) {
       const owner = `${article.repositoryPath}#${variant.locale}`;
       rememberUnique(variantIds, variant.variantId, owner, 'variantId');
       rememberUnique(slugs, variant.slug, owner, 'slug');
-      rememberUnique(titles, titleKey(variant.title), owner, 'title');
     }
 
     if (requireReady) {
