@@ -1,7 +1,9 @@
 import { evaluateArticleBundle } from './article-evaluation.mjs';
 import { loadArticleManifest } from './article-manifest.mjs';
 import { MarkedCompiler } from './compiler/marked-compiler.mjs';
+import { requireCompiledDocument } from './compiler/document-compiler.mjs';
 import { createLocaleProjectionFromCompiledDocument } from './locale-projection.mjs';
+import { planMaterialResourceDelivery } from './material-resource-delivery.mjs';
 import {
   assertProjectionManagedAndUnchanged,
   getProjectionSourceFingerprint,
@@ -36,7 +38,14 @@ async function loadPlanningContext({ manifestPath, action, repoRoot, compiler })
   return { desiredAction, loaded, evaluation };
 }
 
-function prepareLocaleProjection({ loaded, evaluation, locale }) {
+async function prepareLocaleProjection({
+  loaded,
+  evaluation,
+  locale,
+  compiler,
+  repoRoot,
+  assetPublisher
+}) {
   const variantEvidence = evaluation.variantEvidence.get(locale);
   if (!variantEvidence) {
     if (loaded.bundle.article.requiredLocales.includes(locale)) {
@@ -44,25 +53,47 @@ function prepareLocaleProjection({ loaded, evaluation, locale }) {
     }
     throw new Error(`locale is not required by Article: ${locale}`);
   }
+  const variant = loaded.bundle.article.variants.find((candidate) => candidate.locale === locale);
+  if (!variant) throw new Error(`required LocaleVariant is missing: ${locale}`);
+
+  let compiledDocument = variantEvidence.compiledDocument;
+  let assetPlans = [];
   if (variantEvidence.materialAssets.length > 0) {
-    throw new Error(
-      `target Article projection with local body assets requires a host AssetPublisher before Ghost planning: ${locale}`
-    );
+    if (!assetPublisher) {
+      throw new Error(
+        `target Article projection with local body assets requires a host AssetPublisher before Ghost planning: ${locale}`
+      );
+    }
+    const delivery = await planMaterialResourceDelivery({
+      variant,
+      compiledDocument: variantEvidence.compiledDocument,
+      materialAssets: variantEvidence.materialAssets,
+      repoRoot,
+      assetPublisher
+    });
+    compiledDocument = requireCompiledDocument(await compiler.compile(variant, {
+      resolveResource: delivery.resolveResource
+    }));
+    if (compiledDocument.locale !== variant.locale) {
+      throw new Error(`compiler returned locale=${compiledDocument.locale} for LocaleVariant.locale=${variant.locale}`);
+    }
+    assetPlans = delivery.plans;
   }
 
   const publication = loaded.publicationByLocale.get(locale);
   if (!publication) throw new Error(`publication metadata is missing for LocaleVariant: ${locale}`);
   const featureFingerprint = variantEvidence.semanticPublication?.featureImageFingerprint ?? null;
-  return createLocaleProjectionFromCompiledDocument({
+  const prepared = createLocaleProjectionFromCompiledDocument({
     article: loaded.bundle.article,
     locale,
     publication,
-    compiledDocument: variantEvidence.compiledDocument,
+    compiledDocument,
     fingerprintEvidence: {
       materialAssets: variantEvidence.materialAssets,
       ...(featureFingerprint ? { featureImageFingerprint: featureFingerprint } : {})
     }
   });
+  return { ...prepared, assetPlans };
 }
 
 function tagNames(tags) {
@@ -122,6 +153,7 @@ async function planPreparedProjection({ prepared, action, client, repoRoot }) {
     locale: prepared.variant.locale,
     variantId: prepared.variant.variantId,
     sourceFingerprint: prepared.sourceFingerprint,
+    assetPlans: prepared.assetPlans.map((plan) => ({ ...plan })),
     ghost: boundGhost
   };
 }
@@ -132,13 +164,17 @@ export async function planArticleProjection({
   action,
   client,
   repoRoot,
-  compiler = new MarkedCompiler()
+  compiler = new MarkedCompiler(),
+  assetPublisher = null
 }) {
   const context = await loadPlanningContext({ manifestPath, action, repoRoot, compiler });
-  const prepared = prepareLocaleProjection({
+  const prepared = await prepareLocaleProjection({
     loaded: context.loaded,
     evaluation: context.evaluation,
-    locale
+    locale,
+    compiler,
+    repoRoot,
+    assetPublisher
   });
   const planned = await planPreparedProjection({
     prepared,
@@ -155,6 +191,7 @@ export async function planArticleProjection({
     translation: context.evaluation.translation,
     readiness: context.evaluation.readiness,
     sourceFingerprint: planned.sourceFingerprint,
+    assetPlans: planned.assetPlans,
     ghost: planned.ghost
   };
 }
@@ -164,20 +201,25 @@ export async function planArticlePublication({
   action,
   client,
   repoRoot,
-  compiler = new MarkedCompiler()
+  compiler = new MarkedCompiler(),
+  assetPublisher = null
 }) {
   const context = await loadPlanningContext({ manifestPath, action, repoRoot, compiler });
 
   // Preflight every required locale before the first Ghost read. PREPARE_PUBLISH
   // must not produce a partial plan merely because one sibling projection cannot
   // be represented by the current host policy.
-  const prepared = context.loaded.bundle.article.requiredLocales.map((locale) =>
-    prepareLocaleProjection({
+  const prepared = [];
+  for (const locale of context.loaded.bundle.article.requiredLocales) {
+    prepared.push(await prepareLocaleProjection({
       loaded: context.loaded,
       evaluation: context.evaluation,
-      locale
-    })
-  );
+      locale,
+      compiler,
+      repoRoot,
+      assetPublisher
+    }));
+  }
 
   const variants = [];
   for (const projection of prepared) {
