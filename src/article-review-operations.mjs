@@ -1,6 +1,7 @@
 import { evaluateArticleBundle } from './article-evaluation.mjs';
 import {
   acceptArticleBundleReadinessReview,
+  invalidateArticleBundleReadiness,
   recoverArticleBundleReviewState,
   requestArticleBundleReadinessReview
 } from './article-bundle.mjs';
@@ -19,13 +20,17 @@ async function loadEvaluatedArticle({ manifestPath, repoRoot, compiler }) {
   return { loaded, evaluation };
 }
 
-async function serializedResult({ loaded, bundle, repoRoot, currentTranslationFingerprints }) {
-  const manifestText = await serializeArticleManifest({
+async function serializeBundle({ loaded, bundle, repoRoot }) {
+  return serializeArticleManifest({
     bundle,
     publicationByLocale: loaded.publicationByLocale,
     repoRoot,
     articleDir: loaded.articleDir
   });
+}
+
+async function serializedResult({ loaded, bundle, repoRoot, currentTranslationFingerprints }) {
+  const manifestText = await serializeBundle({ loaded, bundle, repoRoot });
   const recovered = recoverArticleBundleReviewState(bundle, { currentTranslationFingerprints });
   return {
     manifestPath: loaded.manifestPath,
@@ -82,6 +87,30 @@ export async function requestArticleSemanticReview({
     repoRoot,
     currentTranslationFingerprints: evaluation.currentTranslationFingerprints
   });
+}
+
+export async function recordArticleReadinessInvalidation({
+  manifestPath,
+  repoRoot,
+  id,
+  reason,
+  origin,
+  reference = null
+}) {
+  const loaded = await loadArticleManifest({ manifestPath, repoRoot });
+  const bundle = invalidateArticleBundleReadiness(loaded.bundle, {
+    id,
+    reason,
+    origin,
+    reference
+  });
+  const manifestText = await serializeBundle({ loaded, bundle, repoRoot });
+  return {
+    manifestPath: loaded.manifestPath,
+    manifestText,
+    bundle,
+    invalidation: bundle.readinessInvalidations.at(-1)
+  };
 }
 
 export async function acceptArticleSemanticReview({
