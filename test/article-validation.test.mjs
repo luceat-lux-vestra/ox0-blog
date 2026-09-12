@@ -91,12 +91,11 @@ test('target repository validation discovers article.json work units and allows 
   assert.deepEqual(validated[0].evaluation.readiness, { state: 'DRAFT' });
 });
 
-test('repository-wide stable IDs, public slugs and normalized titles must be unique', async () => {
+test('repository-wide stable IDs and public Ghost slugs must be unique', async () => {
   for (const [label, betaOverrides, expected] of [
     ['articleId', { articleId: 'article-alpha' }, /duplicate articleId/],
     ['variantId', { koVariantId: 'alpha-ko' }, /duplicate variantId/],
-    ['slug', { koSlug: 'alpha-ko' }, /duplicate slug/],
-    ['title', { koTitle: ' ALPHA 제목 ' }, /duplicate title/]
+    ['slug', { koSlug: 'alpha-ko' }, /duplicate slug/]
   ]) {
     const repoRoot = await repoFixture({
       alpha: rawArticle('alpha'),
@@ -104,6 +103,15 @@ test('repository-wide stable IDs, public slugs and normalized titles must be uni
     });
     await assert.rejects(validateArticleRepository(repoRoot), expected, label);
   }
+});
+
+test('titles are presentation content, not repository identity', async () => {
+  const repoRoot = await repoFixture({
+    alpha: rawArticle('alpha', { koTitle: 'OAuth 2.0', enTitle: 'OAuth 2.0' }),
+    beta: rawArticle('beta', { koTitle: 'OAuth 2.0', enTitle: 'OAuth 2.0' })
+  });
+  const validated = await validateArticleRepository(repoRoot);
+  assert.equal(validated.length, 2);
 });
 
 test('requireReady is a separate guard and does not redefine ordinary source validation', async () => {
