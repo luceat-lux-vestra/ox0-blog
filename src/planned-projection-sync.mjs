@@ -90,15 +90,13 @@ export async function synchronizePlannedProjection({
   }
 
   const bound = bindExpectedIdentityRead(client, sourceIdentity, variantPlan.ghost.observed ?? null);
-  try {
-    return await synchronizeProjection({
-      projection: prepared.projection,
-      compiledDocument: prepared.compiledDocument,
-      action,
-      client: bound.client,
-      repoRoot
-    });
-  } finally {
-    bound.assertChecked();
-  }
+  const result = await synchronizeProjection({
+    projection: prepared.projection,
+    compiledDocument: prepared.compiledDocument,
+    action,
+    client: bound.client,
+    repoRoot
+  });
+  bound.assertChecked();
+  return result;
 }
