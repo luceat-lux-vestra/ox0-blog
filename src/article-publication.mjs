@@ -181,6 +181,7 @@ export async function synchronizeArticlePublication({
   client,
   repoRoot,
   compiler,
+  projectContext = {},
   assetPublisher = null,
   authorization = null
 }) {
@@ -194,6 +195,7 @@ export async function synchronizeArticlePublication({
       client,
       repoRoot,
       ...(compiler ? { compiler } : {}),
+      projectContext,
       assetPublisher
     });
   } catch (cause) {
@@ -253,6 +255,7 @@ export async function synchronizeArticlePublication({
       client,
       repoRoot,
       ...(compiler ? { compiler } : {}),
+      projectContext,
       assetPublisher
     });
     assertSourceSnapshotStable(runtime, refreshed);
