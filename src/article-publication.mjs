@@ -58,20 +58,6 @@ function validateAuthorizationForPlan(authorization, plan) {
   return value;
 }
 
-export function publicationAuthorizationForPlan(plan) {
-  if (!plan || typeof plan !== 'object' || plan.action !== 'publish') {
-    throw new Error('a publish Article plan is required to bind production authorization');
-  }
-  return {
-    version: ARTICLE_PUBLICATION_AUTHORIZATION_VERSION,
-    kind: 'explicit-production-publication',
-    articleId: plan.articleId,
-    sourceFingerprints: Object.fromEntries(
-      plan.variants.map((variant) => [variant.locale, variant.sourceFingerprint])
-    )
-  };
-}
-
 function sameAssetPlan(left, right) {
   return left.ref === right.ref
     && left.fingerprint === right.fingerprint
