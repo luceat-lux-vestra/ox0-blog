@@ -54,14 +54,15 @@ async function fixture({ englishLocalAsset = false } = {}) {
   return { repoRoot, manifestPath };
 }
 
-test('aggregate draft planning returns one read-only plan per required locale', async () => {
+test('aggregate draft planning returns one bound read-only plan per required locale', async () => {
   const value = await fixture();
   const client = new ReadOnlyGhostClient();
   const plan = await planArticlePublication({ ...value, action: 'draft', client });
   assert.equal(plan.articleId, 'article-1');
   assert.deepEqual(plan.variants.map((entry) => entry.locale), ['ko-KR', 'en']);
   assert.ok(plan.variants.every((entry) => entry.ghost.operation === 'create'));
-  assert.equal(client.calls.filter(([kind]) => kind === 'identity').length, 2);
+  assert.ok(plan.variants.every((entry) => entry.ghost.observed === null));
+  assert.equal(client.calls.filter(([kind]) => kind === 'identity').length, 4);
 });
 
 test('aggregate planning preflights every locale before the first Ghost read', async () => {
