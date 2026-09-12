@@ -30,5 +30,7 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Test
         run: npm test
-      - name: Validate post sources
+      - name: Validate legacy post sources
         run: npm run validate
+      - name: Validate Article sources
+        run: npm run validate:articles
