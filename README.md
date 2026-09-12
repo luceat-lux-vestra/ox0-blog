@@ -35,7 +35,7 @@ See:
 - `docs/article-manifest-v1.md` — durable source representation;
 - `docs/translation-fingerprint-v1.md` — translation-equivalence evidence;
 - `docs/article-readiness-v1.md` — semantic readiness ownership;
-- `docs/article-operations.md` — validation/read-only planning;
+- `docs/article-operations.md` — validation/planning/control entrypoints;
 - `docs/asset-publisher.md` — body-resource publication contract;
 - `docs/article-publication.md` — guarded Article-level mutation orchestration;
 - `docs/workflow/` — durable state/authorization/Git/RTA policy.
@@ -133,6 +133,25 @@ npm run validate:articles -- posts/example/article.json
 
 Ordinary source validation allows valid work-in-progress states such as `DRAFT`, `UNREVIEWED`, and `INCOMPLETE`. `--ready` additionally requires Article `SYNCED + READY`; it still does not authorize merge or publication.
 
+## Host runtime dependencies
+
+Target scripts may receive deployment/compiler host dependencies from an operator-controlled repository module:
+
+```text
+OX0_HOST_RUNTIME_MODULE=host/runtime.mjs
+```
+
+The path must remain under repository `host/`; absolute/traversal/symlink escapes are rejected. Article source cannot choose this module.
+
+The module may export:
+
+```js
+export const assetPublisher = ...;
+export const projectContext = ...;
+```
+
+A host module may bind the repository's vendor-neutral content-addressed AssetPublisher policy to R2/S3/OCI/etc. without putting cloud-specific storage logic into the compiler or Article manifest.
+
 ## Read-only Article publication planning
 
 Ghost credentials are required because planning reads current ownership/collision/projection state:
@@ -151,16 +170,56 @@ npm run dry-run -- posts/example/article.json publish
 
 `publish` planning requires current `SYNCED + READY` Article state. The result remains read-only: it does not create/update Ghost posts, stamp metadata, upload feature images, or publish body assets.
 
-A target Article containing local body assets additionally needs a host AssetPublisher provider. The repository includes a content-addressed provider policy over abstract object-store `HEAD`/`PUT` operations, but no cloud vendor/backend is configured by default.
+If local body assets exist, the optional host runtime must provide an AssetPublisher. Without one, planning fails before Ghost access rather than falling back to legacy data URIs.
 
-## Target publication mutation
+## Target Article synchronization control surface
 
-The guarded target Article mutation implementation currently exists as a library, not as a production CLI/workflow.
+The guarded target mutation library is exposed through a low-level CLI:
 
-That is intentional. A production control surface must preserve all of these boundaries:
+```bash
+npm run sync:article -- posts/example/article.json draft
+npm run sync:article -- posts/example/article.json publish
+```
 
-- explicit user/task publication intent;
-- exact Article + required-locale source-fingerprint authorization;
+This command is an execution surface, **not** an authorization generator.
+
+### Draft
+
+Draft synchronization does not require production-publication authorization and rejects a production authorization envelope if one is supplied.
+
+### Production publish
+
+Production publish requires the external conversation/control layer to inject:
+
+```text
+OX0_ARTICLE_PUBLICATION_AUTHORIZATION_JSON
+```
+
+The authorization must be the task-scoped exact-source assertion for the requested Article and every required locale projection fingerprint. The CLI parses it with the strict JSON parser and does not derive it from Article `READY` state, Ghost state, or a dry-run plan by itself.
+
+Missing, malformed, incomplete, wrong-Article, or stale-fingerprint authorization fails closed.
+
+The intended agent workflow is therefore:
+
+```text
+explicit user publication instruction
+        -> control layer prepares exact current Article plan
+        -> control layer binds that intent to exact source fingerprints
+        -> sync:article consumes the bound authorization
+        -> publication library revalidates source/assets/Ghost before mutation
+```
+
+Do not invoke the production `publish` action merely because an Article is `READY`.
+
+The target CLI and dry-run use the same optional `OX0_HOST_RUNTIME_MODULE`, so compiler ProjectContext and AssetPublisher policy do not silently differ between planning and execution.
+
+No target production GitHub Actions workflow is enabled yet. The remaining workflow in `.github/workflows/ghost-publish.yml` is explicitly legacy compatibility only.
+
+## Guarded mutation behavior
+
+Target Article mutation preserves these boundaries:
+
+- exact Article + required-locale source-fingerprint authorization for production publish;
 - Article-wide preflight;
 - body-asset publication/reuse before Ghost mutation;
 - full source/plan revalidation after asset side effects;
@@ -219,7 +278,7 @@ Target Article errors preserve successful feature-image upload evidence (`method
 
 ## Ghost setup
 
-For planning/legacy compatibility, configure:
+For target planning/synchronization and legacy compatibility, configure:
 
 - `GHOST_ADMIN_URL` — e.g. `https://blog.ox0.uk`
 - `GHOST_ADMIN_API_KEY` — Ghost Custom Integration Admin API key (`id:hexsecret`)
