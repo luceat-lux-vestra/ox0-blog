@@ -41,7 +41,7 @@ function publication(overrides = {}) {
   };
 }
 
-function rawManifest({ koBodyAsset = false, featureImage = null } = {}) {
+function rawManifest({ featureImage = null, featureImageAlt = null } = {}) {
   return {
     version: 1,
     articleId: 'article-1',
@@ -54,7 +54,7 @@ function rawManifest({ koBodyAsset = false, featureImage = null } = {}) {
         title: '제목',
         excerpt: '요약',
         slug: 'article-ko',
-        publication: publication({ featureImage })
+        publication: publication({ featureImage, featureImageAlt })
       },
       {
         variantId: 'variant-en',
@@ -67,12 +67,11 @@ function rawManifest({ koBodyAsset = false, featureImage = null } = {}) {
       }
     ],
     translationCheckpoint: null,
-    readiness: { epoch: 0, checkpoint: null, invalidations: [] },
-    koBodyAsset
+    readiness: { epoch: 0, checkpoint: null, invalidations: [] }
   };
 }
 
-async function fixture({ localBodyAsset = false, featureImage = null } = {}) {
+async function fixture({ localBodyAsset = false, featureImage = null, featureImageAlt = null } = {}) {
   const repoRoot = await mkdtemp(path.join(os.tmpdir(), 'ox0-article-plan-'));
   const articleDir = path.join(repoRoot, 'posts', 'article');
   await mkdir(articleDir, { recursive: true });
@@ -85,11 +84,10 @@ async function fixture({ localBodyAsset = false, featureImage = null } = {}) {
   if (localBodyAsset) await writeFile(path.join(repoRoot, 'assets', 'article', 'diagram.png'), 'diagram');
   if (featureImage) await writeFile(path.join(repoRoot, 'assets', 'article', 'cover.png'), 'cover');
 
-  const raw = rawManifest({ featureImage });
-  delete raw.koBodyAsset;
+  const raw = rawManifest({ featureImage, featureImageAlt });
   const manifestPath = path.join(articleDir, 'article.json');
   await writeFile(manifestPath, `${JSON.stringify(raw, null, 2)}\n`, 'utf8');
-  return { repoRoot, articleDir, manifestPath };
+  return { repoRoot, articleDir, manifestPath, coverPath: path.join(repoRoot, 'assets', 'article', 'cover.png') };
 }
 
 async function makeReady(value) {
@@ -97,7 +95,8 @@ async function makeReady(value) {
   const evaluation = await evaluateArticleBundle({
     bundle: loaded.bundle,
     compiler: new MarkedCompiler(),
-    repoRoot: value.repoRoot
+    repoRoot: value.repoRoot,
+    publicationByLocale: loaded.publicationByLocale
   });
   const translationCheckpoint = createTranslationCheckpoint({
     requiredLocales: loaded.bundle.article.requiredLocales,
@@ -195,7 +194,10 @@ test('local body assets fail before Ghost planning until target AssetPublisher e
 });
 
 test('local feature image is allowed in read-only planning and reported as upload without mutation', async () => {
-  const value = await fixture({ featureImage: 'assets/article/cover.png' });
+  const value = await fixture({
+    featureImage: 'assets/article/cover.png',
+    featureImageAlt: '표지 설명'
+  });
   const client = new ReadOnlyGhostClient();
   const plan = await planArticleProjection({
     ...value,
@@ -206,6 +208,26 @@ test('local feature image is allowed in read-only planning and reported as uploa
   assert.equal(plan.ghost.featureImage.action, 'upload');
   assert.equal(plan.ghost.featureImage.ref, 'assets/article/cover.png');
   assert.match(plan.ghost.featureImage.fingerprint, /^sha256:[a-f0-9]{64}$/);
+});
+
+test('feature image bytes changed after READY checkpoint block publish planning before Ghost access', async () => {
+  const value = await fixture({
+    featureImage: 'assets/article/cover.png',
+    featureImageAlt: '표지 설명'
+  });
+  await makeReady(value);
+  await writeFile(value.coverPath, 'changed-cover');
+  const client = new ReadOnlyGhostClient();
+  await assert.rejects(
+    planArticleProjection({
+      ...value,
+      locale: 'ko-KR',
+      action: 'publish',
+      client
+    }),
+    /requires translation SYNCED/
+  );
+  assert.deepEqual(client.calls, []);
 });
 
 test('requested locale must be configured and present', async () => {
