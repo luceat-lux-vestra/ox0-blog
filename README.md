@@ -1,63 +1,110 @@
 # ox0-blog
 
-Canonical blog source and controlled publishing automation for <https://blog.ox0.uk/>.
+Canonical Article source and controlled Ghost projection workflow for <https://blog.ox0.uk/>.
 
-## Contract
+The repository is migrating from an earlier one-file Markdown publisher to an agent-operated `Article + LocaleVariant` model. The target Article contract is authoritative for new architecture work; the legacy one-file publisher remains a compatibility path only.
 
-- Markdown under `posts/` is the source of truth.
-- A normal push never changes Ghost.
-- Ghost synchronization only runs through the manual **Publish to Ghost** workflow.
-- The manual workflow defaults to `dry-run`; `draft` and `publish` are separate explicit mutating actions.
-- `draft` refuses to unpublish an already-published post.
-- Rendered Markdown is stored directly as one Ghost Lexical HTML card. The publisher does not use Ghost's lossy `?source=html` conversion path. After content mutation, a fresh GET must preserve the exact HTML-card content before sync metadata can be stamped; after stamping, the persisted managed state and source ownership are read and verified again before success is returned.
-- Post identity is derived from the repository-relative Markdown path and stored as a hidden `#ox0-source-<sha256>` tag. The exact tag **name** is canonical: the publisher resolves Ghost's current tag slug from that name, so internal tag-slug drift does not break identity lookup. Renaming or removing the source tag name destroys that identity and requires operator reconciliation. Changing the public Ghost slug keeps identity; moving the Markdown file intentionally changes identity and is a migration boundary. An existing Ghost post with the same public slug is never adopted implicitly.
-- Managed Ghost posts carry a hidden `#ox0-sync:<sha256>` tag. Managed-field drift in Ghost fails closed before overwrite, in addition to Ghost's `updated_at` optimistic-concurrency check.
-- Ghost mutation responses explicitly request `formats=lexical`, and Ghost Admin fetch/body reads use a bounded timeout.
-- `publish`, future scheduling, and deletion are explicit operations. v1 intentionally implements only dry-run, draft synchronization, and publishing; deletion and scheduling are out of scope.
-- The Admin API key exists only as a GitHub Actions environment secret. Never commit it or paste it into post sources. The publish job also refuses non-`main` refs; configure the `ox0-blog` environment to allow deployments from `main` only when your GitHub plan supports private-repository environment branch policies.
+## Target contract
 
-## Post format
+One logical Article owns stable identity and required localized variants:
 
-```markdown
----
-title: "Example post"
-slug: example-post
-status: draft
-excerpt: "Short canonical summary"
-tags:
-  - Rust
-  - Benchmark
-feature_image: "../assets/example-post/cover.png"
-feature_image_alt: "Chart describing the benchmark"
-featured: false
-visibility: public
-canonical_url: null
----
+```text
+posts/<article>/
+  article.json
+  ko-KR.md
+  en.md
 
-:::lang ko
-
-## 문제 / 동기
-
-한국어 본문.
-
-:::
-
-:::lang en
-
-## Problem / Motivation
-
-English body.
-
-:::
+assets/
+  ...
 ```
 
-Bilingual sections are optional for legacy/monolingual sources. If `:::lang` is used, exactly one `ko` and one `en` section are required and body content outside them is rejected. See `docs/authoring.md` and `templates/technical-post.md`.
+`article.json` stores stable Article/variant identity, locale-source mapping, source-owned projection metadata, reviewed translation checkpoint, and Article-readiness evidence.
 
-The bilingual wrapper is rendered into the same direct Lexical HTML card as monolingual content. Preservation of its `lang` and `data-ox0-*` attributes through a live Ghost create/update/fetch round trip remains **UNVERIFIED** until the integration gate is executed. Ghost title/excerpt remain one canonical metadata value in v1.
+It does **not** store:
 
-The frontmatter parser is deliberately constrained rather than a general YAML parser. Unknown fields, malformed quoted scalars, unsupported visibility, malformed/oversized slugs and metadata, duplicate author tags, duplicate repository slugs/titles, invalid bilingual structure, and local images escaping `assets/` fail validation. Post sources and local feature images must be regular files; symlinks in any path component are rejected. Markdown source extensions are exactly lowercase `.md`.
+- Ghost post IDs/status as canonical source state;
+- Git/PR lifecycle state;
+- RTA lifecycle state;
+- merge authorization;
+- production publication authorization;
+- raw chat/session/model identifiers;
+- compiler IR or rendered HTML.
 
-`feature_image` may be an HTTPS URL or a relative file under `assets/`. A local image is uploaded through Ghost's Admin Image API when a mutating workflow runs. Ghost does not expose the resulting upload mapping in the post source, so repeated manual synchronizations of the same local feature image can create duplicate media objects; v1 accepts this bounded side effect rather than storing mutable publisher state in Git.
+See:
+
+- `docs/article-manifest-v1.md` — durable source representation;
+- `docs/translation-fingerprint-v1.md` — translation-equivalence evidence;
+- `docs/article-readiness-v1.md` — semantic readiness ownership;
+- `docs/article-operations.md` — validation/read-only planning;
+- `docs/asset-publisher.md` — body-resource publication contract;
+- `docs/article-publication.md` — guarded Article-level mutation orchestration;
+- `docs/workflow/` — durable state/authorization/Git/RTA policy.
+
+## Core invariants
+
+- Git source is canonical; Ghost is a projection target.
+- `articleId` and `variantId` are stable identities. Paths and public slugs are not identity.
+- Translation synchronization, Article semantic readiness, Git state, Ghost projection state, and RTA state are independent machines.
+- Translation generation alone never produces `SYNCED`; an exact-current equivalence review checkpoint is required.
+- Article `READY` is a reviewed semantic claim, not production publication authorization.
+- Projection metadata changes are covered by projection fingerprints and current publication planning even when semantic `READY` remains valid.
+- Production publication authorization is task-scoped and explicit. It is never inferred from source metadata, Git state, RTA state, or Ghost state.
+- A normal Git push does not mutate Ghost.
+- Target `PREPARE_PUBLISH` is Article-wide and read-only with respect to Ghost.
+- Per-locale Ghost projection state remains independently recoverable; partial multi-locale failure is never collapsed into aggregate success.
+- No unmanaged Ghost post is implicitly adopted because a public slug happens to match.
+
+## Article manifest example
+
+```json
+{
+  "version": 1,
+  "articleId": "article-1",
+  "requiredLocales": ["ko-KR", "en"],
+  "variants": [
+    {
+      "variantId": "variant-ko-1",
+      "locale": "ko-KR",
+      "source": "ko-KR.md",
+      "title": "제목",
+      "excerpt": "요약",
+      "slug": "example-ko",
+      "publication": {
+        "tags": ["Architecture"],
+        "featureImage": "assets/example/cover.png",
+        "featureImageAlt": "표지 설명",
+        "featured": false,
+        "visibility": "public",
+        "canonicalUrl": null
+      }
+    },
+    {
+      "variantId": "variant-en-1",
+      "locale": "en",
+      "source": "en.md",
+      "title": "Title",
+      "excerpt": "Summary",
+      "slug": "example-en",
+      "publication": {
+        "tags": ["Architecture"],
+        "featureImage": "assets/example/cover.png",
+        "featureImageAlt": "Cover description",
+        "featured": false,
+        "visibility": "public",
+        "canonicalUrl": null
+      }
+    }
+  ],
+  "translationCheckpoint": null,
+  "readiness": {
+    "epoch": 0,
+    "checkpoint": null,
+    "invalidations": []
+  }
+}
+```
+
+Markdown bodies live in the locale files. Markdown-significant body whitespace is preserved.
 
 ## Local validation
 
@@ -69,81 +116,144 @@ npm test
 npm run validate
 ```
 
-Validating one selected file still evaluates repository-wide invariants:
+`npm run validate` currently runs both migration-era validators:
+
+```text
+validate:legacy
+validate:articles
+```
+
+Run the target Article validator directly:
 
 ```bash
-node scripts/validate-post.mjs posts/example.md
+npm run validate:articles
+npm run validate:articles -- --ready
+npm run validate:articles -- posts/example/article.json
 ```
+
+Ordinary source validation allows valid work-in-progress states such as `DRAFT`, `UNREVIEWED`, and `INCOMPLETE`. `--ready` additionally requires Article `SYNCED + READY`; it still does not authorize merge or publication.
+
+## Read-only Article publication planning
+
+Ghost credentials are required because planning reads current ownership/collision/projection state:
+
+```text
+GHOST_ADMIN_URL
+GHOST_ADMIN_API_KEY
+```
+
+Plan every required locale of an Article:
+
+```bash
+npm run dry-run -- posts/example/article.json draft
+npm run dry-run -- posts/example/article.json publish
+```
+
+`publish` planning requires current `SYNCED + READY` Article state. The result remains read-only: it does not create/update Ghost posts, stamp metadata, upload feature images, or publish body assets.
+
+A target Article containing local body assets additionally needs a host AssetPublisher provider. The repository includes a content-addressed provider policy over abstract object-store `HEAD`/`PUT` operations, but no cloud vendor/backend is configured by default.
+
+## Target publication mutation
+
+The guarded target Article mutation implementation currently exists as a library, not as a production CLI/workflow.
+
+That is intentional. A production control surface must preserve all of these boundaries:
+
+- explicit user/task publication intent;
+- exact Article + required-locale source-fingerprint authorization;
+- Article-wide preflight;
+- body-asset publication/reuse before Ghost mutation;
+- full source/plan revalidation after asset side effects;
+- stale Ghost observation rejection;
+- sequential per-locale mutation with fresh mixed-state recovery on failure;
+- final all-locale currentness verification.
+
+The library does not manufacture production authorization from `READY` state or from a publication plan.
+
+## Compiler/resource boundary
+
+Canonical document compilation is asynchronous:
+
+```text
+DocumentCompiler.compile(LocaleVariant, ProjectContext)
+  -> CompiledDocument
+```
+
+`MarkedCompiler` is the current implementation. Arkst is the intended long-term backend after its HTML/backend parity gates are ready.
+
+Compiler code does not own storage/CDN policy. Local body assets are source evidence; the host AssetPublisher plans stable HTTPS delivery and the compiler sees only a host `resolveResource` callback.
+
+Resolved ProjectContext is preserved through validation, review, planning, AssetPublisher recompilation, and publication so a future Arkst/VirtualProject backend does not lose host context.
+
+## Ghost projection identity
+
+Stable target locale projections use publisher-owned hidden metadata conceptually as:
+
+```text
+#ox0-article-...
+#ox0-locale-...
+#ox0-source-...
+#ox0-revision-...
+#ox0-sync:...
+```
+
+`revision` identifies the exact projection source; `sync` protects managed Ghost state from unmanaged drift.
+
+Fresh recovery derives per-locale states such as:
+
+```text
+NOT_PROJECTED
+DRAFT_CURRENT
+PUBLISHED_CURRENT
+OUTDATED(visibility=DRAFT|PUBLISHED)
+RECONCILIATION_REQUIRED(reason)
+```
+
+## Feature images
+
+Local feature images are separate from body AssetPublisher delivery and currently use Ghost's Image API.
+
+The publisher verifies the local feature-image digest and uploads the exact validated snapshot bytes. Because Ghost media upload and post mutation are not transactional, an upload can succeed before a later post mutation fails.
+
+Target Article errors preserve successful feature-image upload evidence (`method`, repository ref, returned URL) so orphan-media side effects are visible. This is observability, not an automatic rollback claim.
 
 ## Ghost setup
 
-Create a Ghost **Custom Integration** and configure the GitHub `ox0-blog` environment:
+For planning/legacy compatibility, configure:
 
-- Environment variable `GHOST_ADMIN_URL` — e.g. `https://blog.ox0.uk` (a secret with the same name is also accepted as a fallback)
-- Environment secret `GHOST_ADMIN_API_KEY` — the integration Admin API key (`id:hexsecret`)
+- `GHOST_ADMIN_URL` — e.g. `https://blog.ox0.uk`
+- `GHOST_ADMIN_API_KEY` — Ghost Custom Integration Admin API key (`id:hexsecret`)
 
-The publisher calls the Ghost Admin REST API directly and generates the short-lived HS256 JWT with Node's built-in crypto. The only runtime package dependency is `marked`, pinned by `package-lock.json`, for Markdown rendering. The Lexical HTML-card envelope is generated locally with no additional runtime package.
+Never commit or paste the Admin API key into source, logs, issues, or pull requests.
 
-## Dry-run
+## Legacy compatibility path
 
-With Ghost credentials in the environment:
+The following model is **not** the target Article architecture:
 
-```bash
-npm run dry-run -- posts/example.md
-```
+- one Markdown file = one Ghost post;
+- repository path-derived `#ox0-source-*` identity;
+- frontmatter `status: draft|published`;
+- `:::lang ko/en` wrappers inside one Markdown body;
+- local body images embedded as `data:` URIs.
 
-Dry-run performs Ghost read inspection only. It does not upload images, create posts, update posts, or stamp sync metadata. It reports the intended create/update operation, status, source identity, tags, rendered HTML size, and feature-image action.
+It remains only to preserve/verify the earlier publishing stack while the Article migration is active.
 
-## Pre-merge live Ghost verification
-
-GitHub only dispatches a `workflow_dispatch` workflow after that workflow file exists on the repository's default branch. Before the publishing workflow has merged, use the checked-out candidate itself for controlled live verification instead of weakening the merge gate.
-
-Prefer a dedicated staging Ghost instance. The verifier is intentionally mutating: it creates uniquely named temporary **draft** content, exercises the publisher, and then deletes the temporary post/page/tags. It refuses to start unless the explicit opt-in variable is set. It also checks that its temporary slugs/tags are unused before mutation, and cleanup failure makes the command fail rather than reporting a false PASS. Cleanup-only DELETE calls in this verification harness do not constitute delete support in the publishing product.
-
-Run it from the **exact PR candidate commit** with Node 24:
+Explicit legacy commands are:
 
 ```bash
-npm ci --ignore-scripts
-OX0_GHOST_LIVE_VERIFY=1 \
-GHOST_ADMIN_URL=https://your-ghost.example \
-GHOST_ADMIN_API_KEY='<id:hexsecret>' \
-npm run verify:ghost-live
+npm run validate:legacy
+npm run dry-run:legacy -- posts/example.md
+npm run verify:ghost-live:legacy
 ```
 
-Record the exact Git commit SHA together with the PASS output. If the PR HEAD moves afterward, that live result is no longer merge-gate evidence for the new HEAD and must be rerun.
+The GitHub Actions workflow is deliberately named **Legacy Publish to Ghost (compatibility)**. It must not be treated as the target Article production control surface.
 
-On the authoring stack, the verifier uses a bilingual `ko`/`en` source and therefore also proves that the rendered `data-ox0-bilingual`, `lang`, and `data-ox0-lang` wrapper attributes survive the direct Lexical Ghost round trip.
+Legacy implementation details remain documented in `docs/authoring.md`.
 
-The harness verifies live Ghost behavior for:
+## Verification status
 
-- pinned Markdown rendering followed by direct Lexical draft creation and fresh-read equality;
-- bilingual wrapper persistence on the authoring stack;
-- author-tag order plus canonical source/sync publisher tail state;
-- source identity lookup after the Ghost tag slug is changed;
-- managed public-slug rename without duplicate creation;
-- page-slug collision rejection before post creation;
-- manual managed-field drift rejection before overwrite;
-- cleanup of the temporary verification artifacts.
+The presence of tests or live-verification harnesses is not evidence by itself. Merge review, when explicitly started, is exact-HEAD proof work.
 
-The presence of this harness is **not** live-integration evidence by itself. The merge gate still requires a PASS from the exact candidate against an authorized Ghost instance.
+The current authoring branch has repeatedly seen GitHub Actions jobs terminate before runner assignment (`steps=[]`, `runner_id=0`), so canonical Node 24 CI remains unverified until an exact candidate actually executes the configured steps.
 
-Do not paste the Admin API key into shell history, logs, issues, pull requests, or repository files. Use an ephemeral environment injection mechanism where available.
-
-## Publishing
-
-Use **Actions → Publish to Ghost → Run workflow**, select `main`, and provide:
-
-- `post_path`: e.g. `posts/oxide-batch-vs-spring-batch.md`
-- `action`: `dry-run`, `draft`, or `publish`
-
-`dry-run` is the default. `draft` and `publish` mutate Ghost. A mutating action must agree with frontmatter status, so publishing requires both a source change to `status: published` and an explicit `publish` workflow action.
-
-## Deliberate v1 boundaries
-
-- Schedule/delete are not implemented publishing features.
-- Moving/renaming a Markdown file changes source identity and requires explicit migration.
-- Renaming/removing the hidden `#ox0-source-<sha256>` tag name destroys the publisher identity and requires operator reconciliation; changing only that tag's Ghost slug is tolerated.
-- Workflow-level concurrency serializes this publisher's own mutations, but external Ghost edits/integrations can still race. The publisher fails closed on races it observes through optimistic concurrency, post-mutation verification, and post-stamp re-reads; these client-side checks are not a server-side uniqueness guarantee.
-- Re-syncing an unchanged local feature image can create a duplicate/orphan Ghost media object; v1 documents this bounded side effect rather than committing mutable upload state.
-- Bilingual automatic browser-side ordering is specified but not enabled until live Ghost round-trip preservation is proven.
-- Bilingual title/card metadata is deferred; the Ghost title and excerpt remain canonical single fields.
+Controlled live Ghost evidence must likewise be collected on the exact eventual candidate; stale results from an earlier HEAD do not carry forward.
