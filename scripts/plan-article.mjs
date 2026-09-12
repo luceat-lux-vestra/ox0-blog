@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import path from 'node:path';
-import { planArticleProjection } from '../src/article-planning.mjs';
+import { planArticlePublication } from '../src/article-planning.mjs';
 import { GhostAdminClient } from '../src/ghost-client.mjs';
 
-const [manifestRef, locale, action, ...extra] = process.argv.slice(2);
-if (!manifestRef || !locale || !action || extra.length > 0) {
-  throw new Error('usage: node scripts/plan-article.mjs <posts/.../article.json> <locale> <draft|publish>');
+const [manifestRef, action, ...extra] = process.argv.slice(2);
+if (!manifestRef || !action || extra.length > 0) {
+  throw new Error('usage: node scripts/plan-article.mjs <posts/.../article.json> <draft|publish>');
 }
 if (!['draft', 'publish'].includes(action)) throw new Error('action must be draft or publish');
 
@@ -16,9 +16,8 @@ if (!url || !key) throw new Error('GHOST_ADMIN_URL and GHOST_ADMIN_API_KEY are r
 const repoRoot = process.cwd();
 const manifestPath = path.resolve(repoRoot, manifestRef);
 const client = new GhostAdminClient({ url, key });
-const plan = await planArticleProjection({
+const plan = await planArticlePublication({
   manifestPath,
-  locale,
   action,
   client,
   repoRoot
