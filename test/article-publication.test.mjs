@@ -105,7 +105,7 @@ class FakeGhostClient {
 }
 
 class FakeAssetPublisher {
-  constructor(log = []) { this.log = log; }
+  constructor(log = [], afterPublish = null) { this.log = log; this.afterPublish = afterPublish; }
   async planAsset(asset) {
     this.log.push(['asset-plan', asset.ref]);
     return {
@@ -117,6 +117,7 @@ class FakeAssetPublisher {
   }
   async publishAsset(asset, bytes, plan) {
     this.log.push(['asset-publish', asset.ref, Buffer.from(bytes).toString('utf8')]);
+    if (this.afterPublish) await this.afterPublish(asset, bytes, plan);
     return { url: plan.url };
   }
 }
@@ -132,11 +133,13 @@ async function fixture({ englishLocalAsset = false } = {}) {
   const repoRoot = await mkdtemp(path.join(os.tmpdir(), 'ox0-article-publish-'));
   const articleDir = path.join(repoRoot, 'posts', 'article');
   const assetDir = path.join(repoRoot, 'assets', 'article');
+  const koPath = path.join(articleDir, 'ko-KR.md');
+  const enPath = path.join(articleDir, 'en.md');
   await mkdir(articleDir, { recursive: true });
   await mkdir(assetDir, { recursive: true });
-  await writeFile(path.join(articleDir, 'ko-KR.md'), '# 본문\n', 'utf8');
+  await writeFile(koPath, '# 본문\n', 'utf8');
   await writeFile(
-    path.join(articleDir, 'en.md'),
+    enPath,
     englishLocalAsset ? '# Body\n\n![diagram](../../assets/article/diagram.png)\n' : '# Body\n',
     'utf8'
   );
@@ -159,7 +162,7 @@ async function fixture({ englishLocalAsset = false } = {}) {
     translationCheckpoint: null,
     readiness: { epoch: 0, checkpoint: null, invalidations: [] }
   }, null, 2)}\n`, 'utf8');
-  return { repoRoot, articleDir, manifestPath };
+  return { repoRoot, articleDir, manifestPath, koPath, enPath };
 }
 
 async function evaluation(value) {
@@ -266,9 +269,36 @@ test('body assets publish before the first Ghost mutation and use the planned ex
   assert.equal(log[assetIndex][2], 'diagram-v1');
 });
 
-test('Ghost ownership created after planning is rejected before the planned projection mutation', async () => {
+test('source change after asset side effects aborts before every Ghost mutation', async () => {
+  const value = await fixture({ englishLocalAsset: true });
+  const log = [];
+  const client = new FakeGhostClient({ log });
+  const assetPublisher = new FakeAssetPublisher(log, async () => {
+    await writeFile(value.enPath, '# Changed after asset publish\n', 'utf8');
+  });
+
+  await assert.rejects(
+    synchronizeArticlePublication({
+      ...value,
+      action: 'draft',
+      client,
+      assetPublisher
+    }),
+    (error) => {
+      assert.ok(error instanceof ArticlePublicationError);
+      assert.equal(error.stage, 'SOURCE_REVALIDATION');
+      assert.equal(error.publishedAssets.length, 1);
+      return true;
+    }
+  );
+  assert.equal(log.some(([kind]) => kind === 'ghost-create' || kind === 'ghost-update'), false);
+});
+
+test('Ghost ownership created after refreshed planning is rejected before the planned projection mutation', async () => {
   const value = await fixture();
-  const client = new FakeGhostClient({ injectOwnerAtIdentityRead: 5 });
+  // Initial aggregate plan consumes four identity reads, refreshed source plan consumes
+  // four more, and the first mutation checks its planned observation on read nine.
+  const client = new FakeGhostClient({ injectOwnerAtIdentityRead: 9 });
   await assert.rejects(
     synchronizeArticlePublication({ ...value, action: 'draft', client }),
     (error) => {
