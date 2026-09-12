@@ -67,6 +67,22 @@ function portableRelativePath(root, target, name) {
   return requirePortableRelativePath(nativeRelative.split(path.sep).join('/'), name);
 }
 
+function requireArticleDirectory(repoRoot, articleDir) {
+  const root = path.resolve(requireString(repoRoot, 'repoRoot'));
+  const postsRoot = path.resolve(root, 'posts');
+  const sourceRoot = path.resolve(requireString(articleDir, 'articleDir'));
+  const relative = path.relative(postsRoot, sourceRoot);
+  if (
+    relative === ''
+    || relative === '..'
+    || relative.startsWith(`..${path.sep}`)
+    || path.isAbsolute(relative)
+  ) {
+    throw new Error('Article directory must resolve inside repository posts/');
+  }
+  return sourceRoot;
+}
+
 async function readConfinedUtf8(filePath, rootPath, name) {
   const confined = await requireConfinedRegularFile(filePath, rootPath, name);
   const bytes = await readFile(confined.realPath);
@@ -302,7 +318,7 @@ export async function serializeArticleManifest({ bundle: rawBundle, publicationB
     throw new Error('publicationByLocale must be a Map keyed by LocaleVariant.locale');
   }
   const root = path.resolve(requireString(repoRoot, 'repoRoot'));
-  const sourceRoot = path.resolve(requireString(articleDir, 'articleDir'));
+  const sourceRoot = requireArticleDirectory(root, articleDir);
   const variantsByLocale = new Map(bundle.article.variants.map((variant) => [variant.locale, variant]));
   if (publicationByLocale.size !== variantsByLocale.size) {
     throw new Error('publicationByLocale must contain exactly one entry per present LocaleVariant');
