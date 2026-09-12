@@ -46,6 +46,15 @@ function isAbsoluteOnAnyPlatform(value) {
   return path.posix.isAbsolute(value) || path.win32.isAbsolute(value);
 }
 
+export function isHttpsUrl(value) {
+  if (typeof value !== 'string' || value.trim() === '') return false;
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 function normalizeFeatureImage(value) {
   const image = optionalString(value, 'featureImage');
   if (!image) return null;
