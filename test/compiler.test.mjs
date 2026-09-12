@@ -70,6 +70,76 @@ test('MarkedCompiler rejects raw HTML deterministically', async () => {
   );
 });
 
+test('MarkedCompiler rejects active or ambiguous Markdown link protocols', async () => {
+  const compiler = new MarkedCompiler();
+  for (const href of [
+    'javascript:alert(1)',
+    'JaVaScRiPt:alert(1)',
+    'javascript&#58;alert(1)',
+    'javascript&#x3a;alert(1)',
+    'data:text/html,hello',
+    'file:///etc/passwd',
+    '//evil.example/path'
+  ]) {
+    await assert.rejects(
+      compiler.compile(variant({ body: `[unsafe](${href})\n` })),
+      /unsafe Markdown link URL protocol|protocol-relative|control characters/,
+      href
+    );
+  }
+});
+
+test('MarkedCompiler allows ordinary relative and non-active external link protocols', async () => {
+  const compiler = new MarkedCompiler();
+  const compiled = await compiler.compile(variant({
+    body: [
+      '[relative](../other-post)',
+      '[fragment](#section)',
+      '[https](https://example.com/path)',
+      '[http](http://example.com/path)',
+      '[mail](mailto:dev@example.com)',
+      '[phone](tel:+821012345678)'
+    ].join('\n')
+  }));
+  assert.match(compiled.htmlFragment, /href="https:\/\/example\.com\/path"/);
+  assert.match(compiled.htmlFragment, /href="mailto:dev@example\.com"/);
+});
+
+test('MarkedCompiler rejects unsafe image protocols before resource resolution', async () => {
+  const compiler = new MarkedCompiler();
+  for (const href of [
+    'javascript:alert(1)',
+    'data:image/svg+xml;base64,PHN2Zz4=',
+    'http://images.example/a.png',
+    '//images.example/a.png'
+  ]) {
+    let resolverCalled = false;
+    await assert.rejects(
+      compiler.compile(variant({ body: `![unsafe](${href})\n` }), {
+        resolveResource() {
+          resolverCalled = true;
+          return { href: 'https://cdn.example/safe.png' };
+        }
+      }),
+      /unsafe Markdown image URL protocol|protocol-relative/,
+      href
+    );
+    assert.equal(resolverCalled, false);
+  }
+});
+
+test('MarkedCompiler rejects an unsafe URL returned by the host image resolver', async () => {
+  const compiler = new MarkedCompiler();
+  await assert.rejects(
+    compiler.compile(variant(), {
+      resolveResource() {
+        return { href: 'javascript:alert(1)' };
+      }
+    }),
+    /unsafe Markdown image URL protocol/
+  );
+});
+
 test('MarkedCompiler validates the compiler contract inputs and resolver outputs', async () => {
   const compiler = new MarkedCompiler();
   await assert.rejects(compiler.compile({ locale: '', body: '# body' }), /locale/);
