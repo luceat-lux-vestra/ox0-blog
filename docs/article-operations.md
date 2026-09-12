@@ -1,8 +1,8 @@
 # Target Article operations
 
-This document describes the target Article-oriented read/validation operations currently available on `feat/authoring-foundation`.
+This document describes the target Article-oriented validation, planning, and low-level synchronization entrypoints on `feat/authoring-foundation`.
 
-It does not replace the durable authorization/state-machine policy in `docs/workflow/`. In particular, a successful validation or dry-run never grants merge or production publication authorization.
+It does not replace the durable authorization/state-machine policy in `docs/workflow/`. A successful validation or dry-run never grants merge or production publication authorization.
 
 ## Validate Article source
 
@@ -10,7 +10,7 @@ It does not replace the durable authorization/state-machine policy in `docs/work
 npm run validate:articles
 ```
 
-This scans repository `posts/` for exact-lowercase `article.json` manifests, loads each manifest and locale source, compiles each present LocaleVariant, derives material local-asset and semantic publication evidence, computes current translation fingerprints, and recovers translation/readiness state.
+This scans repository `posts/` for exact-lowercase `article.json` manifests, loads each manifest and locale source, compiles each present LocaleVariant, derives current material/local semantic evidence, computes translation fingerprints, and recovers translation/readiness state.
 
 Normal source validation allows valid work-in-progress states such as:
 
@@ -18,9 +18,7 @@ Normal source validation allows valid work-in-progress states such as:
 - translation `UNREVIEWED`;
 - translation `INCOMPLETE` while an Article is still being authored.
 
-The command is therefore a structural/source-integrity gate, not a publication-readiness assertion.
-
-Repository-wide checks include at least:
+Repository-wide target checks include at least:
 
 - strict manifest/source/path validation;
 - compiler/raw-HTML/resource validation;
@@ -31,15 +29,22 @@ Repository-wide checks include at least:
 - unique public Ghost slugs;
 - deterministic checkpoint/readiness recovery.
 
-Titles are presentation content, not repository identity. Target Article validation deliberately does not inherit the legacy validator's repository-wide title-uniqueness rule.
+Titles are presentation content, not repository identity. Target validation deliberately does not inherit the legacy repository-wide title-uniqueness rule.
 
-The legacy compatibility command remains separate:
+During migration the default combined command runs both source models:
 
 ```bash
 npm run validate
 ```
 
-CI currently runs both commands while the migration is active.
+Equivalent explicit commands are:
+
+```bash
+npm run validate:legacy
+npm run validate:articles
+```
+
+CI uses the combined command.
 
 ## Require reviewed readiness
 
@@ -54,14 +59,7 @@ translation = SYNCED
 readiness   = READY
 ```
 
-This is a stronger evidence check. It still does **not** mean:
-
-- merge is authorized;
-- a PR is a merge candidate;
-- production publication is authorized;
-- Ghost should be mutated.
-
-Those decisions remain separate workflow transitions.
+This is a stronger evidence check. It still does **not** mean merge or production publication is authorized.
 
 ## Validate selected manifests
 
@@ -76,12 +74,16 @@ Selecting one manifest does not bypass collisions or invalid source elsewhere in
 
 ## Read-only Article publication planning
 
+The target default dry-run is Article-wide:
+
 ```bash
-npm run dry-run:article -- posts/example/article.json draft
-npm run dry-run:article -- posts/example/article.json publish
+npm run dry-run -- posts/example/article.json draft
+npm run dry-run -- posts/example/article.json publish
 ```
 
-The action is mandatory and explicit. It is never inferred from source metadata or Ghost state.
+`dry-run:article` is an explicit alias of the same target command.
+
+The action is mandatory and is never inferred from source metadata or Ghost state.
 
 The command requires:
 
@@ -90,40 +92,56 @@ GHOST_ADMIN_URL
 GHOST_ADMIN_API_KEY
 ```
 
-because planning reads Ghost ownership/slug/current-state information. Planning must remain GET-only with respect to Ghost: no post mutation, metadata stamping, or image upload occurs.
+because planning reads Ghost ownership/collision/current-state information. Planning remains read-only with respect to Ghost and body-asset storage.
 
-The CLI plans the logical Article as one work unit. It first loads/evaluates every present required LocaleVariant and preflights every required locale projection. Only after all source-side preconditions pass does it begin Ghost reads. The returned plan contains one projection plan per required locale.
+The planner:
 
-This means a sibling locale that cannot currently be represented by the target host policy—for example because it has a local body asset while no target `AssetPublisher` exists—causes the entire Article planning operation to fail before the first Ghost request. `PREPARE_PUBLISH` must not silently produce a half-plan.
+1. loads/evaluates the logical Article;
+2. preflights every required locale;
+3. plans all local body-resource delivery where a host AssetPublisher is available;
+4. refuses a partial Article plan if one sibling cannot be represented;
+5. only then reads Ghost;
+6. binds each locale plan to a fresh observed Ghost snapshot.
 
-A `publish` plan additionally requires the Article to recover as `SYNCED + READY` before any Ghost access. This verifies that the exact source is eligible to be considered for production publication under the current content contract; it is not publication authorization itself.
+A `publish` plan additionally requires `SYNCED + READY` before Ghost access. That is eligibility for consideration, not publication authorization.
 
-A `draft` plan may operate on valid work-in-progress Article state because a draft projection is not production publication. Source/compiler/resource validation still applies.
+A `draft` plan may operate on valid work-in-progress Article state, subject to the same structural/compiler/resource safety invariants.
 
-The lower-level `planArticleProjection(...)` API remains available for a single LocaleVariant, but it is a projection primitive rather than the normal Article-level `PREPARE_PUBLISH` workflow.
+The lower-level `planArticleProjection(...)` remains a per-locale primitive; normal workflow uses the Article-wide plan.
 
-## Current local body-asset boundary
+## Host runtime injection
 
-Target Article planning currently fails closed when any required LocaleVariant references local body assets.
+Target scripts may receive host-specific compiler/resource dependencies through:
 
-That is intentional. The legacy compatibility renderer embeds local body images as data URIs, but target Article architecture must not silently inherit that delivery mechanism.
+```text
+OX0_HOST_RUNTIME_MODULE=host/runtime.mjs
+```
 
-Until a host-owned target `AssetPublisher` / stable resource delivery contract is implemented, aggregate Article planning reports that local body assets require an AssetPublisher and stops **before Ghost access**.
+The module path is supplied only by the operator/control environment. It is not read from Article source.
 
-This does not prevent:
+It must be a real `.mjs` file under repository `host/`; absolute paths, traversal, aliases, and symlink escapes fail closed.
 
-- text-only Articles;
-- Articles using validated remote HTTPS body images;
-- local `featureImage`, which is a separate projection concern handled through the existing Ghost Image API planning/snapshot path.
+The module may export:
+
+```js
+export const assetPublisher = ...;
+export const projectContext = ...;
+```
+
+`assetPublisher` must satisfy the host AssetPublisher contract. `projectContext` may be an object or per-LocaleVariant factory.
+
+With no host runtime module, target text/remote-resource Articles can still plan normally. A local body asset requiring delivery fails before Ghost access because no AssetPublisher is available.
+
+The repository also includes a vendor-neutral content-addressed AssetPublisher adapter; a deployment host module can bind it to its chosen object-store backend.
 
 ## Fresh-session semantic evaluation
 
-The target evaluator reconstructs current semantic evidence rather than trusting stored state:
+The target evaluator reconstructs current semantic evidence instead of trusting a stored readiness enum:
 
 ```text
 ArticleBundle
   + locale Markdown
-  + compiler observations
+  + compiler/ProjectContext observations
   + current local body-asset bytes
   + locale semantic publication evidence
         |
@@ -136,25 +154,65 @@ current translation fingerprints
                      +--> readiness state
 ```
 
-Locale semantic publication evidence currently includes the source-owned feature-image reference, local feature-image content digest when applicable, and localized feature-image alt text. It deliberately excludes Ghost IDs/status, deployment state, merge/publication authorization, and other non-semantic workflow state.
+Locale semantic publication evidence includes the feature-image source, local feature-image content digest when applicable, and localized feature-image alt text.
 
-Therefore any of the following can invalidate the affected locale's reviewed translation fingerprint even if Markdown body text is unchanged:
+Changes to semantic source/assets can invalidate translation/readiness even when Markdown text itself did not change.
 
-- a material local body asset byte change;
-- a local feature-image byte change;
-- a feature-image source reference change;
-- localized feature-image alt text change.
-
-If an Article had previously been READY, a resulting Article semantic-source mismatch also produces `REVIEW_REQUIRED(SOURCE_CHANGED)`.
-
-Remote HTTPS body resources and remote feature images are normalized as URLs, but their remote bytes are not fetched or persisted as local material evidence. The authored/canonical URL remains part of the relevant source evidence.
+Projection-only metadata such as slug/tags/featured/canonical URL is deliberately handled by the separate projection fingerprint and production authorization contract; see `docs/article-readiness-v1.md`.
 
 ## Planning snapshot safety
 
-A local feature image is hashed during Article semantic evaluation. The same digest is handed to the projection fingerprint. The publisher preflight snapshots the file again before Ghost access and requires the current bytes to match that digest. This binds publish planning to the feature-image bytes that passed translation/readiness evaluation instead of accepting a validate-then-re-read race.
+Local feature-image and body-asset evidence is tied to exact bytes.
 
-## Mutation boundary
+For local body assets, target AssetPublisher planning resolves a deterministic HTTPS target from exact ref/digest/size evidence. Mutation re-snapshots the file and requires the exact planned digest/size before any provider write.
 
-There is intentionally no target Article mutation CLI documented here yet.
+After body-asset side effects, the complete Article is loaded/evaluated/planned again before the first Ghost mutation. Source/evidence/target drift fails closed.
 
-The existing legacy publication commands remain compatibility code. A target mutating publication path must preserve the explicit production authorization boundary, re-run current source/projection guards, handle partial multi-locale failure/reconciliation explicitly, and must not be introduced by repurposing a read-only planning command.
+## Low-level target synchronization CLI
+
+The repository now exposes:
+
+```bash
+npm run sync:article -- posts/example/article.json draft
+npm run sync:article -- posts/example/article.json publish
+```
+
+This is a low-level control-surface entrypoint over the guarded Article mutation library. It is **not** allowed to infer production authorization.
+
+### Draft
+
+Draft synchronization must not be given a production authorization envelope.
+
+### Publish
+
+Production publish requires the external control surface to inject:
+
+```text
+OX0_ARTICLE_PUBLICATION_AUTHORIZATION_JSON
+```
+
+The JSON must be the task-scoped exact-source authorization expected by the Article publication library. The CLI parses it with the strict JSON parser and does not generate it from Article `READY` state or from a dry-run plan.
+
+Missing, malformed, wrong-Article, incomplete-locale, or stale-fingerprint authorization fails closed.
+
+The same optional `OX0_HOST_RUNTIME_MODULE` is used by planning and synchronization, so AssetPublisher/ProjectContext semantics do not silently differ between the two entrypoints.
+
+Article publication errors are emitted as structured JSON including stage and, where applicable:
+
+- body assets successfully published before failure;
+- Ghost feature-image upload side effects;
+- fresh per-locale projection recovery state.
+
+## Legacy compatibility entrypoints
+
+The earlier one-file publisher is explicitly namespaced:
+
+```bash
+npm run validate:legacy
+npm run dry-run:legacy -- posts/example.md
+npm run verify:ghost-live:legacy
+```
+
+The GitHub workflow is named **Legacy Publish to Ghost (compatibility)**.
+
+These commands are migration compatibility mechanisms, not the target Article production workflow.
