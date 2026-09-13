@@ -21,6 +21,7 @@ import { requireArticleStagingLiveContext } from '../src/article-staging-live-gu
 import { MarkedCompiler } from '../src/compiler/marked-compiler.mjs';
 import { GhostAdminClient } from '../src/ghost-client.mjs';
 import { projectionIdentityTags } from '../src/projection-identity.mjs';
+import { projectionLookupTag } from '../src/projection-managed-state.mjs';
 import { TRANSLATION_REVIEW_CONTRACT_VERSION } from '../src/translation-checkpoint.mjs';
 import { requireExactCurrentDraftsForProduction } from '../src/workflow-dispatch-control.mjs';
 
@@ -211,6 +212,16 @@ async function assertOwnedPost(id, variant, allowedStatuses) {
   return post;
 }
 
+async function recoverOwnedPost(variant, allowedStatuses = ['draft', 'published']) {
+  const lookupTag = projectionLookupTag(expectedIdentity(variant));
+  const matches = await client.getPostsBySourceTag(lookupTag);
+  if (matches.length > 1) {
+    throw new Error(`multiple staging posts claim verifier identity for locale ${variant.locale}; refusing cleanup`);
+  }
+  if (matches.length === 0) return null;
+  return assertOwnedPost(matches[0].id, variant, allowedStatuses);
+}
+
 async function rememberCleanupTags(post) {
   for (const name of tagNames(post)) {
     if (!name.startsWith('#ox0-') || name.startsWith('#ox0-locale-')) continue;
@@ -270,11 +281,15 @@ async function cleanupGhost() {
   let postsClean = true;
 
   for (const variant of variants) {
-    const id = knownPostIds.get(variant.locale);
-    if (!id) continue;
     try {
-      const owned = await assertOwnedPost(id, variant, ['draft', 'published']);
-      if (owned) {
+      let id = knownPostIds.get(variant.locale) ?? null;
+      let owned = id ? await assertOwnedPost(id, variant, ['draft', 'published']) : null;
+      if (!id) {
+        owned = await recoverOwnedPost(variant);
+        id = owned?.id ?? null;
+        if (id) knownPostIds.set(variant.locale, id);
+      }
+      if (owned && id) {
         await rememberCleanupTags(owned);
         await deletePostById(id);
       }
@@ -378,7 +393,7 @@ try {
       'production transition restricted to draft-to-published status-update',
       'core publicationPlanGuard enforced during internal preflight and refreshed pre-mutation plan',
       'two-locale PUBLISHED_CURRENT fresh recovery',
-      'ID-bound temporary post cleanup and safe unreferenced verifier-tag cleanup'
+      'ID/recovered-identity-bound temporary post cleanup and safe unreferenced verifier-tag cleanup'
     ]
   };
 } catch (error) {
