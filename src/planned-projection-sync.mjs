@@ -24,6 +24,23 @@ function sameArray(left, right) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
+function requirePublicFeatureImageUploadUrl(value) {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error('Ghost feature-image upload result must contain a non-empty URL');
+  }
+  let parsed;
+  try { parsed = new URL(value); } catch {
+    throw new Error('Ghost feature-image upload result must be a valid URL');
+  }
+  if (parsed.protocol !== 'https:') {
+    throw new Error('Ghost feature-image upload result must use https');
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error('Ghost feature-image upload result must not contain URL credentials');
+  }
+  return parsed.href;
+}
+
 function validateExpectedObservation(matches, expected) {
   if (expected == null) {
     if (matches.length !== 0) {
@@ -70,12 +87,14 @@ function bindPlannedClient(client, sourceIdentity, expectedObserved) {
       if (property === 'uploadImageBytes' || property === 'uploadImage') {
         return async (...args) => {
           const result = await target[property](...args);
+          const rawUrl = typeof result?.url === 'string' ? result.url : null;
           featureImageUploads.push({
             method: property,
             ref: typeof args[1] === 'string' ? args[1] : null,
-            url: typeof result?.url === 'string' ? result.url : null
+            url: rawUrl
           });
-          return result;
+          const url = requirePublicFeatureImageUploadUrl(rawUrl);
+          return { ...result, url };
         };
       }
       const value = Reflect.get(target, property, target);
