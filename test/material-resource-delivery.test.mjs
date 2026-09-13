@@ -115,3 +115,23 @@ test('asset byte change after planning fails before provider mutation', async ()
   );
   assert.equal(publisher.publishCalls.length, 0);
 });
+
+test('low-level reuse rejects credentialed planned public URL without provider mutation', async () => {
+  const value = await fixture();
+  const fingerprint = `sha256:${value.evidence.materialAssets[0].sha256}`;
+  await assert.rejects(
+    publishPlannedMaterialAssets({
+      plans: [{
+        ref: 'assets/article/diagram.png',
+        fingerprint,
+        action: 'reuse',
+        url: 'https://user:password@assets.example/content/diagram.png',
+        size: Buffer.byteLength('asset-v1'),
+        filename: 'diagram.png'
+      }],
+      repoRoot: value.repoRoot,
+      assetPublisher: new Publisher()
+    }),
+    /must not contain URL credentials/
+  );
+});
