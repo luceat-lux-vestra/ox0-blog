@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   publicationAuthorizationForDispatchPlan,
-  requireArticleWorkflowDispatchContext
+  requireArticleWorkflowDispatchContext,
+  requireExactCurrentDraftsForProduction
 } from '../src/workflow-dispatch-control.mjs';
 
 const SHA = 'a'.repeat(40);
@@ -19,6 +20,37 @@ function context(overrides = {}) {
     manifestRef: MANIFEST,
     operation,
     publishConfirmation: operation === 'publish' ? `publish:${MANIFEST}@${SHA}` : '',
+    ...overrides
+  };
+}
+
+function draftVariant(locale, digit, overrides = {}) {
+  const sourceFingerprint = `sha256:${digit.repeat(64)}`;
+  return {
+    locale,
+    sourceFingerprint,
+    ghost: {
+      operation: 'status-update',
+      existingPostId: `post-${locale}`,
+      currentStatus: 'draft',
+      desiredStatus: 'published',
+      projectedSourceFingerprint: sourceFingerprint,
+      observed: {
+        postId: `post-${locale}`,
+        status: 'draft',
+        projectedSourceFingerprint: sourceFingerprint,
+        syncHash: digit.repeat(64)
+      }
+    },
+    ...overrides
+  };
+}
+
+function publishPlan(overrides = {}) {
+  return {
+    articleId: 'article-1',
+    action: 'publish',
+    variants: [draftVariant('ko-KR', '1'), draftVariant('en', '2')],
     ...overrides
   };
 }
@@ -110,16 +142,31 @@ test('production publish confirmation binds exact normalized manifest and source
   }
 });
 
-test('workflow dispatch control binds external publish intent to exact fresh plan fingerprints', () => {
+test('production workflow accepts only exact-current managed drafts for every locale', () => {
+  assert.equal(requireExactCurrentDraftsForProduction(publishPlan()).articleId, 'article-1');
+});
+
+test('production workflow rejects first-publish, stale, already-published, rewrite and unbound draft plans', () => {
+  const cases = [
+    [draftVariant('en', '2', { ghost: { ...draftVariant('en', '2').ghost, existingPostId: null, observed: null, operation: 'create' } }), /existing managed draft/],
+    [draftVariant('en', '2', { ghost: { ...draftVariant('en', '2').ghost, currentStatus: 'published', observed: { ...draftVariant('en', '2').ghost.observed, status: 'published' }, operation: 'noop' } }), /status=draft/],
+    [draftVariant('en', '2', { ghost: { ...draftVariant('en', '2').ghost, projectedSourceFingerprint: `sha256:${'3'.repeat(64)}`, operation: 'update' } }), /not exact-current/],
+    [draftVariant('en', '2', { ghost: { ...draftVariant('en', '2').ghost, operation: 'update' } }), /draft-to-published status update/],
+    [draftVariant('en', '2', { ghost: { ...draftVariant('en', '2').ghost, observed: null } }), /exact bound managed-draft observation/],
+    [draftVariant('en', '2', { ghost: { ...draftVariant('en', '2').ghost, observed: { ...draftVariant('en', '2').ghost.observed, syncHash: '' } } }), /exact bound managed-draft observation/]
+  ];
+
+  for (const [variant, pattern] of cases) {
+    assert.throws(
+      () => requireExactCurrentDraftsForProduction(publishPlan({ variants: [draftVariant('ko-KR', '1'), variant] })),
+      pattern
+    );
+  }
+});
+
+test('workflow dispatch control binds external publish intent to exact fresh draft-plan fingerprints', () => {
   const dispatch = requireArticleWorkflowDispatchContext(context());
-  const authorization = publicationAuthorizationForDispatchPlan(dispatch, {
-    articleId: 'article-1',
-    action: 'publish',
-    variants: [
-      { locale: 'ko-KR', sourceFingerprint: `sha256:${'1'.repeat(64)}` },
-      { locale: 'en', sourceFingerprint: `sha256:${'2'.repeat(64)}` }
-    ]
-  });
+  const authorization = publicationAuthorizationForDispatchPlan(dispatch, publishPlan());
 
   assert.deepEqual(authorization, {
     version: 1,
@@ -140,34 +187,23 @@ test('workflow dispatch authorization rejects non-publish contexts and malformed
   }));
 
   assert.throws(
-    () => publicationAuthorizationForDispatchPlan(draft, {
-      articleId: 'article-1', action: 'publish', variants: []
-    }),
+    () => publicationAuthorizationForDispatchPlan(draft, publishPlan()),
     /requires an exact publish workflow_dispatch context/
   );
   assert.throws(
-    () => publicationAuthorizationForDispatchPlan(publish, {
-      articleId: 'article-1', action: 'draft', variants: []
-    }),
-    /requires a publish plan/
+    () => publicationAuthorizationForDispatchPlan(publish, publishPlan({ action: 'draft' })),
+    /require a publish plan/
   );
   assert.throws(
-    () => publicationAuthorizationForDispatchPlan(publish, {
-      articleId: 'article-1',
-      action: 'publish',
-      variants: [
-        { locale: 'en', sourceFingerprint: `sha256:${'1'.repeat(64)}` },
-        { locale: 'en', sourceFingerprint: `sha256:${'2'.repeat(64)}` }
-      ]
-    }),
+    () => publicationAuthorizationForDispatchPlan(publish, publishPlan({
+      variants: [draftVariant('en', '1'), draftVariant('en', '2')]
+    })),
     /duplicate locale/
   );
   assert.throws(
-    () => publicationAuthorizationForDispatchPlan(publish, {
-      articleId: 'article-1',
-      action: 'publish',
-      variants: [{ locale: 'en', sourceFingerprint: 'not-a-fingerprint' }]
-    }),
+    () => publicationAuthorizationForDispatchPlan(publish, publishPlan({
+      variants: [draftVariant('en', '2', { sourceFingerprint: 'not-a-fingerprint' })]
+    })),
     /source fingerprint is invalid/
   );
 });
