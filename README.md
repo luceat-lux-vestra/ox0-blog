@@ -20,15 +20,7 @@ assets/
 
 `article.json` stores stable Article/variant identity, locale-source mapping, source-owned projection metadata, reviewed translation checkpoint, and Article-readiness evidence.
 
-It does **not** store:
-
-- Ghost post IDs/status as canonical source state;
-- Git/PR lifecycle state;
-- RTA lifecycle state;
-- merge authorization;
-- production publication authorization;
-- raw chat/session/model identifiers;
-- compiler IR or rendered HTML.
+It does **not** store Ghost IDs/state as canonical source truth, Git/RTA lifecycle state, merge/publication authorization, raw chat/session/model identifiers, compiler IR, or rendered HTML.
 
 See:
 
@@ -47,72 +39,20 @@ See:
 - `articleId` and `variantId` are stable identities. Paths and public slugs are not identity.
 - Translation synchronization, Article semantic readiness, Git state, Ghost projection state, and RTA state are independent machines.
 - Translation generation alone never produces `SYNCED`; an exact-current equivalence review checkpoint is required.
-- Article `READY` is a reviewed semantic claim, not production publication authorization.
-- Projection metadata changes are covered by projection fingerprints and current publication planning even when semantic `READY` remains valid.
-- Production publication authorization is task-scoped and explicit. It is never inferred from source metadata, Git state, RTA state, or Ghost state.
-- A normal Git push does not mutate Ghost.
-- Target `PREPARE_PUBLISH` is Article-wide and read-only with respect to Ghost.
-- Production use of external HTTPS body/feature images requires explicit host trust approval; URL-only source is not treated as proof of immutable remote bytes.
-- Public projection/publication URLs must not embed URL credentials. HTTPS alone is not sufficient if user-info is present.
-- Per-locale Ghost projection state remains independently recoverable; partial multi-locale failure is never collapsed into aggregate success.
-- A post that was created/updated but failed final revision/sync stamping is recovered as reconciliation-required rather than forgotten as not projected.
-- No unmanaged Ghost post is implicitly adopted because a public slug happens to match.
-
-## Article manifest example
-
-```json
-{
-  "version": 1,
-  "articleId": "article-1",
-  "requiredLocales": ["ko-KR", "en"],
-  "variants": [
-    {
-      "variantId": "variant-ko-1",
-      "locale": "ko-KR",
-      "source": "ko-KR.md",
-      "title": "제목",
-      "excerpt": "요약",
-      "slug": "example-ko",
-      "publication": {
-        "tags": ["Architecture"],
-        "featureImage": "assets/example/cover.png",
-        "featureImageAlt": "표지 설명",
-        "featured": false,
-        "visibility": "public",
-        "canonicalUrl": null
-      }
-    },
-    {
-      "variantId": "variant-en-1",
-      "locale": "en",
-      "source": "en.md",
-      "title": "Title",
-      "excerpt": "Summary",
-      "slug": "example-en",
-      "publication": {
-        "tags": ["Architecture"],
-        "featureImage": "assets/example/cover.png",
-        "featureImageAlt": "Cover description",
-        "featured": false,
-        "visibility": "public",
-        "canonicalUrl": null
-      }
-    }
-  ],
-  "translationCheckpoint": null,
-  "readiness": {
-    "epoch": 0,
-    "checkpoint": null,
-    "invalidations": []
-  }
-}
-```
-
-Markdown bodies live in the locale files. Markdown-significant body whitespace is preserved.
+- Article `READY` is a reviewed semantic claim, not merge or production-publication authorization.
+- Production publication authorization is task-scoped and explicit. It is never inferred from source metadata, Git state, RTA state, Ghost state, or a prior dry-run.
+- A normal Git push/PR does not mutate Ghost.
+- `PREPARE_PUBLISH` / planning is read-only with respect to Ghost and publication resource storage.
+- A `draft` operation is a real mutation and may stage repository-owned body assets or upload a local Ghost feature image.
+- Production use of external HTTPS body/feature images requires explicit current host trust approval.
+- Public projection/publication URLs must be credential-free HTTPS where HTTPS is required.
+- Per-locale Ghost state is independently recoverable; partial multi-locale failure is never whole-Article success.
+- A post created/updated but missing valid final revision/sync evidence is reconciliation-required, never silently forgotten.
+- No unmanaged Ghost post is implicitly adopted because a slug happens to match.
 
 ## Local validation
 
-Node.js 24 is the canonical runtime.
+Node.js 24 is canonical.
 
 ```bash
 npm ci --ignore-scripts
@@ -120,24 +60,25 @@ npm test
 npm run validate
 ```
 
-`npm run validate` currently runs both migration-era validators:
+`npm run validate` runs both migration-era validators:
 
 ```text
 validate:legacy
 validate:articles
 ```
 
-Run the target Article validator directly:
+Target Article checks:
 
 ```bash
 npm run validate:articles
 npm run validate:articles -- --ready
 npm run validate:articles -- posts/example/article.json
+npm run validate:articles -- --ready posts/example/article.json
 ```
 
-Ordinary source validation allows valid work-in-progress states such as `DRAFT`, `UNREVIEWED`, and `INCOMPLETE`. `--ready` additionally requires Article `SYNCED + READY`; it still does not authorize merge or publication.
+Ordinary validation permits valid work-in-progress states such as `DRAFT`, `UNREVIEWED`, and `INCOMPLETE`. `--ready` requires `SYNCED + READY`; it still does not authorize merge or publication.
 
-## Host runtime dependencies
+## Host runtime
 
 Target scripts may receive deployment/compiler host dependencies from an operator-controlled repository module:
 
@@ -145,9 +86,9 @@ Target scripts may receive deployment/compiler host dependencies from an operato
 OX0_HOST_RUNTIME_MODULE=host/runtime.mjs
 ```
 
-The path must remain under repository `host/`; absolute/traversal/symlink escapes are rejected. Article source cannot choose this module.
+The path must be an exact unaliased repository-relative `.mjs` path under `host/`; absolute paths, traversal/aliases, and symlink escapes fail closed. Article source cannot choose the module.
 
-The module may export any combination of:
+The module may export:
 
 ```js
 export const assetPublisher = ...;
@@ -155,111 +96,142 @@ export const projectContext = ...;
 export async function remoteResourcePolicy(resource) { ... }
 ```
 
-- `assetPublisher` binds repository-owned body assets to stable HTTPS delivery.
+- `assetPublisher` binds repository-owned body assets to stable credential-free HTTPS delivery.
 - `projectContext` supplies compiler/VirtualProject host context.
 - `remoteResourcePolicy` explicitly approves or denies external HTTPS body/feature images for production publication.
 
-A host module may bind the repository's vendor-neutral content-addressed AssetPublisher policy to R2/S3/OCI/etc. without putting cloud-specific storage logic into the compiler or Article manifest.
+The core architecture does not select R2/S3/OCI/etc.; a host module may bind the vendor-neutral content-addressed AssetPublisher adapter to a concrete object store.
 
-## Read-only Article publication planning
+## Read-only Article planning
 
-Ghost credentials are required because planning reads current ownership/collision/projection state:
+Ghost credentials are needed because planning reads ownership/collision/projection state:
 
 ```text
 GHOST_ADMIN_URL
 GHOST_ADMIN_API_KEY
 ```
 
-Plan every required locale of an Article:
+Plan every required locale:
 
 ```bash
 npm run dry-run -- posts/example/article.json draft
 npm run dry-run -- posts/example/article.json publish
 ```
 
-`publish` planning requires current `SYNCED + READY` Article state. The result remains read-only: it does not create/update Ghost posts, stamp metadata, upload feature images, or publish body assets.
+Planning never creates/updates Ghost posts, uploads feature images, or publishes body assets.
 
-If local body assets exist, the optional host runtime must provide an AssetPublisher. Without one, planning fails before Ghost access rather than falling back to legacy data URIs.
+`publish` planning additionally requires `SYNCED + READY`, current remote-resource policy approval where needed, and current Ghost observations. A plan is ephemeral evidence; source/Ghost/resource-policy changes require recomputation.
 
-If remote HTTPS body/feature images exist, `publish` additionally requires `remoteResourcePolicy` approval before Ghost access. The plan records `{ kind, href, evidence }` for every approved remote resource. Draft planning may retain external HTTPS images without production trust approval.
+## Low-level Article synchronization
 
-## Target Article synchronization control surface
-
-The guarded target mutation library is exposed through a low-level CLI:
+The guarded low-level CLI is:
 
 ```bash
 npm run sync:article -- posts/example/article.json draft
 npm run sync:article -- posts/example/article.json publish
 ```
 
-This command is an execution surface, **not** an authorization generator.
+It is an execution primitive, **not an authorization generator**.
 
 ### Draft
 
-Draft synchronization does not require production-publication authorization and rejects a production authorization envelope if one is supplied.
+Draft rejects a production authorization envelope. It may stage body assets, upload a local feature image, and create/update managed Ghost drafts.
 
-### Production publish
+### Publish
 
-Production publish requires the external conversation/control layer to inject:
+Low-level production publish requires externally supplied strict JSON:
 
 ```text
 OX0_ARTICLE_PUBLICATION_AUTHORIZATION_JSON
 ```
 
-The authorization must be the task-scoped exact-source assertion for the requested Article and every required locale projection fingerprint. The CLI parses it with the strict JSON parser and does not derive it from Article `READY` state, Ghost state, or a dry-run plan by itself.
+The authorization binds explicit task intent to the exact Article and every required locale projection fingerprint. Missing, malformed, incomplete, wrong-Article, or stale authorization fails closed.
 
-Missing, malformed, incomplete, wrong-Article, or stale-fingerprint authorization fails closed.
+The library then re-plans/revalidates source, assets, remote-resource policy, and Ghost observations before mutation.
 
-The intended agent workflow is therefore:
+## Target manual GitHub Actions control surface
+
+`.github/workflows/article-ghost.yml` is the target manual Article control surface. It is `workflow_dispatch` only; ordinary push/PR events do not invoke it.
+
+The workflow accepts:
 
 ```text
-explicit user publication instruction
-        -> control layer prepares exact current Article plan
-        -> control layer binds that intent to exact source fingerprints
-        -> sync:article consumes the bound authorization
-        -> publication library revalidates source/assets/remote-policy/Ghost before mutation
+manifest_path
+source_sha
+operation = plan-draft | draft | plan-publish | publish
+publish_confirmation
 ```
 
-Do not invoke the production `publish` action merely because an Article is `READY`.
+It fails closed unless it runs from `refs/heads/main`, `source_sha` is the exact current dispatch `github.sha`, that SHA is checked out and reverified, and the manifest is an unaliased repository-relative `posts/.../article.json` path.
 
-The target CLI and dry-run use the same optional `OX0_HOST_RUNTIME_MODULE`, so compiler ProjectContext, AssetPublisher policy, and remote-resource trust policy do not silently differ between planning and execution.
+Before the selected operation it runs Node 24 locked install, `npm test`, combined repository validation, and selected-Article validation. All target Article Ghost operations are globally serialized under one concurrency group.
 
-No target production GitHub Actions workflow is enabled yet. The remaining workflow in `.github/workflows/ghost-publish.yml` is explicitly legacy compatibility only.
+### Staged path
 
-## Guarded mutation behavior
+The intended manual production path is:
 
-Target Article mutation preserves these boundaries:
+```text
+plan-draft      # read-only
+    |
+    v
+draft           # explicit staging mutation
+    |
+    v
+plan-publish    # read-only exact-current draft gate
+    |
+    v
+publish          # explicit exact-target production promotion
+```
 
-- exact Article + required-locale source-fingerprint authorization for production publish;
-- Article-wide preflight;
-- explicit production approval for external HTTPS image resources;
-- credential-free public URL boundaries for Markdown/projected images/canonical URLs/asset targets/Ghost image results;
-- body-asset publication/reuse before Ghost mutation;
-- full source/plan/policy revalidation after asset side effects;
-- stale Ghost observation rejection;
-- sequential per-locale mutation with fresh mixed-state recovery on failure;
-- final all-locale currentness verification.
+A stale earlier plan is never replayed; each operation creates fresh current evidence.
 
-The library does not manufacture production authorization from `READY` state or from a publication plan.
+`publish` additionally requires exact confirmation:
+
+```text
+publish:<manifest_path>@<source_sha>
+```
+
+This confirmation binds the control-surface intent to one Article source version. It does not bypass readiness, trust, ownership, drift, or authorization checks.
+
+### Production publish is promotion-only
+
+For every required locale, `plan-publish` and `publish` require:
+
+- an existing uniquely managed Ghost post;
+- current status `draft`;
+- projected source fingerprint equal to the exact current source fingerprint;
+- valid bound managed revision/sync evidence;
+- planned Ghost operation exactly `status-update` to `published`;
+- every local body-asset plan exactly `reuse`.
+
+Therefore target production `publish` rejects:
+
+- first-publish `create`;
+- content `update`;
+- already-published `noop`;
+- stale/unmanaged/ambiguous draft state;
+- a body asset that still needs `publish`.
+
+The dispatch adapter first checks this on a fresh publish plan and creates the normal exact-source authorization envelope. The core publication library then receives the same predicate as a plan guard and reruns it on its own initial plan and again on the refreshed plan immediately before Ghost mutation.
+
+This closes the race where a draft could disappear/change after external planning. Under the target manual path, final production publication is restricted to pre-staged body-asset reuse plus managed Ghost draft-to-published status transition; it is not allowed to create/rewrite posts or upload new feature/body assets during the final production step.
 
 ## Compiler/resource boundary
 
-Canonical document compilation is asynchronous:
+Canonical compilation is asynchronous:
 
 ```text
 DocumentCompiler.compile(LocaleVariant, ProjectContext)
   -> CompiledDocument
 ```
 
-`MarkedCompiler` is the current implementation. Arkst is the intended long-term backend after its HTML/backend parity gates are ready.
+`MarkedCompiler` is the current implementation. Arkst is the intended long-term backend after its HTML/resource and semantic-parity gates are ready.
 
-Compiler code does not own storage/CDN policy. Local body assets are source evidence; the host AssetPublisher plans stable HTTPS delivery and the compiler sees only a host `resolveResource` callback.
+Compiler code does not own storage/CDN policy. Local body assets are source evidence; the host AssetPublisher plans delivery and the compiler sees only a host `resolveResource` callback. Resolved ProjectContext is preserved through evaluation, review, planning, resource-delivery recompilation, and publication.
 
-Resolved ProjectContext is preserved through validation, review, planning, AssetPublisher recompilation, and publication so a future Arkst/VirtualProject backend does not lose host context.
+Canonical Markdown rejects raw HTML and unsafe/ambiguous active URLs. `javascript:`, `data:`, `file:`, protocol-relative, control/entity-obfuscated, backslash-ambiguous, and credential-bearing HTTP(S) URLs fail closed at the relevant compiler/projection boundaries.
 
-Canonical Markdown rejects raw HTML and active/ambiguous URL forms. Links are limited to relative URLs or `http/https/mailto/tel`; images are relative source refs or HTTPS. `javascript:`, `data:`, `file:`, protocol-relative URLs, control/entity-obfuscated schemes, slash/backslash named-entity ambiguity, backslash-ambiguous hrefs, and credentialed HTTP(S) URLs fail closed before publication planning. Host resolver output is revalidated through the same image URL guard.
-
-## Ghost projection identity
+## Ghost projection identity and recovery
 
 Stable target locale projections use publisher-owned hidden metadata conceptually as:
 
@@ -271,8 +243,6 @@ Stable target locale projections use publisher-owned hidden metadata conceptuall
 #ox0-sync:...
 ```
 
-`revision` identifies the exact projection source; `sync` protects managed Ghost state from unmanaged drift.
-
 Fresh recovery derives per-locale states such as:
 
 ```text
@@ -283,44 +253,41 @@ OUTDATED(visibility=DRAFT|PUBLISHED)
 RECONCILIATION_REQUIRED(reason)
 ```
 
-If post creation/update succeeds but final publisher revision/sync stamping fails, the fresh post is retained as a reconciliation-required projection state; it is not collapsed to `NOT_PROJECTED`.
+`revision` identifies the exact projection source; `sync` protects managed Ghost state from unmanaged drift.
+
+If create/update succeeds but final publisher stamping fails, fresh recovery keeps that post visible as reconciliation-required rather than collapsing it to `NOT_PROJECTED`.
 
 ## Feature images
 
-Local feature images are separate from body AssetPublisher delivery and currently use Ghost's Image API.
+Local feature images use Ghost's Image API, separately from body AssetPublisher delivery.
 
-The publisher verifies the local feature-image digest and uploads the exact validated snapshot bytes. Because Ghost media upload and post mutation are not transactional, an upload can succeed before a later post mutation fails.
+Exact repository bytes are verified before upload. Because image upload and post mutation are not transactional, a successful or possibly-successful upload can remain as an orphan side effect if a later step fails.
 
-Ghost Image API response URLs used by the target Article path must be absolute credential-free HTTPS URLs. Response-validation failures are marked as possible upload side effects so the Article layer does not lose observability merely because the transport rejected the returned URL.
+Returned image URLs must be bounded absolute credential-free HTTPS URLs before they are used in a post. Error evidence is sanitized: URL credentials are removed with `urlCredentialsRedacted: true`, while malformed/overlong URL text is not echoed.
 
-Feature-image side-effect evidence is sanitized before surfacing it: credentialed URLs have user-info removed and carry `urlCredentialsRedacted: true`; malformed or overlong URL text is not echoed. If the returned URL is invalid, insecure, or credentialed, post create/update is refused while the possible upload side effect remains visible in `featureImageUploads[]`.
-
-Target Article errors preserve bounded feature-image upload evidence (`method`, repository ref, sanitized returned URL when safe, optional redaction marker) so orphan-media side effects are visible. This is observability, not an automatic rollback or proof that media definitely persisted.
-
-Remote HTTPS feature images are not fetched by ox0-blog. Production use requires host remote-resource approval because the bytes behind an unchanged URL are outside repository-observed evidence.
+Target Article errors preserve bounded feature-image side-effect evidence plus fresh projection recovery. This is observability, not rollback.
 
 ## Ghost setup
 
-For target planning/synchronization and legacy compatibility, configure:
+Configure:
 
-- `GHOST_ADMIN_URL` — e.g. `https://blog.ox0.uk`; HTTPS only, no embedded URL credentials, query, or fragment;
-- `GHOST_ADMIN_API_KEY` — Ghost Custom Integration Admin API key (`id:hexsecret`).
+- `GHOST_ADMIN_URL` — e.g. `https://blog.ox0.uk`; HTTPS only, no URL credentials/query/fragment;
+- `GHOST_ADMIN_API_KEY` — Ghost Custom Integration Admin API key (`id:hexsecret`);
+- optional `OX0_HOST_RUNTIME_MODULE` — target host resource/compiler policy module.
 
 Never commit or paste the Admin API key into source, logs, issues, or pull requests.
 
-## Legacy compatibility path
+## Legacy compatibility
 
-The following model is **not** the target Article architecture:
+The following are **not** the target Article architecture:
 
 - one Markdown file = one Ghost post;
-- repository path-derived `#ox0-source-*` identity;
-- frontmatter `status: draft|published`;
-- `:::lang ko/en` wrappers inside one Markdown body;
-- local body images embedded as `data:` URIs.
+- path-derived `#ox0-source-*` identity;
+- frontmatter publication `status`;
+- `:::lang ko/en` wrappers in one body;
+- local body images embedded as data URIs.
 
-It remains only to preserve/verify the earlier publishing stack while the Article migration is active.
-
-Explicit legacy commands are:
+Legacy commands remain explicit:
 
 ```bash
 npm run validate:legacy
@@ -328,14 +295,12 @@ npm run dry-run:legacy -- posts/example.md
 npm run verify:ghost-live:legacy
 ```
 
-The GitHub Actions workflow is deliberately named **Legacy Publish to Ghost (compatibility)**. It must not be treated as the target Article production control surface.
-
-Legacy implementation details remain documented in `docs/authoring.md`.
+`.github/workflows/ghost-publish.yml` is named **Legacy Publish to Ghost (compatibility)** and is not the target Article control surface.
 
 ## Verification status
 
-The presence of tests or live-verification harnesses is not evidence by itself. Merge review, when explicitly started, is exact-HEAD proof work.
+Tests and workflows existing in the tree are not proof by themselves. Merge review, when explicitly started, is exact-HEAD proof work.
 
-The current authoring branch has repeatedly seen GitHub Actions jobs terminate before runner assignment (`steps=[]`, `runner_id=0`), so canonical Node 24 CI remains unverified until an exact candidate actually executes the configured steps.
+This branch has repeatedly seen `Validate blog source` jobs terminate before runner allocation (`steps=[]`, `runner_id=0`), so canonical Node 24 hosted-CI execution remains unverified until an exact candidate actually executes checkout/test/validation steps.
 
-Controlled live Ghost evidence must likewise be collected on the exact eventual candidate; stale results from an earlier HEAD do not carry forward.
+Controlled staging/live Ghost evidence must likewise be collected on the exact eventual candidate; stale evidence from an earlier HEAD does not carry forward.
