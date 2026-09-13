@@ -1,6 +1,6 @@
 # Target Article operations
 
-This document describes the target Article-oriented validation, planning, and low-level synchronization entrypoints on `feat/authoring-foundation`.
+This document describes the target Article-oriented validation, planning, synchronization, and manual production-control entrypoints on `feat/authoring-foundation`.
 
 It does not replace the durable authorization/state-machine policy in `docs/workflow/`. A successful validation or dry-run never grants merge or production publication authorization.
 
@@ -185,7 +185,7 @@ After body-asset side effects, the complete Article is loaded/evaluated/planned 
 
 ## Low-level target synchronization CLI
 
-The repository now exposes:
+The repository exposes:
 
 ```bash
 npm run sync:article -- posts/example/article.json draft
@@ -196,7 +196,7 @@ This is a low-level control-surface entrypoint over the guarded Article mutation
 
 ### Draft
 
-Draft synchronization must not be given a production authorization envelope.
+Draft synchronization must not be given a production authorization envelope. Draft is a mutation and may stage repository-owned body assets and upload a local Ghost feature image before creating/updating the managed Ghost draft.
 
 ### Publish
 
@@ -218,6 +218,79 @@ Article publication errors are emitted as structured JSON including stage and, w
 - Ghost feature-image upload side effects;
 - fresh per-locale projection recovery state.
 
+## Target manual GitHub Actions control surface
+
+`.github/workflows/article-ghost.yml` is the target manual Article control surface. It is `workflow_dispatch` only; ordinary push/PR events never invoke it.
+
+Inputs are:
+
+```text
+manifest_path
+source_sha
+operation = plan-draft | draft | plan-publish | publish
+publish_confirmation
+```
+
+The workflow fails closed unless:
+
+- it is running from `refs/heads/main`;
+- `source_sha` is exactly the current workflow-dispatch `github.sha` and is lowercase 40-hex;
+- exact `source_sha` is checked out and reverified;
+- the manifest path is an unaliased repository-relative `posts/.../article.json` path;
+- the full Node 24 test suite and repository validation run before the selected operation.
+
+Article Ghost workflow executions are globally serialized (`article-ghost-control`) and use the `ox0-blog` environment.
+
+### `plan-draft`
+
+Read-only with respect to Ghost and body-asset storage. This is the normal first visibility check for the exact canonical source.
+
+### `draft`
+
+Explicit non-production mutation. This may:
+
+- publish/reuse repository-owned body assets required by the draft;
+- upload a local feature image to Ghost;
+- create/update managed Ghost locale drafts.
+
+It must never unpublish an already-published managed projection.
+
+### `plan-publish`
+
+Read-only production readiness check. In addition to normal `SYNCED + READY`, remote-resource policy, identity, drift, and URL guards, every required locale must already be an **exact-current managed Ghost draft**.
+
+For every required locale:
+
+- a managed Ghost post must exist;
+- current Ghost status must be `draft`;
+- observed projected source fingerprint must equal the exact current source fingerprint;
+- managed sync evidence must be present and fresh;
+- the publish operation must be exactly `status-update` to `published`;
+- every local body-asset plan must be `reuse`, so production planning proves those assets were already staged.
+
+A first-publish `create`, content `update`, already-published `noop`, unstaged body-asset `publish`, stale draft, or ambiguous/unmanaged projection fails closed.
+
+### `publish`
+
+Explicit production mutation. It additionally requires exact confirmation:
+
+```text
+publish:<manifest_path>@<source_sha>
+```
+
+This is an exact-target/source binding supplied by the external control surface; it is not inferred from Article/Git/Ghost/RTA state.
+
+The dispatch adapter creates the existing Article publication authorization envelope only from a fresh exact publish plan after the draft gate passes. The core publication library then independently recreates the plan and reruns the same draft-only plan guard:
+
+1. during its first internal preflight, before body-asset side effects;
+2. again after asset/source/policy revalidation, immediately before Ghost mutation.
+
+This closes the race where a draft could disappear/change between control-surface planning and core execution.
+
+Under this manual production path, local body assets must remain `reuse` and every Ghost locale operation must remain draft-to-published `status-update`. Therefore the final production step is not allowed to create a post, rewrite Article content, upload a feature image, or newly publish repository-owned body assets.
+
+A stale plan, changed Ghost draft, changed source, changed asset target/action, changed remote-resource approval, or lost managed evidence aborts instead of widening the operation.
+
 ## Legacy compatibility entrypoints
 
 The earlier one-file publisher is explicitly namespaced:
@@ -228,6 +301,6 @@ npm run dry-run:legacy -- posts/example.md
 npm run verify:ghost-live:legacy
 ```
 
-The GitHub workflow is named **Legacy Publish to Ghost (compatibility)**.
+`.github/workflows/ghost-publish.yml` is named **Legacy Publish to Ghost (compatibility)**.
 
-These commands are migration compatibility mechanisms, not the target Article production workflow.
+These commands/workflow are migration compatibility mechanisms, not the target Article production workflow.
