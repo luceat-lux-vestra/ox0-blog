@@ -65,18 +65,21 @@ export function remoteResourcePolicy() {
   assert.equal(typeof runtime.remoteResourcePolicy, 'function');
 });
 
-test('host runtime rejects traversal, absolute paths, wrong extension and modules outside host', async () => {
+test('host runtime rejects traversal, aliases, absolute paths, wrong extension and modules outside host', async () => {
   const repoRoot = await fixture();
+  await mkdir(path.join(repoRoot, 'host', 'nested'), { recursive: true });
   await writeFile(path.join(repoRoot, 'outside.mjs'), 'export const projectContext = {};\n', 'utf8');
+  await writeFile(path.join(repoRoot, 'host', 'runtime.mjs'), 'export const projectContext = {};\n', 'utf8');
 
   for (const ref of [
     '../outside.mjs',
     './host/runtime.mjs',
+    'host/nested/../runtime.mjs',
     'outside.mjs',
     'host/runtime.js',
     path.join(repoRoot, 'host', 'runtime.mjs')
   ]) {
-    await assert.rejects(loadHostRuntime({ repoRoot, moduleRef: ref }), /repository-relative|traverse|host\/|\.mjs/);
+    await assert.rejects(loadHostRuntime({ repoRoot, moduleRef: ref }), /repository-relative|traverse|alias|host\/|\.mjs/);
   }
 });
 
