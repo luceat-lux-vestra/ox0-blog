@@ -291,9 +291,11 @@ Local feature images are separate from body AssetPublisher delivery and currentl
 
 The publisher verifies the local feature-image digest and uploads the exact validated snapshot bytes. Because Ghost media upload and post mutation are not transactional, an upload can succeed before a later post mutation fails.
 
-Ghost Image API response URLs used by the target Article path must be absolute credential-free HTTPS URLs. The target wrapper records the raw returned URL as side-effect evidence before validating it for use in a post payload. If the returned URL is invalid, insecure, or credentialed, post create/update is refused while the already-completed upload remains visible in `featureImageUploads[]`.
+Ghost Image API response URLs used by the target Article path must be absolute credential-free HTTPS URLs. Response-validation failures are marked as possible upload side effects so the Article layer does not lose observability merely because the transport rejected the returned URL.
 
-Target Article errors preserve successful feature-image upload evidence (`method`, repository ref, returned URL) so orphan-media side effects are visible. This is observability, not an automatic rollback claim.
+Feature-image side-effect evidence is sanitized before surfacing it: credentialed URLs have user-info removed and carry `urlCredentialsRedacted: true`; malformed or overlong URL text is not echoed. If the returned URL is invalid, insecure, or credentialed, post create/update is refused while the possible upload side effect remains visible in `featureImageUploads[]`.
+
+Target Article errors preserve bounded feature-image upload evidence (`method`, repository ref, sanitized returned URL when safe, optional redaction marker) so orphan-media side effects are visible. This is observability, not an automatic rollback or proof that media definitely persisted.
 
 Remote HTTPS feature images are not fetched by ox0-blog. Production use requires host remote-resource approval because the bytes behind an unchanged URL are outside repository-observed evidence.
 
