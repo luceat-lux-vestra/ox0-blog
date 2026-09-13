@@ -71,18 +71,25 @@ function rawManifest({ featureImage = null, featureImageAlt = null } = {}) {
   };
 }
 
-async function fixture({ localBodyAsset = false, featureImage = null, featureImageAlt = null } = {}) {
+async function fixture({
+  localBodyAsset = false,
+  remoteBodyAsset = false,
+  featureImage = null,
+  featureImageAlt = null
+} = {}) {
   const repoRoot = await mkdtemp(path.join(os.tmpdir(), 'ox0-article-plan-'));
   const articleDir = path.join(repoRoot, 'posts', 'article');
   await mkdir(articleDir, { recursive: true });
   await mkdir(path.join(repoRoot, 'assets', 'article'), { recursive: true });
-  const koBody = localBodyAsset
-    ? '# 본문\n\n![diagram](../../assets/article/diagram.png)\n'
-    : '# 본문\n';
+  let koBody = '# 본문\n';
+  if (localBodyAsset) koBody += '\n![diagram](../../assets/article/diagram.png)\n';
+  if (remoteBodyAsset) koBody += '\n![remote](https://cdn.example/content/diagram.png)\n';
   await writeFile(path.join(articleDir, 'ko-KR.md'), koBody, 'utf8');
   await writeFile(path.join(articleDir, 'en.md'), '# Body\n', 'utf8');
   if (localBodyAsset) await writeFile(path.join(repoRoot, 'assets', 'article', 'diagram.png'), 'diagram');
-  if (featureImage) await writeFile(path.join(repoRoot, 'assets', 'article', 'cover.png'), 'cover');
+  if (featureImage && !/^https:\/\//.test(featureImage)) {
+    await writeFile(path.join(repoRoot, 'assets', 'article', 'cover.png'), 'cover');
+  }
 
   const raw = rawManifest({ featureImage, featureImageAlt });
   const manifestPath = path.join(articleDir, 'article.json');
@@ -176,6 +183,114 @@ test('publish planning requires SYNCED + READY before any Ghost access', async (
   assert.deepEqual(plan.translation, { state: 'SYNCED' });
   assert.deepEqual(plan.readiness, { state: 'READY' });
   assert.equal(plan.ghost.desiredStatus, 'published');
+});
+
+test('draft planning permits remote HTTPS images without granting production trust', async () => {
+  const value = await fixture({
+    remoteBodyAsset: true,
+    featureImage: 'https://cdn.example/content/cover.png',
+    featureImageAlt: 'remote cover'
+  });
+  const client = new ReadOnlyGhostClient();
+  const plan = await planArticleProjection({
+    ...value,
+    locale: 'ko-KR',
+    action: 'draft',
+    client
+  });
+  assert.deepEqual(plan.remoteResourceApprovals, []);
+  assert.ok(client.calls.length > 0);
+});
+
+test('production planning rejects remote resources without host approval before Ghost access', async () => {
+  const value = await fixture({
+    remoteBodyAsset: true,
+    featureImage: 'https://cdn.example/content/cover.png',
+    featureImageAlt: 'remote cover'
+  });
+  await makeReady(value);
+  const client = new ReadOnlyGhostClient();
+  await assert.rejects(
+    planArticleProjection({
+      ...value,
+      locale: 'ko-KR',
+      action: 'publish',
+      client
+    }),
+    /requires host remoteResourcePolicy/
+  );
+  assert.deepEqual(client.calls, []);
+});
+
+test('production planning binds explicit remote-resource approval evidence into the plan', async () => {
+  const value = await fixture({
+    remoteBodyAsset: true,
+    featureImage: 'https://cdn.example/content/cover.png',
+    featureImageAlt: 'remote cover'
+  });
+  await makeReady(value);
+  const client = new ReadOnlyGhostClient();
+  const seen = [];
+  const plan = await planArticleProjection({
+    ...value,
+    locale: 'ko-KR',
+    action: 'publish',
+    client,
+    remoteResourcePolicy(resource) {
+      seen.push(resource);
+      return { decision: 'ALLOW', evidence: `trusted-static-v1:${resource.kind}` };
+    }
+  });
+  assert.deepEqual(plan.remoteResourceApprovals, [
+    {
+      kind: 'body-image',
+      href: 'https://cdn.example/content/diagram.png',
+      evidence: 'trusted-static-v1:body-image'
+    },
+    {
+      kind: 'feature-image',
+      href: 'https://cdn.example/content/cover.png',
+      evidence: 'trusted-static-v1:feature-image'
+    }
+  ]);
+  assert.deepEqual(seen.map(({ kind, href, articleId, locale, variantId }) => ({
+    kind, href, articleId, locale, variantId
+  })), [
+    {
+      kind: 'body-image',
+      href: 'https://cdn.example/content/diagram.png',
+      articleId: 'article-1',
+      locale: 'ko-KR',
+      variantId: 'variant-ko'
+    },
+    {
+      kind: 'feature-image',
+      href: 'https://cdn.example/content/cover.png',
+      articleId: 'article-1',
+      locale: 'ko-KR',
+      variantId: 'variant-ko'
+    }
+  ]);
+  assert.ok(client.calls.length > 0);
+});
+
+test('production planning propagates host remote-resource denial before Ghost access', async () => {
+  const value = await fixture({ remoteBodyAsset: true });
+  await makeReady(value);
+  const client = new ReadOnlyGhostClient();
+  await assert.rejects(
+    planArticleProjection({
+      ...value,
+      locale: 'ko-KR',
+      action: 'publish',
+      client,
+      remoteResourcePolicy() {
+        return { decision: 'DENY', reason: 'mutable external image' };
+      }
+    }),
+    /mutable external image/
+  );
+  assert.deepEqual(client.calls, []);
 });
 
 test('local body assets fail before Ghost planning until target AssetPublisher exists', async () => {
