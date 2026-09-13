@@ -1,17 +1,17 @@
 # Target Article publication orchestration
 
-This document describes the target Article-level mutation library and low-level execution CLI on the authoring branch.
+This document describes the target Article-level mutation library, low-level execution CLI, and guarded manual GitHub Actions control surface on the authoring branch.
 
-The durable workflow policy in `docs/workflow/` remains authoritative for deciding whether a task is authorized to mutate Ghost. The CLI consumes authorization; it does not create evidence of user intent.
+The durable workflow policy in `docs/workflow/` remains authoritative for deciding whether a task is authorized to mutate Ghost. Low-level repository mechanics consume authorization; they do not create evidence of user intent by themselves.
 
 ## High-level invariant
 
 Production publication is an Article work-unit operation across all required locales, not a loop that independently calls “publish this Markdown file”.
 
-The orchestration sequence is:
+The generic Article mutation library performs:
 
 ```text
-explicit task intent
+external task/control authorization
       |
       v
 source/evidence/Article preflight
@@ -25,7 +25,10 @@ read-only body-asset plans
 read-only Ghost plans for all required locales
       |
       v
-exact production authorization binding (publish only)
+exact source-fingerprint authorization check
+      |
+      v
+optional control-surface PublicationPlan guard
       |
       v
 asset publish/reuse side effects
@@ -33,7 +36,10 @@ asset publish/reuse side effects
       v
 full Article source/policy + Ghost re-plan
       |
-      +-- changed -> abort before Ghost mutation
+      +--> exact source authorization recheck
+      +--> optional control-surface plan guard recheck
+      |
+      +-- changed/disallowed -> abort before Ghost mutation
       |
       v
 sequential locale Ghost mutations
@@ -47,24 +53,28 @@ fresh all-locale projection recovery
 SUCCESS
 ```
 
+The optional `publicationPlanGuard` is a read-only policy callback supplied by a higher-level control surface. It is evaluated on the library's first internal plan and again on the refreshed plan immediately before Ghost mutation. This lets a control surface enforce a narrower allowed transition without teaching the generic publication library to infer user intent or workflow state.
+
 ## Draft versus production publish
 
-`draft` and `publish` remain explicit operation parameters.
+`draft` and `publish` remain explicit low-level operation parameters.
 
-A draft mutation does not require production-publication authorization, but all source/compiler/identity/asset safety invariants still apply.
+A draft mutation does not require production-publication authorization, but all source/compiler/identity/asset safety invariants still apply. Draft is not read-only: it may stage repository-owned body assets and upload a local feature image before creating/updating managed Ghost drafts.
 
-A production `publish` mutation requires all of:
+A generic production `publish` mutation requires all of:
 
 - translation state `SYNCED`;
 - Article readiness `READY`;
 - explicit host approval for every remote HTTPS body/feature image;
-- a task-scoped explicit authorization assertion supplied by the control surface;
+- a task-scoped explicit authorization assertion supplied by the external control surface;
 - authorization `articleId` equal to the prepared Article;
 - authorization source fingerprint for every required locale equal to the exact prepared projection source fingerprint.
 
 The publication library does not create that authorization assertion itself. Doing so would let repository mechanics manufacture evidence of user intent. The conversation/control layer owns the statement “the user explicitly requested production publication”.
 
 The authorization object is ephemeral. It is not persisted in `article.json`, Ghost, Git, or RTA.
+
+The target manual GitHub Actions production surface intentionally adds a stronger staged-promotion policy; see **Manual staged production control surface** below.
 
 ## ProjectContext preservation
 
@@ -160,7 +170,7 @@ The repository includes a vendor-neutral content-addressed AssetPublisher adapte
 
 ## Source revalidation after asset side effects
 
-Asset upload may take time or interact with external infrastructure. Repository state and host trust evidence are therefore not assumed stable across that phase.
+Asset upload may take time or interact with external infrastructure. Repository state, host trust evidence, and higher-level transition policy are therefore not assumed stable across that phase.
 
 Before the first Ghost mutation, the orchestration runs a second complete Article preparation pass. It compares at least:
 
@@ -172,11 +182,11 @@ Before the first Ghost mutation, the orchestration runs a second complete Articl
 - planned public asset target URLs;
 - approved remote-resource kinds/URLs/policy evidence.
 
-Asset provider `publish -> reuse` action change after a successful upload is allowed if the source digest and target URL remain identical. A changed target URL is not allowed because it changes the compiled projection.
+Asset provider `publish -> reuse` action change after a successful upload is allowed by the generic library if the source digest and target URL remain identical. A changed target URL is not allowed because it changes the compiled projection.
 
 Any source/evidence/remote-policy/target difference ends the operation with `SOURCE_REVALIDATION` before Ghost mutation.
 
-For production publish, the explicit authorization is checked again against the refreshed exact source fingerprints.
+For production publish, the explicit authorization is checked again against the refreshed exact source fingerprints. If the caller supplied a `publicationPlanGuard`, it is also rerun against the refreshed plan. A guard failure at this second boundary is reported as `SOURCE_REVALIDATION` and Ghost mutation does not begin.
 
 ## Sequential Ghost mutation
 
@@ -197,9 +207,84 @@ Each locale still gets low-level safeguards such as:
 
 Sequential mutation does not imply transactionality across Ghost posts. The orchestration therefore treats partial failure as a first-class state rather than pretending distributed rollback exists.
 
+## Manual staged production control surface
+
+`.github/workflows/article-ghost.yml` is the target manual GitHub Actions control surface. It is `workflow_dispatch` only and operates only on the exact current `main` SHA supplied as `source_sha`.
+
+Its operation sequence is intentionally staged:
+
+```text
+plan-draft       # read-only
+    |
+    v
+draft            # explicit staging mutation
+    |
+    v
+plan-publish     # read-only exact-current draft check
+    |
+    v
+publish           # explicit production confirmation + minimal promotion
+```
+
+The workflow may be used without running every read-only operation as a historical marker, because each mutating operation recreates/validates its own current plan. No stale dry-run plan is replayed.
+
+### Exact source / target binding
+
+The workflow fails closed unless:
+
+- event is `workflow_dispatch`;
+- ref is `refs/heads/main`;
+- user/control-surface `source_sha` equals the event's exact `github.sha`;
+- the exact SHA is checked out and verified;
+- `manifest_path` is an unaliased repository-relative `posts/.../article.json` path.
+
+The production `publish` operation additionally requires:
+
+```text
+publish:<manifest_path>@<source_sha>
+```
+
+as `publish_confirmation`. This is an exact-target/source confirmation. It does not substitute for Article readiness, remote-resource trust, managed Ghost ownership, or source fingerprints.
+
+### Draft-stage requirement
+
+Production `plan-publish` and `publish` require every required LocaleVariant to already be an exact-current managed Ghost draft.
+
+For each locale, the fresh publish plan must prove:
+
+```text
+existingPostId != null
+currentStatus == draft
+projectedSourceFingerprint == exact current sourceFingerprint
+managed observed post/status/revision/sync evidence == current draft
+operation == status-update
+desiredStatus == published
+```
+
+A missing post (`create`), stale content (`update`), already-public current post (`noop`), missing/invalid managed evidence, or any other operation fails closed.
+
+The dispatch adapter performs this check before building the production authorization envelope. The core `synchronizeArticlePublication(...)` then receives the same predicate as `publicationPlanGuard`, so it reruns the gate:
+
+1. on the core library's first internal plan, before asset side effects;
+2. on the refreshed plan after source/asset/policy revalidation, immediately before Ghost mutation.
+
+Therefore Ghost state cannot widen from “exact current draft -> status update” to “create/update/noop” in the race between external planning and core execution.
+
+### Production resource mutation restriction
+
+Every local body-asset plan must already be `reuse` during `plan-publish` and `publish`.
+
+`reuse` re-snapshots/verifies exact source bytes but skips provider mutation. An asset plan that still says `publish` means staging is incomplete and production fails closed.
+
+Because the Ghost operation must be `status-update`, the low-level publisher also preserves the existing feature image rather than uploading a new one.
+
+The target manual production step therefore permits no new Article-content write, no first post creation, no local feature-image upload, and no new repository-owned body-asset publish. Its intended external mutation is the managed draft-to-published Ghost status transition, followed by normal sync/revision verification.
+
+This restriction is deliberately stronger than the generic low-level publication library. A future alternative control surface would need its own explicit policy and evidence rather than silently inheriting broader mutation authority.
+
 ## Feature-image side-effect observability
 
-Local feature images are still uploaded through Ghost's Image API inside the low-level projection synchronization path.
+Local feature images are still uploaded through Ghost's Image API inside low-level projection synchronization when a content create/update actually requires them, notably during staging/draft operations.
 
 That upload is not transactional with subsequent Ghost post creation/update. A successful image upload followed by a post mutation failure can therefore leave an orphan Ghost media object.
 
@@ -230,8 +315,6 @@ featureImageUploads[] = {
 ```
 
 This is observability, not rollback or proof that Ghost definitely persisted an orphan media object. The system does not claim that media was deleted or that cleanup is safe automatically.
-
-A future deterministic prepublication/cleanup contract may reduce this side effect, but current correctness depends on reporting it rather than hiding it.
 
 ## Partial failure recovery
 
@@ -273,11 +356,11 @@ The explicit production authorization may remain conceptually valid only for the
 
 The target library distinguishes at least:
 
-- `PREFLIGHT` — source/compiler/readiness/remote-policy/planning failed before side effects;
+- `PREFLIGHT` — source/compiler/readiness/remote-policy/planning or initial higher-level plan guard failed before side effects;
 - `AUTHORIZATION` — production authorization does not match exact prepared source;
 - `ASSET_PLANNING` — required locale asset plans conflict;
 - `ASSET_PUBLICATION` — body-asset provider mutation failed before Ghost mutation;
-- `SOURCE_REVALIDATION` — source/evidence/remote-policy/asset target changed after preflight;
+- `SOURCE_REVALIDATION` — source/evidence/remote-policy/asset target or refreshed higher-level plan guard changed/failed after preflight;
 - `GHOST_MUTATION` — one locale mutation failed; fresh all-locale recovery attached;
 - `POST_VERIFY` — mutations returned but fresh aggregate recovery is not the requested current state.
 
@@ -285,7 +368,7 @@ Errors may contain successfully published body-asset records, bounded feature-im
 
 ## Low-level CLI boundary
 
-The target mutation library is exposed through:
+The generic target mutation library is exposed through:
 
 ```bash
 npm run sync:article -- posts/example/article.json draft
@@ -314,4 +397,4 @@ The CLI:
 
 This CLI being executable does not mean the agent may invoke `publish` without a user's explicit publication instruction. The workflow authorization contract remains above the CLI.
 
-No target production GitHub Actions workflow is enabled yet. `.github/workflows/ghost-publish.yml` remains explicitly named **Legacy Publish to Ghost (compatibility)** and must not be treated as the target Article publication surface.
+The target manual production workflow is `.github/workflows/article-ghost.yml`. `.github/workflows/ghost-publish.yml` remains explicitly named **Legacy Publish to Ghost (compatibility)** and must not be treated as the target Article publication surface.
