@@ -29,6 +29,7 @@ function draftVariant(locale, digit, overrides = {}) {
   return {
     locale,
     sourceFingerprint,
+    assetPlans: [],
     ghost: {
       operation: 'status-update',
       existingPostId: `post-${locale}`,
@@ -142,18 +143,28 @@ test('production publish confirmation binds exact normalized manifest and source
   }
 });
 
-test('production workflow accepts only exact-current managed drafts for every locale', () => {
-  assert.equal(requireExactCurrentDraftsForProduction(publishPlan()).articleId, 'article-1');
+test('production workflow accepts exact-current managed drafts with reuse-only staged assets', () => {
+  const plan = publishPlan({
+    variants: [
+      draftVariant('ko-KR', '1', {
+        assetPlans: [{ action: 'reuse', ref: 'assets/a.png' }]
+      }),
+      draftVariant('en', '2')
+    ]
+  });
+  assert.equal(requireExactCurrentDraftsForProduction(plan).articleId, 'article-1');
 });
 
-test('production workflow rejects first-publish, stale, already-published, rewrite and unbound draft plans', () => {
+test('production workflow rejects first-publish, stale, already-published, rewrite, unbound or unstaged asset plans', () => {
+  const base = draftVariant('en', '2');
   const cases = [
-    [draftVariant('en', '2', { ghost: { ...draftVariant('en', '2').ghost, existingPostId: null, observed: null, operation: 'create' } }), /existing managed draft/],
-    [draftVariant('en', '2', { ghost: { ...draftVariant('en', '2').ghost, currentStatus: 'published', observed: { ...draftVariant('en', '2').ghost.observed, status: 'published' }, operation: 'noop' } }), /status=draft/],
-    [draftVariant('en', '2', { ghost: { ...draftVariant('en', '2').ghost, projectedSourceFingerprint: `sha256:${'3'.repeat(64)}`, operation: 'update' } }), /not exact-current/],
-    [draftVariant('en', '2', { ghost: { ...draftVariant('en', '2').ghost, operation: 'update' } }), /draft-to-published status update/],
-    [draftVariant('en', '2', { ghost: { ...draftVariant('en', '2').ghost, observed: null } }), /exact bound managed-draft observation/],
-    [draftVariant('en', '2', { ghost: { ...draftVariant('en', '2').ghost, observed: { ...draftVariant('en', '2').ghost.observed, syncHash: '' } } }), /exact bound managed-draft observation/]
+    [draftVariant('en', '2', { ghost: { ...base.ghost, existingPostId: null, observed: null, operation: 'create' } }), /existing managed draft/],
+    [draftVariant('en', '2', { ghost: { ...base.ghost, currentStatus: 'published', observed: { ...base.ghost.observed, status: 'published' }, operation: 'noop' } }), /status=draft/],
+    [draftVariant('en', '2', { ghost: { ...base.ghost, projectedSourceFingerprint: `sha256:${'3'.repeat(64)}`, operation: 'update' } }), /not exact-current/],
+    [draftVariant('en', '2', { ghost: { ...base.ghost, operation: 'update' } }), /draft-to-published status update/],
+    [draftVariant('en', '2', { ghost: { ...base.ghost, observed: null } }), /exact bound managed-draft observation/],
+    [draftVariant('en', '2', { ghost: { ...base.ghost, observed: { ...base.ghost.observed, syncHash: '' } } }), /exact bound managed-draft observation/],
+    [draftVariant('en', '2', { assetPlans: [{ action: 'publish', ref: 'assets/a.png' }] }), /pre-staged\/reuse-only/]
   ];
 
   for (const [variant, pattern] of cases) {
