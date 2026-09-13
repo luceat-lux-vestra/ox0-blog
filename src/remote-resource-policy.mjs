@@ -22,6 +22,9 @@ function requireHttpsHref(value) {
   if (parsed.protocol !== 'https:') {
     throw new Error(`remote resource href must use https: ${source}`);
   }
+  if (parsed.username || parsed.password) {
+    throw new Error(`remote resource href must not contain URL credentials: ${source}`);
+  }
   return parsed.href;
 }
 
