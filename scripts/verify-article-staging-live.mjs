@@ -126,7 +126,7 @@ async function makeFixtureReady() {
     manifestPath,
     repoRoot,
     id: reviewId,
-    origin: 'staging-live-verifier',
+    origin: 'blog-audit',
     reference: context.sourceSha
   });
   await writeFile(manifestPath, requested.manifestText, 'utf8');
@@ -406,7 +406,7 @@ try {
       'explicit staging mutation + promotion opt-ins',
       'clean exact-candidate git HEAD binding',
       'production Ghost host refusal + exact staging origin binding',
-      'temporary Article translation checkpoint and UUID-v4 readiness review to SYNCED + READY',
+      'temporary Article translation checkpoint and UUID-v4 blog-audit readiness review to SYNCED + READY',
       'two-locale managed Ghost draft creation with fresh current-state recovery',
       'fresh production plan restricted to exact-current managed drafts',
       'production transition restricted to draft-to-published status-update',
