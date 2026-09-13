@@ -34,8 +34,11 @@ export function createAdminToken(adminKey, nowSeconds = Math.floor(Date.now() / 
 }
 
 function normalizeAdminUrl(url) {
-  const parsed = new URL(url);
+  let parsed;
+  try { parsed = new URL(url); } catch { throw new Error('GHOST_ADMIN_URL must be a valid absolute URL'); }
   if (parsed.protocol !== 'https:') throw new Error('GHOST_ADMIN_URL must use https');
+  if (parsed.username || parsed.password) throw new Error('GHOST_ADMIN_URL must not contain URL credentials');
+  if (parsed.search || parsed.hash) throw new Error('GHOST_ADMIN_URL must not contain query or fragment');
   return parsed.toString().replace(/\/$/, '');
 }
 
@@ -68,7 +71,10 @@ function validateUploadedImage(image) {
   if (parsed.protocol !== 'https:') {
     throw new Error('Ghost image upload response URL must use https');
   }
-  return image;
+  if (parsed.username || parsed.password) {
+    throw new Error('Ghost image upload response URL must not contain URL credentials');
+  }
+  return { ...image, url: parsed.href };
 }
 
 export class GhostAdminClient {
