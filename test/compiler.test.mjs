@@ -77,13 +77,16 @@ test('MarkedCompiler rejects active or ambiguous Markdown link protocols', async
     'JaVaScRiPt:alert(1)',
     'javascript&#58;alert(1)',
     'javascript&#x3a;alert(1)',
+    'java&#9;script:alert(1)',
     'data:text/html,hello',
     'file:///etc/passwd',
-    '//evil.example/path'
+    '//evil.example/path',
+    '\\\\evil.example\\path',
+    '&#92;&#92;evil.example&#92;path'
   ]) {
     await assert.rejects(
       compiler.compile(variant({ body: `[unsafe](${href})\n` })),
-      /unsafe Markdown link URL protocol|protocol-relative|control characters/,
+      /unsafe Markdown link URL protocol|protocol-relative|control characters|backslashes/,
       href
     );
   }
@@ -111,7 +114,8 @@ test('MarkedCompiler rejects unsafe image protocols before resource resolution',
     'javascript:alert(1)',
     'data:image/svg+xml;base64,PHN2Zz4=',
     'http://images.example/a.png',
-    '//images.example/a.png'
+    '//images.example/a.png',
+    '..\\..\\assets\\diagram.png'
   ]) {
     let resolverCalled = false;
     await assert.rejects(
@@ -121,7 +125,7 @@ test('MarkedCompiler rejects unsafe image protocols before resource resolution',
           return { href: 'https://cdn.example/safe.png' };
         }
       }),
-      /unsafe Markdown image URL protocol|protocol-relative/,
+      /unsafe Markdown image URL protocol|protocol-relative|backslashes/,
       href
     );
     assert.equal(resolverCalled, false);
@@ -137,6 +141,14 @@ test('MarkedCompiler rejects an unsafe URL returned by the host image resolver',
       }
     }),
     /unsafe Markdown image URL protocol/
+  );
+  await assert.rejects(
+    compiler.compile(variant(), {
+      resolveResource() {
+        return { href: '\\\\cdn.example\\unsafe.png' };
+      }
+    }),
+    /backslashes/
   );
 });
 
