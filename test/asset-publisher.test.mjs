@@ -29,7 +29,7 @@ test('read-only AssetPublisher planning binds exact ref/fingerprint to HTTPS URL
   assert.equal(result.plan.ref, descriptor().ref);
 });
 
-test('AssetPublisher plan cannot substitute another asset or non-HTTPS target', async () => {
+test('AssetPublisher plan cannot substitute another asset, insecure target, or credentialed public URL', async () => {
   await assert.rejects(
     planAssetDelivery({
       async planAsset(asset) {
@@ -45,6 +45,19 @@ test('AssetPublisher plan cannot substitute another asset or non-HTTPS target', 
       }
     }, descriptor()),
     /must use https/
+  );
+  await assert.rejects(
+    planAssetDelivery({
+      async planAsset(asset) {
+        return {
+          action: 'reuse',
+          url: 'https://user:password@assets.example/a',
+          ref: asset.ref,
+          fingerprint: asset.fingerprint
+        };
+      }
+    }, descriptor()),
+    /must not contain URL credentials/
   );
 });
 
@@ -75,6 +88,13 @@ test('mutation must publish exact planned bytes to exact planned URL', async () 
       async publishAsset() { return { url: 'https://assets.example/other.png' }; }
     }, asset, Buffer.from('data'), plan),
     /changed planned URL/
+  );
+  await assert.rejects(
+    publishAssetDelivery({
+      ...publisher,
+      async publishAsset() { return { url: 'https://user:password@assets.example/content/diagram.png' }; }
+    }, asset, Buffer.from('data'), plan),
+    /must not contain URL credentials/
   );
   await assert.rejects(
     publishAssetDelivery(publisher, asset, Buffer.from('too-long'), plan),
