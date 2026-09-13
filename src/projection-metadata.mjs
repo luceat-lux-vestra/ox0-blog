@@ -46,10 +46,15 @@ function isAbsoluteOnAnyPlatform(value) {
   return path.posix.isAbsolute(value) || path.win32.isAbsolute(value);
 }
 
+function isCredentialFree(parsed) {
+  return parsed.username === '' && parsed.password === '';
+}
+
 export function isHttpsUrl(value) {
   if (typeof value !== 'string' || value.trim() === '') return false;
   try {
-    return new URL(value).protocol === 'https:';
+    const parsed = new URL(value);
+    return parsed.protocol === 'https:' && isCredentialFree(parsed);
   } catch {
     return false;
   }
@@ -63,6 +68,7 @@ function normalizeFeatureImage(value) {
     let parsed;
     try { parsed = new URL(image); } catch { throw new Error('remote featureImage must be a valid URL'); }
     if (parsed.protocol !== 'https:') throw new Error('remote featureImage must use https');
+    if (!isCredentialFree(parsed)) throw new Error('remote featureImage must not contain URL credentials');
     return maxLength(parsed.href, 'remote featureImage', MAX_FEATURE_IMAGE_URL_LENGTH);
   }
   if (!isAbsoluteOnAnyPlatform(image)) {
@@ -80,6 +86,7 @@ function normalizeCanonicalUrl(value) {
   let parsed;
   try { parsed = new URL(canonicalUrl); } catch { throw new Error('canonicalUrl must be a valid URL'); }
   if (parsed.protocol !== 'https:') throw new Error('canonicalUrl must use https');
+  if (!isCredentialFree(parsed)) throw new Error('canonicalUrl must not contain URL credentials');
   return maxLength(parsed.href, 'canonicalUrl', MAX_CANONICAL_URL_LENGTH);
 }
 
