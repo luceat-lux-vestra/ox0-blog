@@ -5,6 +5,8 @@ import {
 } from './projection-managed-state.mjs';
 import { synchronizeProjection } from './publisher.mjs';
 
+const MAX_FEATURE_IMAGE_EVIDENCE_URL_LENGTH = 2000;
+
 export class PlannedProjectionSynchronizationError extends Error {
   constructor(message, { cause = null, featureImageUploads = [] } = {}) {
     super(message);
@@ -39,6 +41,34 @@ function requirePublicFeatureImageUploadUrl(value) {
     throw new Error('Ghost feature-image upload result must not contain URL credentials');
   }
   return parsed.href;
+}
+
+function featureImageUploadEvidence(rawUrl) {
+  if (
+    typeof rawUrl !== 'string'
+    || rawUrl.length === 0
+    || rawUrl.length > MAX_FEATURE_IMAGE_EVIDENCE_URL_LENGTH
+  ) {
+    return { url: null };
+  }
+  let parsed;
+  try { parsed = new URL(rawUrl); } catch { return { url: null }; }
+  if (parsed.username || parsed.password) {
+    parsed.username = '';
+    parsed.password = '';
+    return { url: parsed.href, urlCredentialsRedacted: true };
+  }
+  return { url: parsed.href };
+}
+
+function normalizedUploadErrorEvidence(error) {
+  if (error?.ghostImageUploadSideEffect !== true) return null;
+  const value = error?.uploadEvidence;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { url: null };
+  return {
+    url: typeof value.url === 'string' ? value.url : null,
+    ...(value.urlCredentialsRedacted === true ? { urlCredentialsRedacted: true } : {})
+  };
 }
 
 function validateExpectedObservation(matches, expected) {
@@ -86,12 +116,23 @@ function bindPlannedClient(client, sourceIdentity, expectedObserved) {
       }
       if (property === 'uploadImageBytes' || property === 'uploadImage') {
         return async (...args) => {
-          const result = await target[property](...args);
+          const ref = typeof args[1] === 'string' ? args[1] : null;
+          let result;
+          try {
+            result = await target[property](...args);
+          } catch (error) {
+            const evidence = normalizedUploadErrorEvidence(error);
+            if (evidence) {
+              featureImageUploads.push({ method: property, ref, ...evidence });
+            }
+            throw error;
+          }
+
           const rawUrl = typeof result?.url === 'string' ? result.url : null;
           featureImageUploads.push({
             method: property,
-            ref: typeof args[1] === 'string' ? args[1] : null,
-            url: rawUrl
+            ref,
+            ...featureImageUploadEvidence(rawUrl)
           });
           const url = requirePublicFeatureImageUploadUrl(rawUrl);
           return { ...result, url };
