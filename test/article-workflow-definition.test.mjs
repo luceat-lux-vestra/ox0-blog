@@ -21,6 +21,18 @@ test('target Article Ghost workflow remains manual-only, exact-main-bound and gl
   assert.match(source, /node scripts\/workflow-dispatch-article\.mjs "\$MANIFEST_PATH"/);
 });
 
+test('target Article workflow fresh-reads canonical main before checkout and immediately before operation', async () => {
+  const source = await readFile(WORKFLOW, 'utf8');
+  const mainRefCalls = source.match(/\/git\/ref\/heads\/main/g) ?? [];
+
+  assert.equal(mainRefCalls.length, 2);
+  assert.match(source, /^      - name: Verify dispatch source is still current main$/m);
+  assert.match(source, /^      - name: Reverify current main immediately before operation$/m);
+  assert.match(source, /source_sha is no longer current main; dispatch a fresh operation/);
+  assert.match(source, /main advanced during workflow; refusing stale Article operation/);
+  assert.match(source, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
+});
+
 test('target Article workflow exposes staged plan, draft and publish operations with explicit publish confirmation', async () => {
   const source = await readFile(WORKFLOW, 'utf8');
 
