@@ -16,6 +16,8 @@ explicit task intent
       v
 source/evidence/Article preflight
       |
+      +--> production remote-resource host approvals
+      |
       v
 read-only body-asset plans
       |
@@ -29,7 +31,7 @@ exact production authorization binding (publish only)
 asset publish/reuse side effects
       |
       v
-full Article source + Ghost re-plan
+full Article source/policy + Ghost re-plan
       |
       +-- changed -> abort before Ghost mutation
       |
@@ -55,6 +57,7 @@ A production `publish` mutation requires all of:
 
 - translation state `SYNCED`;
 - Article readiness `READY`;
+- explicit host approval for every remote HTTPS body/feature image;
 - a task-scoped explicit authorization assertion supplied by the control surface;
 - authorization `articleId` equal to the prepared Article;
 - authorization source fingerprint for every required locale equal to the exact prepared projection source fingerprint.
@@ -75,7 +78,39 @@ This is important for future compiler backends such as Arkst/VirtualProject: res
 
 The same ProjectContext is threaded through the post-asset source revalidation pass. A backend/context change that affects the compiled projection therefore changes the projection source fingerprint and fails the stability check rather than being ignored.
 
-Target scripts may load deployment-specific ProjectContext/AssetPublisher dependencies through an operator-controlled `OX0_HOST_RUNTIME_MODULE=host/...mjs`. Article source cannot select this runtime module, and path/symlink escapes are rejected.
+Target scripts may load deployment-specific ProjectContext/AssetPublisher/remote-resource policy dependencies through an operator-controlled `OX0_HOST_RUNTIME_MODULE=host/...mjs`. Article source cannot select this runtime module, and path/symlink escapes are rejected.
+
+## Remote external image policy
+
+An authored HTTPS image URL does not prove immutable remote bytes.
+
+For production `publish`, every remote body image and remote feature image must therefore be approved by the host `remoteResourcePolicy` before the first Ghost read.
+
+The policy returns explicit bounded evidence:
+
+```text
+{ decision: "ALLOW", evidence: "trusted-static-cdn-v1" }
+```
+
+or denies the resource.
+
+The approval is a host trust assertion. ox0-blog does not fetch arbitrary external URLs to hash their bytes; that would introduce a separate network/SSRF/redirect/content trust boundary.
+
+Each locale plan records:
+
+```text
+remoteResourceApprovals[] = {
+  kind,
+  href,
+  evidence
+}
+```
+
+The complete preparation pass is repeated before Ghost mutation. URL/kind/policy-evidence drift is treated as source-policy drift and causes `SOURCE_REVALIDATION`.
+
+Draft planning/mutation may retain remote HTTPS image dependencies without production trust approval because it is not a public publication authorization boundary.
+
+See `docs/remote-resource-policy.md`.
 
 ## Plan binding
 
@@ -109,7 +144,7 @@ The repository includes a vendor-neutral content-addressed AssetPublisher adapte
 
 ## Source revalidation after asset side effects
 
-Asset upload may take time or interact with external infrastructure. Repository state is therefore not assumed stable across that phase.
+Asset upload may take time or interact with external infrastructure. Repository state and host trust evidence are therefore not assumed stable across that phase.
 
 Before the first Ghost mutation, the orchestration runs a second complete Article preparation pass. It compares at least:
 
@@ -118,11 +153,12 @@ Before the first Ghost mutation, the orchestration runs a second complete Articl
 - derived translation/readiness state;
 - per-locale projection source fingerprints;
 - local asset refs/digests/sizes/filenames;
-- planned public asset target URLs.
+- planned public asset target URLs;
+- approved remote-resource kinds/URLs/policy evidence.
 
 Asset provider `publish -> reuse` action change after a successful upload is allowed if the source digest and target URL remain identical. A changed target URL is not allowed because it changes the compiled projection.
 
-Any source/evidence/target difference ends the operation with `SOURCE_REVALIDATION` before Ghost mutation.
+Any source/evidence/remote-policy/target difference ends the operation with `SOURCE_REVALIDATION` before Ghost mutation.
 
 For production publish, the explicit authorization is checked again against the refreshed exact source fingerprints.
 
@@ -190,17 +226,17 @@ en    -> NOT_PROJECTED
 
 Ambiguous ownership, missing operation-known managed target, unmanaged drift, unsupported status, or recovery-read failure are represented as reconciliation-required outcomes. The system never implicitly adopts a conflicting unmanaged post.
 
-The explicit production authorization may remain conceptually valid only for the same intended active operation/source, but the next attempt must re-run source, asset, identity and plan guards. A stale PublicationPlan is never replayed blindly.
+The explicit production authorization may remain conceptually valid only for the same intended active operation/source, but the next attempt must re-run source, policy, asset, identity and plan guards. A stale PublicationPlan is never replayed blindly.
 
 ## Error stages
 
 The target library distinguishes at least:
 
-- `PREFLIGHT` — source/compiler/readiness/planning failed before side effects;
+- `PREFLIGHT` — source/compiler/readiness/remote-policy/planning failed before side effects;
 - `AUTHORIZATION` — production authorization does not match exact prepared source;
 - `ASSET_PLANNING` — required locale asset plans conflict;
 - `ASSET_PUBLICATION` — body-asset provider mutation failed before Ghost mutation;
-- `SOURCE_REVALIDATION` — source/evidence/asset target changed after preflight;
+- `SOURCE_REVALIDATION` — source/evidence/remote-policy/asset target changed after preflight;
 - `GHOST_MUTATION` — one locale mutation failed; fresh all-locale recovery attached;
 - `POST_VERIFY` — mutations returned but fresh aggregate recovery is not the requested current state.
 
@@ -232,6 +268,7 @@ The CLI:
 - never creates authorization from Article `READY` state;
 - never derives authorization from a dry-run by itself;
 - rejects a production authorization envelope on `draft` rather than silently ignoring it;
+- loads the same host AssetPublisher/ProjectContext/remote-resource policy contract used by dry-run;
 - reports Article publication failures as structured JSON with stage/side-effect/recovery evidence.
 
 This CLI being executable does not mean the agent may invoke `publish` without a user's explicit publication instruction. The workflow authorization contract remains above the CLI.
