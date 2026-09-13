@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
@@ -47,7 +47,7 @@ if (!key) throw new Error('GHOST_ADMIN_API_KEY is required');
 
 const suffix = `${Date.now()}-${randomBytes(4).toString('hex')}`;
 const articleId = `ox0-staging-verify-${suffix}`;
-const reviewId = `ox0-staging-review-${suffix}`;
+const reviewId = randomUUID();
 const articleDir = path.join(repoRoot, 'posts', `ox0-staging-verify-${suffix}`);
 const manifestPath = path.join(articleDir, 'article.json');
 const variants = [
@@ -68,6 +68,7 @@ const variants = [
     slug: `ox0-staging-verify-${suffix}-en`
   }
 ];
+
 const client = new GhostAdminClient({ url: context.stagingUrl, key });
 const knownPostIds = new Map();
 const cleanupTagIds = new Map();
@@ -244,6 +245,18 @@ async function assertNamespaceUnused() {
   }
 }
 
+async function assertNamespaceRemoved() {
+  for (const variant of variants) {
+    assert.equal(await client.getPostBySlug(variant.slug), null, `temporary staging post slug remains after cleanup: ${variant.slug}`);
+    assert.equal(await client.getPageBySlug(variant.slug), null, `temporary staging page slug remains after cleanup: ${variant.slug}`);
+    assert.equal(await recoverOwnedPost(variant), null, `temporary staging projection remains after cleanup: ${variant.locale}`);
+    for (const name of expectedIdentity(variant)) {
+      if (name.startsWith('#ox0-locale-')) continue;
+      assert.equal(await findExactTag(name), null, `temporary staging identity tag remains after cleanup: ${name}`);
+    }
+  }
+}
+
 async function deletePostById(id) {
   try {
     await client.request(`posts/${encodeURIComponent(id)}/`, { method: 'DELETE' });
@@ -307,6 +320,12 @@ async function cleanupGhost() {
         errors.push(error);
       }
     }
+  }
+
+  try {
+    await assertNamespaceRemoved();
+  } catch (error) {
+    errors.push(error);
   }
   return errors;
 }
@@ -387,13 +406,13 @@ try {
       'explicit staging mutation + promotion opt-ins',
       'clean exact-candidate git HEAD binding',
       'production Ghost host refusal + exact staging origin binding',
-      'temporary Article translation checkpoint and readiness review to SYNCED + READY',
+      'temporary Article translation checkpoint and UUID-v4 readiness review to SYNCED + READY',
       'two-locale managed Ghost draft creation with fresh current-state recovery',
       'fresh production plan restricted to exact-current managed drafts',
       'production transition restricted to draft-to-published status-update',
       'core publicationPlanGuard enforced during internal preflight and refreshed pre-mutation plan',
       'two-locale PUBLISHED_CURRENT fresh recovery',
-      'ID/recovered-identity-bound temporary post cleanup and safe unreferenced verifier-tag cleanup'
+      'ID/recovered-identity-bound temporary post cleanup plus fresh namespace absence verification'
     ]
   };
 } catch (error) {
@@ -401,7 +420,11 @@ try {
 }
 
 const cleanupErrors = await cleanupGhost();
-await rm(articleDir, { recursive: true, force: true });
+try {
+  await rm(articleDir, { recursive: true, force: true });
+} catch (error) {
+  cleanupErrors.push(error);
+}
 
 try {
   const finalStatus = git('status', '--porcelain', '--untracked-files=all');
