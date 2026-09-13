@@ -50,7 +50,7 @@ test('public tags reject normalized duplicates and reserved publisher namespace 
   }
 });
 
-test('remote feature images and canonical URLs are HTTPS-only', () => {
+test('remote feature images and canonical URLs are HTTPS-only and credential-free', () => {
   assert.equal(
     normalizeProjectionMetadata(metadata({ featureImage: 'https://img.example/a.png' })).featureImage,
     'https://img.example/a.png'
@@ -63,8 +63,16 @@ test('remote feature images and canonical URLs are HTTPS-only', () => {
     /protocol-relative/
   );
   assert.throws(
+    () => normalizeProjectionMetadata(metadata({ featureImage: 'https://user:password@img.example/a.png' })),
+    /must not contain URL credentials/
+  );
+  assert.throws(
     () => normalizeProjectionMetadata(metadata({ canonicalUrl: 'http://example.com/a' })),
     /canonicalUrl must use https/
+  );
+  assert.throws(
+    () => normalizeProjectionMetadata(metadata({ canonicalUrl: 'https://user:password@example.com/a' })),
+    /canonicalUrl must not contain URL credentials/
   );
 });
 
