@@ -11,6 +11,7 @@ import {
 } from './projection-managed-state.mjs';
 import { withProjectResourceResolver } from './project-context.mjs';
 import { planProjectionSynchronization } from './publisher.mjs';
+import { approveRemoteResources } from './remote-resource-policy.mjs';
 
 function requireAction(action) {
   if (!['draft', 'publish'].includes(action)) throw new Error('action must be draft or publish');
@@ -26,7 +27,61 @@ function assertPublishReady(evaluation, manifestPath) {
   }
 }
 
-async function loadPlanningContext({ manifestPath, action, repoRoot, compiler, projectContext }) {
+function remoteDescriptorsForLocale(loaded, evaluation, locale) {
+  const variant = loaded.bundle.article.variants.find((candidate) => candidate.locale === locale);
+  const evidence = evaluation.variantEvidence.get(locale);
+  if (!variant || !evidence) return [];
+
+  const resources = evidence.remoteResources.map((resource) => ({
+    kind: 'body-image',
+    href: resource.href,
+    articleId: loaded.bundle.article.articleId,
+    locale,
+    variantId: variant.variantId
+  }));
+  const semanticPublication = evidence.semanticPublication;
+  if (
+    semanticPublication?.featureImageRef
+    && semanticPublication.featureImageFingerprint == null
+    && /^https:\/\//.test(semanticPublication.featureImageRef)
+  ) {
+    resources.push({
+      kind: 'feature-image',
+      href: semanticPublication.featureImageRef,
+      articleId: loaded.bundle.article.articleId,
+      locale,
+      variantId: variant.variantId
+    });
+  }
+  return resources;
+}
+
+async function productionRemoteApprovals({ loaded, evaluation, remoteResourcePolicy }) {
+  const byLocale = new Map();
+  for (const locale of loaded.bundle.article.requiredLocales) {
+    const resources = remoteDescriptorsForLocale(loaded, evaluation, locale);
+    if (resources.length === 0) {
+      byLocale.set(locale, []);
+      continue;
+    }
+    if (!remoteResourcePolicy) {
+      throw new Error(
+        `production publish with remote resources requires host remoteResourcePolicy before Ghost access: ${locale}`
+      );
+    }
+    byLocale.set(locale, await approveRemoteResources(remoteResourcePolicy, resources));
+  }
+  return byLocale;
+}
+
+async function loadPlanningContext({
+  manifestPath,
+  action,
+  repoRoot,
+  compiler,
+  projectContext,
+  remoteResourcePolicy
+}) {
   const desiredAction = requireAction(action);
   const loaded = await loadArticleManifest({ manifestPath, repoRoot });
   const evaluation = await evaluateArticleBundle({
@@ -36,8 +91,18 @@ async function loadPlanningContext({ manifestPath, action, repoRoot, compiler, p
     projectContext,
     publicationByLocale: loaded.publicationByLocale
   });
-  if (desiredAction === 'publish') assertPublishReady(evaluation, loaded.manifestPath);
-  return { desiredAction, loaded, evaluation };
+  let remoteApprovalsByLocale = new Map(
+    loaded.bundle.article.requiredLocales.map((locale) => [locale, []])
+  );
+  if (desiredAction === 'publish') {
+    assertPublishReady(evaluation, loaded.manifestPath);
+    remoteApprovalsByLocale = await productionRemoteApprovals({
+      loaded,
+      evaluation,
+      remoteResourcePolicy
+    });
+  }
+  return { desiredAction, loaded, evaluation, remoteApprovalsByLocale };
 }
 
 async function prepareLocaleProjection({
@@ -46,7 +111,8 @@ async function prepareLocaleProjection({
   locale,
   compiler,
   repoRoot,
-  assetPublisher
+  assetPublisher,
+  remoteResourceApprovals = []
 }) {
   const variantEvidence = evaluation.variantEvidence.get(locale);
   if (!variantEvidence) {
@@ -96,7 +162,11 @@ async function prepareLocaleProjection({
       ...(featureFingerprint ? { featureImageFingerprint: featureFingerprint } : {})
     }
   });
-  return { ...prepared, assetPlans };
+  return {
+    ...prepared,
+    assetPlans,
+    remoteResourceApprovals: remoteResourceApprovals.map((approval) => ({ ...approval }))
+  };
 }
 
 function tagNames(tags) {
@@ -157,6 +227,7 @@ async function planPreparedProjection({ prepared, action, client, repoRoot }) {
     variantId: prepared.variant.variantId,
     sourceFingerprint: prepared.sourceFingerprint,
     assetPlans: prepared.assetPlans.map((plan) => ({ ...plan })),
+    remoteResourceApprovals: prepared.remoteResourceApprovals.map((approval) => ({ ...approval })),
     ghost: boundGhost
   };
 }
@@ -169,16 +240,25 @@ export async function planArticleProjection({
   repoRoot,
   compiler = new MarkedCompiler(),
   projectContext = {},
-  assetPublisher = null
+  assetPublisher = null,
+  remoteResourcePolicy = null
 }) {
-  const context = await loadPlanningContext({ manifestPath, action, repoRoot, compiler, projectContext });
+  const context = await loadPlanningContext({
+    manifestPath,
+    action,
+    repoRoot,
+    compiler,
+    projectContext,
+    remoteResourcePolicy
+  });
   const prepared = await prepareLocaleProjection({
     loaded: context.loaded,
     evaluation: context.evaluation,
     locale,
     compiler,
     repoRoot,
-    assetPublisher
+    assetPublisher,
+    remoteResourceApprovals: context.remoteApprovalsByLocale.get(locale) ?? []
   });
   const planned = await planPreparedProjection({
     prepared,
@@ -196,6 +276,7 @@ export async function planArticleProjection({
     readiness: context.evaluation.readiness,
     sourceFingerprint: planned.sourceFingerprint,
     assetPlans: planned.assetPlans,
+    remoteResourceApprovals: planned.remoteResourceApprovals,
     ghost: planned.ghost
   };
 }
@@ -207,9 +288,17 @@ export async function prepareArticlePublicationOperation({
   repoRoot,
   compiler = new MarkedCompiler(),
   projectContext = {},
-  assetPublisher = null
+  assetPublisher = null,
+  remoteResourcePolicy = null
 }) {
-  const context = await loadPlanningContext({ manifestPath, action, repoRoot, compiler, projectContext });
+  const context = await loadPlanningContext({
+    manifestPath,
+    action,
+    repoRoot,
+    compiler,
+    projectContext,
+    remoteResourcePolicy
+  });
 
   // Preflight every required locale before the first Ghost read. PREPARE_PUBLISH
   // must not produce a partial plan merely because one sibling projection cannot
@@ -222,7 +311,8 @@ export async function prepareArticlePublicationOperation({
       locale,
       compiler,
       repoRoot,
-      assetPublisher
+      assetPublisher,
+      remoteResourceApprovals: context.remoteApprovalsByLocale.get(locale) ?? []
     }));
   }
 
