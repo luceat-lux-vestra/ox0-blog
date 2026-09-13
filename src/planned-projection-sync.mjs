@@ -65,9 +65,14 @@ function normalizedUploadErrorEvidence(error) {
   if (error?.ghostImageUploadSideEffect !== true) return null;
   const value = error?.uploadEvidence;
   if (!value || typeof value !== 'object' || Array.isArray(value)) return { url: null };
+  const sanitized = featureImageUploadEvidence(value.url);
   return {
-    url: typeof value.url === 'string' ? value.url : null,
-    ...(value.urlCredentialsRedacted === true ? { urlCredentialsRedacted: true } : {})
+    ...sanitized,
+    ...(
+      value.urlCredentialsRedacted === true || sanitized.urlCredentialsRedacted === true
+        ? { urlCredentialsRedacted: true }
+        : {}
+    )
   };
 }
 
