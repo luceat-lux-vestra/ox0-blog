@@ -39,10 +39,12 @@ Additional guards:
 - the tracked/untracked worktree must be clean before verification;
 - the expected staging URL and actual Ghost Admin URL must match exactly after safe normalization;
 - both URLs must be credential-free HTTPS without query/fragment;
-- the verifier hard-refuses the production host `blog.ox0.uk`;
+- the verifier canonicalizes DNS hostname case/trailing-dot form and hard-refuses the production host `blog.ox0.uk`;
 - `OX0_HOST_RUNTIME_MODULE` must be absent for this base verifier.
 
-The last rule is intentional. The base verifier proves the staged Ghost state transition without allowing an unproven deployment-specific AssetPublisher/remote-resource adapter to enter the evidence run. Concrete resource adapters have their own live proof obligation after a deployment backend is selected.
+The explicit expected staging URL is an operator assertion and accidental-target guard; it is not cryptographic attestation that the remote service is non-production. The canonical production-host block is defense in depth, not a substitute for selecting and verifying the correct staging endpoint/credentials.
+
+The host-runtime rule is intentional. The base verifier proves the staged Ghost state transition without allowing an unproven deployment-specific AssetPublisher/remote-resource adapter to enter the evidence run. Concrete resource adapters have their own live proof obligation after a deployment backend is selected.
 
 Do not print or persist the staging Admin key in logs, issues, PR bodies, or evidence summaries.
 
@@ -54,6 +56,8 @@ The verifier creates a unique temporary bilingual Article under `posts/` in the 
 translation = SYNCED
 readiness   = READY
 ```
+
+The readiness invalidation/review uses the normal durable review contract: a lowercase UUID v4 invalidation ID with `blog-audit` origin. The verifier does not expand the production readiness schema with staging-only origin values.
 
 It then performs against the explicitly bound staging Ghost:
 
@@ -92,10 +96,11 @@ On success or failure after namespace ownership is established, cleanup:
 4. deletes posts by ID and verifies persisted absence;
 5. never deletes shared `#ox0-locale-*` tags;
 6. deletes other observed verifier/publisher tags only when the exact tag ID/name still matches and the tag is unreferenced;
-7. removes the temporary Article directory;
-8. verifies the checkout is clean again.
+7. fresh-reads the temporary slugs, stable projection identities, and non-shared identity tags and requires the verifier namespace to be absent;
+8. removes the temporary Article directory;
+9. verifies the checkout is clean again.
 
-If ownership is ambiguous or changed, cleanup fails closed and reports reconciliation instead of deleting by slug or guessing ownership.
+If ownership is ambiguous or changed, cleanup fails closed and reports reconciliation instead of deleting by slug or guessing ownership. If a mutation left unproven Ghost residue that cannot be safely claimed/deleted, the verifier fails rather than silently calling cleanup successful.
 
 ## Evidence scope
 
@@ -107,7 +112,7 @@ A PASS from this verifier supports only these claims for the **exact verified ca
 - the staged production policy restricts promotion to draft-to-published status updates;
 - the core plan guard survives the independent internal re-plan/revalidation boundary;
 - both locale projections can recover as `PUBLISHED_CURRENT`;
-- temporary posts can be safely recovered/cleaned by stable ownership.
+- temporary posts can be safely recovered/cleaned by stable ownership and the temporary namespace is absent afterward.
 
 It does **not** prove:
 
@@ -117,6 +122,7 @@ It does **not** prove:
 - remote-resource-policy integration with real external resources;
 - local feature-image upload behavior in the target deployment;
 - production Ghost behavior;
+- the remote endpoint's staging identity beyond the explicitly supplied URL/credentials;
 - merge safety by itself.
 
 Those remain separate proof obligations.
