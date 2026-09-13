@@ -54,25 +54,53 @@ function mimeType(filePath) {
   }
 }
 
+function uploadUrlEvidence(rawUrl) {
+  if (typeof rawUrl !== 'string' || rawUrl.length === 0 || rawUrl.length > MAX_FEATURE_IMAGE_URL_LENGTH) {
+    return { url: null };
+  }
+  let parsed;
+  try { parsed = new URL(rawUrl); } catch { return { url: null }; }
+  if (parsed.username || parsed.password) {
+    parsed.username = '';
+    parsed.password = '';
+    return { url: parsed.href, urlCredentialsRedacted: true };
+  }
+  return { url: parsed.href };
+}
+
+function imageUploadResponseError(message, image) {
+  const error = new Error(message);
+  error.name = 'GhostImageUploadResponseError';
+  error.ghostImageUploadSideEffect = true;
+  error.uploadEvidence = uploadUrlEvidence(image?.url);
+  return error;
+}
+
 function validateUploadedImage(image) {
   if (!image || typeof image.url !== 'string' || image.url.length === 0) {
-    throw new Error('Ghost image upload response did not contain a valid images[0].url string');
+    throw imageUploadResponseError(
+      'Ghost image upload response did not contain a valid images[0].url string',
+      image
+    );
   }
   if (image.url.length > MAX_FEATURE_IMAGE_URL_LENGTH) {
-    throw new Error(`Ghost image upload URL must be at most ${MAX_FEATURE_IMAGE_URL_LENGTH} characters`);
+    throw imageUploadResponseError(
+      `Ghost image upload URL must be at most ${MAX_FEATURE_IMAGE_URL_LENGTH} characters`,
+      image
+    );
   }
 
   let parsed;
   try {
     parsed = new URL(image.url);
   } catch {
-    throw new Error('Ghost image upload response URL must be a valid absolute URL');
+    throw imageUploadResponseError('Ghost image upload response URL must be a valid absolute URL', image);
   }
   if (parsed.protocol !== 'https:') {
-    throw new Error('Ghost image upload response URL must use https');
+    throw imageUploadResponseError('Ghost image upload response URL must use https', image);
   }
   if (parsed.username || parsed.password) {
-    throw new Error('Ghost image upload response URL must not contain URL credentials');
+    throw imageUploadResponseError('Ghost image upload response URL must not contain URL credentials', image);
   }
   return { ...image, url: parsed.href };
 }
