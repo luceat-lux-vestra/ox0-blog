@@ -16,6 +16,10 @@ function normalizeGhostBase(value, name) {
   return parsed.toString().replace(/\/$/, '');
 }
 
+function canonicalHostname(value) {
+  return new URL(value).hostname.toLowerCase().replace(/\.$/, '');
+}
+
 export function requireArticleStagingLiveContext({
   verifyOptIn,
   promoteOptIn,
@@ -56,7 +60,7 @@ export function requireArticleStagingLiveContext({
   if (actualBase !== expectedBase) {
     throw new Error('GHOST_ADMIN_URL must exactly match OX0_ARTICLE_STAGING_EXPECTED_URL');
   }
-  if (new URL(actualBase).hostname.toLowerCase() === PRODUCTION_HOST) {
+  if (canonicalHostname(actualBase) === PRODUCTION_HOST) {
     throw new Error(`staging Article verifier refuses production Ghost host: ${PRODUCTION_HOST}`);
   }
 
