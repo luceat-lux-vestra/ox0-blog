@@ -103,6 +103,14 @@ function stableAssetTarget(asset) {
   };
 }
 
+function stableRemoteApproval(approval) {
+  return {
+    kind: approval.kind,
+    href: approval.href,
+    evidence: approval.evidence
+  };
+}
+
 function sourceSnapshot(runtime) {
   return {
     articleId: runtime.plan.articleId,
@@ -119,7 +127,14 @@ function sourceSnapshot(runtime) {
       locale: variant.locale,
       variantId: variant.variantId,
       sourceFingerprint: variant.sourceFingerprint,
-      assets: (variant.assetPlans ?? []).map(stableAssetTarget).sort((a, b) => a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0)
+      assets: (variant.assetPlans ?? []).map(stableAssetTarget).sort((a, b) => a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0),
+      remoteResources: (variant.remoteResourceApprovals ?? [])
+        .map(stableRemoteApproval)
+        .sort((a, b) => {
+          if (a.kind !== b.kind) return a.kind < b.kind ? -1 : 1;
+          if (a.href !== b.href) return a.href < b.href ? -1 : 1;
+          return a.evidence < b.evidence ? -1 : a.evidence > b.evidence ? 1 : 0;
+        })
     }))
   };
 }
@@ -128,7 +143,7 @@ function assertSourceSnapshotStable(initial, refreshed) {
   const before = JSON.stringify(sourceSnapshot(initial));
   const after = JSON.stringify(sourceSnapshot(refreshed));
   if (before !== after) {
-    throw new Error('Article source/evidence or planned asset target changed after publication preflight');
+    throw new Error('Article source/evidence, remote-resource approval or planned asset target changed after publication preflight');
   }
 }
 
@@ -195,6 +210,7 @@ export async function synchronizeArticlePublication({
   compiler,
   projectContext = {},
   assetPublisher = null,
+  remoteResourcePolicy = null,
   authorization = null
 }) {
   if (action === 'publish') requireAuthorizationShape(authorization);
@@ -208,7 +224,8 @@ export async function synchronizeArticlePublication({
       repoRoot,
       ...(compiler ? { compiler } : {}),
       projectContext,
-      assetPublisher
+      assetPublisher,
+      remoteResourcePolicy
     });
   } catch (cause) {
     throw new ArticlePublicationError('Article publication preflight failed', {
@@ -268,7 +285,8 @@ export async function synchronizeArticlePublication({
       repoRoot,
       ...(compiler ? { compiler } : {}),
       projectContext,
-      assetPublisher
+      assetPublisher,
+      remoteResourcePolicy
     });
     assertSourceSnapshotStable(runtime, refreshed);
     if (action === 'publish') validateAuthorizationForPlan(authorization, refreshed.plan);
