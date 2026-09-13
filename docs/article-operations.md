@@ -99,13 +99,14 @@ The planner:
 1. loads/evaluates the logical Article;
 2. preflights every required locale;
 3. plans all local body-resource delivery where a host AssetPublisher is available;
-4. refuses a partial Article plan if one sibling cannot be represented;
-5. only then reads Ghost;
-6. binds each locale plan to a fresh observed Ghost snapshot.
+4. for production `publish`, requires explicit host approval for every remote HTTPS body/feature image;
+5. refuses a partial Article plan if one sibling cannot be represented or trusted;
+6. only then reads Ghost;
+7. binds each locale plan to a fresh observed Ghost snapshot.
 
 A `publish` plan additionally requires `SYNCED + READY` before Ghost access. That is eligibility for consideration, not publication authorization.
 
-A `draft` plan may operate on valid work-in-progress Article state, subject to the same structural/compiler/resource safety invariants.
+A `draft` plan may operate on valid work-in-progress Article state, subject to the same structural/compiler/resource safety invariants. Draft planning may retain external HTTPS image dependencies without production trust approval.
 
 The lower-level `planArticleProjection(...)` remains a per-locale primitive; normal workflow uses the Article-wide plan.
 
@@ -121,18 +122,28 @@ The module path is supplied only by the operator/control environment. It is not 
 
 It must be a real `.mjs` file under repository `host/`; absolute paths, traversal, aliases, and symlink escapes fail closed.
 
-The module may export:
+The module may export any combination of:
 
 ```js
 export const assetPublisher = ...;
 export const projectContext = ...;
+export async function remoteResourcePolicy(resource) { ... }
 ```
 
-`assetPublisher` must satisfy the host AssetPublisher contract. `projectContext` may be an object or per-LocaleVariant factory.
+- `assetPublisher` must satisfy the host AssetPublisher contract.
+- `projectContext` may be an object or per-LocaleVariant factory.
+- `remoteResourcePolicy` owns the explicit production trust decision for external HTTPS body/feature images.
 
-With no host runtime module, target text/remote-resource Articles can still plan normally. A local body asset requiring delivery fails before Ghost access because no AssetPublisher is available.
+With no host runtime module:
+
+- text-only Articles and repository-owned local feature images can still plan;
+- a local body asset requiring delivery fails before Ghost access because no AssetPublisher is available;
+- draft planning may retain remote HTTPS image URLs;
+- production publish planning with remote body/feature images fails before Ghost access because no remote-resource policy approved them.
 
 The repository also includes a vendor-neutral content-addressed AssetPublisher adapter; a deployment host module can bind it to its chosen object-store backend.
+
+See `docs/asset-publisher.md` and `docs/remote-resource-policy.md`.
 
 ## Fresh-session semantic evaluation
 
@@ -160,13 +171,17 @@ Changes to semantic source/assets can invalidate translation/readiness even when
 
 Projection-only metadata such as slug/tags/featured/canonical URL is deliberately handled by the separate projection fingerprint and production authorization contract; see `docs/article-readiness-v1.md`.
 
+Remote HTTPS image URLs remain authored source references. ox0-blog does not fetch arbitrary remote bytes for semantic fingerprints; production use therefore requires the separate host trust assertion described in `docs/remote-resource-policy.md`.
+
 ## Planning snapshot safety
 
 Local feature-image and body-asset evidence is tied to exact bytes.
 
 For local body assets, target AssetPublisher planning resolves a deterministic HTTPS target from exact ref/digest/size evidence. Mutation re-snapshots the file and requires the exact planned digest/size before any provider write.
 
-After body-asset side effects, the complete Article is loaded/evaluated/planned again before the first Ghost mutation. Source/evidence/target drift fails closed.
+Approved remote resources are bound into a production plan as `{ kind, href, evidence }`. Mutation repeats the full publication preparation before Ghost mutation and requires the refreshed approval evidence to match the initial plan.
+
+After body-asset side effects, the complete Article is loaded/evaluated/planned again before the first Ghost mutation. Source/evidence/remote-policy/target drift fails closed.
 
 ## Low-level target synchronization CLI
 
@@ -195,7 +210,7 @@ The JSON must be the task-scoped exact-source authorization expected by the Arti
 
 Missing, malformed, wrong-Article, incomplete-locale, or stale-fingerprint authorization fails closed.
 
-The same optional `OX0_HOST_RUNTIME_MODULE` is used by planning and synchronization, so AssetPublisher/ProjectContext semantics do not silently differ between the two entrypoints.
+The same optional `OX0_HOST_RUNTIME_MODULE` is used by planning and synchronization, so AssetPublisher, ProjectContext, and remote-resource trust semantics do not silently differ between the two entrypoints.
 
 Article publication errors are emitted as structured JSON including stage and, where applicable:
 
