@@ -26,6 +26,8 @@ function decodeSchemeRelevantEntities(value) {
       try { return String.fromCodePoint(codePoint); } catch { return match; }
     })
     .replace(/&colon;/gi, ':')
+    .replace(/&sol;/gi, '/')
+    .replace(/&bsol;/gi, '\\')
     .replace(/&tab;/gi, '\t')
     .replace(/&newline;/gi, '\n');
 }
