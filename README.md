@@ -36,7 +36,8 @@ See:
 - `docs/translation-fingerprint-v1.md` — translation-equivalence evidence;
 - `docs/article-readiness-v1.md` — semantic readiness ownership;
 - `docs/article-operations.md` — validation/planning/control entrypoints;
-- `docs/asset-publisher.md` — body-resource publication contract;
+- `docs/asset-publisher.md` — repository-owned body-resource publication contract;
+- `docs/remote-resource-policy.md` — production trust policy for external HTTPS images;
 - `docs/article-publication.md` — guarded Article-level mutation orchestration;
 - `docs/workflow/` — durable state/authorization/Git/RTA policy.
 
@@ -51,6 +52,7 @@ See:
 - Production publication authorization is task-scoped and explicit. It is never inferred from source metadata, Git state, RTA state, or Ghost state.
 - A normal Git push does not mutate Ghost.
 - Target `PREPARE_PUBLISH` is Article-wide and read-only with respect to Ghost.
+- Production use of external HTTPS body/feature images requires explicit host trust approval; URL-only source is not treated as proof of immutable remote bytes.
 - Per-locale Ghost projection state remains independently recoverable; partial multi-locale failure is never collapsed into aggregate success.
 - No unmanaged Ghost post is implicitly adopted because a public slug happens to match.
 
@@ -143,12 +145,17 @@ OX0_HOST_RUNTIME_MODULE=host/runtime.mjs
 
 The path must remain under repository `host/`; absolute/traversal/symlink escapes are rejected. Article source cannot choose this module.
 
-The module may export:
+The module may export any combination of:
 
 ```js
 export const assetPublisher = ...;
 export const projectContext = ...;
+export async function remoteResourcePolicy(resource) { ... }
 ```
+
+- `assetPublisher` binds repository-owned body assets to stable HTTPS delivery.
+- `projectContext` supplies compiler/VirtualProject host context.
+- `remoteResourcePolicy` explicitly approves or denies external HTTPS body/feature images for production publication.
 
 A host module may bind the repository's vendor-neutral content-addressed AssetPublisher policy to R2/S3/OCI/etc. without putting cloud-specific storage logic into the compiler or Article manifest.
 
@@ -171,6 +178,8 @@ npm run dry-run -- posts/example/article.json publish
 `publish` planning requires current `SYNCED + READY` Article state. The result remains read-only: it does not create/update Ghost posts, stamp metadata, upload feature images, or publish body assets.
 
 If local body assets exist, the optional host runtime must provide an AssetPublisher. Without one, planning fails before Ghost access rather than falling back to legacy data URIs.
+
+If remote HTTPS body/feature images exist, `publish` additionally requires `remoteResourcePolicy` approval before Ghost access. The plan records `{ kind, href, evidence }` for every approved remote resource. Draft planning may retain external HTTPS images without production trust approval.
 
 ## Target Article synchronization control surface
 
@@ -206,12 +215,12 @@ explicit user publication instruction
         -> control layer prepares exact current Article plan
         -> control layer binds that intent to exact source fingerprints
         -> sync:article consumes the bound authorization
-        -> publication library revalidates source/assets/Ghost before mutation
+        -> publication library revalidates source/assets/remote-policy/Ghost before mutation
 ```
 
 Do not invoke the production `publish` action merely because an Article is `READY`.
 
-The target CLI and dry-run use the same optional `OX0_HOST_RUNTIME_MODULE`, so compiler ProjectContext and AssetPublisher policy do not silently differ between planning and execution.
+The target CLI and dry-run use the same optional `OX0_HOST_RUNTIME_MODULE`, so compiler ProjectContext, AssetPublisher policy, and remote-resource trust policy do not silently differ between planning and execution.
 
 No target production GitHub Actions workflow is enabled yet. The remaining workflow in `.github/workflows/ghost-publish.yml` is explicitly legacy compatibility only.
 
@@ -221,8 +230,9 @@ Target Article mutation preserves these boundaries:
 
 - exact Article + required-locale source-fingerprint authorization for production publish;
 - Article-wide preflight;
+- explicit production approval for external HTTPS image resources;
 - body-asset publication/reuse before Ghost mutation;
-- full source/plan revalidation after asset side effects;
+- full source/plan/policy revalidation after asset side effects;
 - stale Ghost observation rejection;
 - sequential per-locale mutation with fresh mixed-state recovery on failure;
 - final all-locale currentness verification.
@@ -243,6 +253,8 @@ DocumentCompiler.compile(LocaleVariant, ProjectContext)
 Compiler code does not own storage/CDN policy. Local body assets are source evidence; the host AssetPublisher plans stable HTTPS delivery and the compiler sees only a host `resolveResource` callback.
 
 Resolved ProjectContext is preserved through validation, review, planning, AssetPublisher recompilation, and publication so a future Arkst/VirtualProject backend does not lose host context.
+
+Canonical Markdown rejects raw HTML and active/ambiguous URL forms. Links are limited to relative URLs or `http/https/mailto/tel`; images are relative source refs or HTTPS. `javascript:`, `data:`, `file:`, protocol-relative URLs, control-character schemes, and backslash-ambiguous hrefs fail closed before publication planning.
 
 ## Ghost projection identity
 
@@ -275,6 +287,8 @@ Local feature images are separate from body AssetPublisher delivery and currentl
 The publisher verifies the local feature-image digest and uploads the exact validated snapshot bytes. Because Ghost media upload and post mutation are not transactional, an upload can succeed before a later post mutation fails.
 
 Target Article errors preserve successful feature-image upload evidence (`method`, repository ref, returned URL) so orphan-media side effects are visible. This is observability, not an automatic rollback claim.
+
+Remote HTTPS feature images are not fetched by ox0-blog. Production use requires host remote-resource approval because the bytes behind an unchanged URL are outside repository-observed evidence.
 
 ## Ghost setup
 
