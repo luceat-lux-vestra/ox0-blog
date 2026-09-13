@@ -66,10 +66,12 @@ For a Blog/RTA task:
 4. inspect any active Article PR/work branch that may own the requested change;
 5. derive translation state from required locales + current fingerprints + the checkpoint on the source being evaluated;
 6. when RTA is involved, load `research-to-action/AGENTS.md` and recover RTA state from that repository's current authority;
-7. fresh-read Ghost only when projection/publication state is relevant;
+7. when projection/publication is relevant, resolve current public-resource safety/resource-delivery/host external-resource policy evidence as applicable and fresh-read Ghost;
 8. apply the operation guards from `state-machines.md` and the Git policy before mutation.
 
-Do not use a rendered Ghost post as the canonical editing source when repository source exists. Do not use an RTA lifecycle label as Blog authorization. Do not use a remembered prior-session state when a durable source can be re-read.
+Do not use a rendered Ghost post as the canonical editing source when repository source exists. Do not use an RTA lifecycle label as Blog authorization. Do not use a remembered prior-session state when a durable/current source or host policy can be re-evaluated.
+
+A recovered PublicationPlan or prior host external-resource approval is not durable mutation authority. Recompute plan-bound resource targets/approvals from current source and current host policy before a new Ghost write.
 
 ### Target resolution
 
@@ -94,6 +96,7 @@ Different machines intentionally observe different authorities:
 - an active branch/PR is the authority for that **work unit's candidate source**, translation review, and candidate checkpoint;
 - GitHub is authoritative for branch/PR/merge state;
 - Ghost must be fresh-read for projection state before any write;
+- current host resource policy/provider observations are authoritative only for the ephemeral PublicationPlan operation that evaluated them; they are not durable publication authorization;
 - RTA repository state is authoritative for RTA lifecycle.
 
 An unmerged branch edit must **not** by itself mark the currently published Ghost projection `OUTDATED`; it means a new Blog work unit exists. Projection becomes outdated only when the canonical production source relation changes under the projection-state contract.
@@ -156,7 +159,9 @@ This explicitly permits entering `MERGE_REVIEW`; `merge해` also authorizes the 
 
 Example: `발행 준비해`.
 
-This is **read-only with respect to Ghost by default**. The agent validates canonical source/translation/assets, fresh-reads Ghost, checks identity/collision/drift, and produces a fresh `PublicationPlan`. It must not create/update a Ghost draft or publish merely as a side effect of preparation.
+This is **read-only with respect to Ghost and publication resource storage by default**. The agent validates canonical source/translation/assets/public-resource safety, resolves read-only resource-delivery targets and current host external-resource approvals where applicable, fresh-reads Ghost, checks identity/collision/drift, and produces a fresh `PublicationPlan` bound to that evidence.
+
+Preparation must not create/update a Ghost draft, publish a post, or upload/mutate publication resources merely as a side effect. A host `plan` operation may inspect provider state but must remain read-only.
 
 A Ghost draft mutation requires a task that actually authorizes draft projection (for example, an explicit request to create/update a Ghost draft). It is still not production publication.
 
@@ -164,11 +169,13 @@ A Ghost draft mutation requires a task that actually authorizes draft projection
 
 Example: `발행해`.
 
-This is explicit production-publication authorization for the intended Article operation, subject to all source, translation, identity, drift, and publication guards. It does **not** implicitly authorize a pending Git merge; merge and production publication remain separate authorization boundaries.
+This is explicit production-publication authorization for the intended Article operation, subject to all source, translation, public-resource safety, current host external-resource trust, identity, drift, and publication guards. It does **not** implicitly authorize a pending Git merge; merge and production publication remain separate authorization boundaries.
 
-For multiple locale projections, success is established per variant and then aggregated; partial success is recovered from fresh Ghost reads and is never reported as whole-Article publication success.
+Production authorization does not substitute for host external-resource trust. If a publication resource is external to repository-owned bytes, any required current host approval/policy evidence must be present in the fresh plan under repository policy.
 
-Authorization is not a substitute for validation. A stale plan, changed canonical source, changed Ghost state, or unresolved reconciliation condition requires re-planning/re-validation before the write.
+For multiple locale projections, success is established per variant and then aggregated; partial success is recovered from fresh Ghost reads and is never reported as whole-Article publication success. If a post write may have succeeded but final publisher revision/sync evidence is missing or invalid, recover it as reconciliation-required rather than not-projected.
+
+Authorization is not a substitute for validation. A stale plan, changed canonical source, changed resource target/host policy evidence, changed Ghost state, or unresolved reconciliation condition requires re-planning/re-validation before the write.
 
 ## Current implementation vs target architecture
 
