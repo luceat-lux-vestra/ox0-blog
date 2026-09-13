@@ -22,7 +22,12 @@ function requireModuleRef(value) {
     throw new Error('OX0_HOST_RUNTIME_MODULE must reference a .mjs module');
   }
   const normalized = path.posix.normalize(ref);
-  if (normalized === '..' || normalized.startsWith('../') || normalized.startsWith('./')) {
+  if (
+    normalized !== ref
+    || normalized === '..'
+    || normalized.startsWith('../')
+    || normalized.startsWith('./')
+  ) {
     throw new Error('OX0_HOST_RUNTIME_MODULE must not traverse or alias its repository path');
   }
   if (!normalized.startsWith('host/')) {
