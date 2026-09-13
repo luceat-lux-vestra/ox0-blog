@@ -33,12 +33,16 @@ class FailingAfterImageUploadGhostClient {
 }
 
 class TransportRejectingAfterUploadGhostClient extends FailingAfterImageUploadGhostClient {
+  constructor({ uploadEvidence = { url: 'http://ghost.example/content/images/cover.png' } } = {}) {
+    super();
+    this.uploadEvidence = uploadEvidence;
+  }
   async uploadImageBytes(file, ref) {
     this.uploads.push({ ref, filename: file.filename, url: null });
-    const error = new Error('Ghost image upload response URL must use https');
+    const error = new Error('Ghost image upload response URL rejected by transport validation');
     error.name = 'GhostImageUploadResponseError';
     error.ghostImageUploadSideEffect = true;
-    error.uploadEvidence = { url: 'http://ghost.example/content/images/cover.png' };
+    error.uploadEvidence = this.uploadEvidence;
     throw error;
   }
 }
@@ -176,5 +180,32 @@ test('target Article preserves transport-level upload side-effect evidence when 
   );
 
   assert.equal(client.uploads.length, 1);
+  assert.equal(client.createCalls, 0);
+});
+
+test('target Article re-sanitizes credentialed transport upload evidence instead of trusting lower layers', async () => {
+  const value = await fixture();
+  const client = new TransportRejectingAfterUploadGhostClient({
+    uploadEvidence: {
+      url: 'https://user:password@ghost.example/content/images/cover.png'
+    }
+  });
+
+  await assert.rejects(
+    synchronizeArticlePublication({ ...value, action: 'draft', client }),
+    (error) => {
+      assert.ok(error instanceof ArticlePublicationError);
+      assert.equal(error.stage, 'GHOST_MUTATION');
+      assert.deepEqual(error.featureImageUploads, [{
+        method: 'uploadImageBytes',
+        ref: 'assets/article/cover.png',
+        url: 'https://ghost.example/content/images/cover.png',
+        urlCredentialsRedacted: true
+      }]);
+      assert.doesNotMatch(JSON.stringify(error.featureImageUploads), /user|password/);
+      return true;
+    }
+  );
+
   assert.equal(client.createCalls, 0);
 });
