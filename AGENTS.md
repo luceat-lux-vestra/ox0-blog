@@ -38,6 +38,8 @@ Once merge judgment has explicitly started, correctness/safety not proven is FAI
 - Use Article-wide dry-run/read-only planning before first target mutation when the publication workflow supports it.
 - Treat translation checkpoint, Article semantic readiness, projection revision, remote-resource trust, and production authorization as separate proofs. None substitutes for another.
 - A remote HTTPS image URL is not immutable-byte evidence. Production use of remote body/feature images requires explicit host `remoteResourcePolicy` approval; otherwise fail closed before Ghost access.
+- `PREPARE_PUBLISH`/planning is read-only with respect to Ghost and publication resource storage. A `draft` operation is not read-only: it may stage repository-owned body assets and upload a local feature image before creating/updating the managed Ghost draft.
+- The target manual production path is staged: exact `main` source -> optional/read-only plan -> explicit managed draft -> fresh publish plan -> explicit production publish. Production publish requires every required locale to already be an exact-current managed draft, every local body-asset plan to be `reuse`, and the Ghost operation to be draft-to-published `status-update` only.
 
 ## Target Article contract
 
@@ -51,7 +53,9 @@ For new architecture work, prefer the Article path documented by:
 - `docs/remote-resource-policy.md`
 - `docs/article-publication.md`
 
-`npm run dry-run` is the target Article planner. `npm run validate` currently checks both migration-era models. Legacy one-file commands/workflows are explicitly marked compatibility-only.
+`npm run dry-run` is the target Article planner. `npm run validate` currently checks both migration-era models. `.github/workflows/article-ghost.yml` is the target manual Article control surface; `.github/workflows/ghost-publish.yml` remains legacy compatibility only.
+
+The Article workflow is `workflow_dispatch` only, operates only on the exact current `main` SHA supplied by the control surface, and globally serializes Article Ghost operations. `publish` additionally requires exact target confirmation `publish:<manifest_path>@<source_sha>`; this is an exact-target binding, not permission to infer publication from source state.
 
 ## Transitional implementation warning
 
