@@ -262,6 +262,7 @@ IDENTITY_AMBIGUITY
 COLLISION
 UNMANAGED_MUTATION
 MISSING_MANAGED_TARGET
+INCOMPLETE_MANAGED_EVIDENCE
 ```
 
 ### Meaning
@@ -277,6 +278,8 @@ Visibility is preserved for outdated projections because agent behavior differs 
 
 If publisher metadata says a managed target existed but the Ghost post is missing, use `RECONCILIATION_REQUIRED(MISSING_MANAGED_TARGET)`, not `NOT_PROJECTED`; do not silently recreate/adopt content without reconciliation.
 
+If Ghost create/update may have succeeded but final publisher revision/sync evidence is missing, malformed, or unverified, use `RECONCILIATION_REQUIRED(INCOMPLETE_MANAGED_EVIDENCE)`, not `NOT_PROJECTED`. A partially mutated post must remain visible for explicit repair rather than being silently forgotten or recreated.
+
 ### Canonical-vs-candidate source rule
 
 An unmerged Article branch does **not** make a currently published projection `OUTDATED(PUBLISHED)`. Published-currentness is evaluated against canonical production source, normally merged `main`.
@@ -291,23 +294,27 @@ A `PublicationPlan` is ephemeral and bound to:
 
 - exact Article/variant identities;
 - exact target **projection fingerprints** and source identity;
+- exact planned repository-owned resource delivery targets/digests when applicable;
+- current host approval/policy evidence for external publication resources when applicable;
 - observed Ghost IDs/managed tags/status/version fields used for optimistic guards;
 - intended operations.
 
-Any relevant source or Ghost change makes the plan stale. Recompute before mutation.
+Any relevant source, planned resource target, host-policy/approval evidence, or Ghost change makes the plan stale. Recompute before mutation.
+
+Host/resource-policy approval evidence is operation evidence, not durable publication authorization. After task/session loss, recompute it from current source and current host policy instead of treating a prior plan as authority.
 
 ### Transitions
 
 | From | Event | Guard / preconditions | Deterministic side effects | Semantic / agent review | To | User authorization required? |
 |---|---|---|---|---|---|---|
-| any non-reconciliation state | prepare/dry-run | source/translation validation PASS | fresh-read Ghost; emit bounded plan; no write | inspect collision/ownership/publication intent | unchanged | no |
-| NOT_PROJECTED | authorized draft projection | active task authorizes Ghost draft mutation; plan/identity guards PASS | create managed draft; fresh-read verify | verify privacy/public-content policy | DRAFT_CURRENT | **yes for Ghost draft mutation** |
-| OUTDATED(DRAFT) | authorized draft refresh | active task authorizes Ghost draft mutation; plan/identity guards PASS | update existing managed draft without publishing; fresh-read verify | review intended draft source | DRAFT_CURRENT | **yes for Ghost draft mutation** |
-| NOT_PROJECTED / DRAFT_CURRENT / OUTDATED(DRAFT) / OUTDATED(PUBLISHED) | production publish | Article READY for canonical production source; translation SYNCED; source canonical; fresh plan/identity/drift guards PASS | create/publish or update managed public post; fresh-read verify | publication content/identity checks PASS | PUBLISHED_CURRENT | **yes: explicit production publication authorization** |
+| any non-reconciliation state | prepare/dry-run | source/translation/resource validation PASS; current host resource policy can be evaluated where applicable | resolve bounded resource targets/approvals; fresh-read Ghost; emit bounded plan; no write | inspect collision/ownership/publication intent and unresolved resource trust | unchanged | no |
+| NOT_PROJECTED | authorized draft projection | active task authorizes Ghost draft mutation; public-resource safety + plan/identity guards PASS | create managed draft; fresh-read verify | verify privacy/public-content policy | DRAFT_CURRENT | **yes for Ghost draft mutation** |
+| OUTDATED(DRAFT) | authorized draft refresh | active task authorizes Ghost draft mutation; public-resource safety + plan/identity guards PASS | update existing managed draft without publishing; fresh-read verify | review intended draft source | DRAFT_CURRENT | **yes for Ghost draft mutation** |
+| NOT_PROJECTED / DRAFT_CURRENT / OUTDATED(DRAFT) / OUTDATED(PUBLISHED) | production publish | Article READY for canonical production source; translation SYNCED; source canonical; public-resource safety PASS; every required external publication resource has current host approval bound to fresh plan; identity/drift guards PASS | create/publish or update managed public post; fresh-read verify | publication content/identity/resource checks PASS | PUBLISHED_CURRENT | **yes: explicit production publication authorization** |
 | DRAFT_CURRENT | targeted draft source/projection fingerprint changes | uniquely owned draft exists | no Ghost write; recompute relation | none | OUTDATED(DRAFT) | no |
 | PUBLISHED_CURRENT | canonical production projection fingerprint changes | uniquely owned published projection exists | no Ghost write; keep current public post live | none | OUTDATED(PUBLISHED) | no |
 | OUTDATED(DRAFT) / OUTDATED(PUBLISHED) | source reverts/matches observed managed fingerprint | exact relation can be proven without write | recompute relation | none | DRAFT_CURRENT or PUBLISHED_CURRENT as observed | no |
-| any managed state | drift/collision/identity ambiguity/missing managed target detected | safe automatic interpretation not proven | stop write path; preserve observations | determine ownership/current intent | RECONCILIATION_REQUIRED | only for material ownership/intent decision |
+| any managed state | drift/collision/identity ambiguity/missing managed target/incomplete managed evidence detected | safe automatic interpretation not proven | stop write path; preserve observations | determine ownership/current intent | RECONCILIATION_REQUIRED | only for material ownership/intent decision |
 | RECONCILIATION_REQUIRED | reconciliation proves unique ownership/current intent | authoritative evidence resolves ambiguity | fresh-read and recompute relation | review semantic/manual Ghost changes before overwrite | recomputed state | only when needed |
 
 ### Published projection is not a draft staging surface
@@ -325,10 +332,11 @@ If one locale succeeds and another fails:
 1. do not claim whole-Article publication success;
 2. fresh-read every targeted variant;
 3. preserve actual per-variant states, e.g. first-publish failure may yield `ko-KR=PUBLISHED_CURRENT`, `en=NOT_PROJECTED`; update failure may yield `en=OUTDATED(PUBLISHED)`;
-4. do not automatically roll back a successfully published sibling;
-5. within the same active authorized publish operation, re-plan/recheck guards before retry;
-6. after task/session loss, do **not** infer production authorization from the partial state—require a fresh explicit publication instruction unless a durable automation policy exists;
-7. never adopt/overwrite an ambiguous unmanaged post to complete the set.
+4. if a post create/update may have succeeded but final publisher revision/sync evidence is missing or invalid, recover that locale as `RECONCILIATION_REQUIRED`, never `NOT_PROJECTED`;
+5. do not automatically roll back a successfully published sibling;
+6. within the same active authorized publish operation, re-plan/recheck source/resource/host-policy/Ghost guards before retry;
+7. after task/session loss, do **not** infer production authorization or reuse old host-policy evidence from the partial state—require fresh planning and a fresh explicit publication instruction unless a durable automation policy exists;
+8. never adopt/overwrite an ambiguous unmanaged post to complete the set.
 
 A Git merge never automatically transitions a Ghost projection to `PUBLISHED_CURRENT`.
 
@@ -390,7 +398,7 @@ Examples:
   -> MERGE                # merge judgment + merge on PASS
 
 "발행 준비해"
-  -> PREPARE_PUBLISH      # read-only Ghost plan
+  -> PREPARE_PUBLISH      # read-only Ghost/resource plan
 
 "Ghost draft로 올려"
   -> PROJECT_GHOST_DRAFT  # explicit non-public Ghost mutation
@@ -465,18 +473,20 @@ AND live rules/required contexts + mergeability PASS
 
 ```text
 canonical/target source identity known
-AND source/translation/assets validation sufficient for planning
+AND source/translation/assets/public-resource safety validation sufficient for planning
+AND current host resource policy can be evaluated where applicable
+AND planned repository-owned resource targets and external-resource approvals can be bound to the plan
 AND Ghost can be fresh-read
 ```
 
-Effect is read-only: produce `PublicationPlan`; no Ghost mutation.
+Effect is read-only: produce a fresh `PublicationPlan`; do not mutate Ghost or resource storage during preparation.
 
 ### `may_project_ghost_draft`
 
 ```text
 active task explicitly authorizes Ghost draft mutation
 AND target projection is NOT_PROJECTED or OUTDATED(DRAFT)
-AND source/translation validation PASS
+AND source/translation/public-resource safety validation PASS
 AND fresh PublicationPlan guards PASS
 AND ownership/collision/drift checks PASS
 ```
@@ -490,12 +500,14 @@ active task explicitly authorizes production publication
 AND production source version is canonical/authorized by repository policy
 AND Article state == READY for that exact production source
 AND translation state == SYNCED for that exact production source
-AND compiler/source/assets validation PASS
+AND compiler/source/assets/public-resource safety validation PASS
+AND every required external publication resource has current host approval/policy evidence bound to the fresh plan
+AND planned resource targets + host-policy evidence are unchanged from the current preflight
 AND fresh PublicationPlan guards PASS for every targeted LocaleVariant
 AND Ghost ownership/collision/drift checks PASS
 ```
 
-Production authorization never substitutes for validation and never implicitly authorizes a pending Git merge.
+Production authorization never substitutes for validation, current host external-resource trust, or public-resource safety, and never implicitly authorizes a pending Git merge.
 
 ### `may_capture_to_rta`
 
@@ -525,6 +537,7 @@ This does not imply RTA promotion.
 | fully current public Article | READY | SYNCED | latest work unit MERGED | all required variants `PUBLISHED_CURRENT` |
 | RTA evidence weakens published claim before source edit | REVIEW_REQUIRED | SYNCED | IDLE or ACTIVE | can remain `PUBLISHED_CURRENT` |
 | managed published Ghost post manually edited | Article unchanged | translation unchanged | Git unchanged | affected variant `RECONCILIATION_REQUIRED(DRIFT)` |
+| post write succeeded but final publisher evidence failed | Article unchanged | translation unchanged | Git unchanged | affected variant `RECONCILIATION_REQUIRED(INCOMPLETE_MANAGED_EVIDENCE)` |
 | two-locale first publish partially succeeds | READY | SYNCED | MERGED | e.g. `ko-KR=PUBLISHED_CURRENT`, `en=NOT_PROJECTED` |
 
 No single enum may collapse these facts.
@@ -568,9 +581,10 @@ Do **not** persist by default:
 - redundant mega-state copies;
 - task-scoped merge authorization;
 - task-scoped Ghost-draft authorization;
-- task-scoped production-publication authorization.
+- task-scoped production-publication authorization;
+- stale PublicationPlans or stale host/resource approval evidence as reusable authorization.
 
-After session/task loss, mutation authorization must be re-established from a new explicit instruction unless a separately approved durable automation/authorization mechanism exists.
+After session/task loss, mutation authorization must be re-established from a new explicit instruction unless a separately approved durable automation/authorization mechanism exists. PublicationPlan resource targets and host-policy approvals must also be recomputed from current source/current host policy before any new write.
 
 If persisted state names/meaning become machine-consumed, workflow/checkpoint contract versions must be checked on recovery. Missing, malformed, contradictory, or unsupported newer contracts fail closed before mutation.
 
@@ -584,11 +598,15 @@ The following must fail closed or remain read-only:
 - edit stale sibling -> `SYNCED` without separate equivalence PASS + checkpoint advance;
 - bare `state: READY` with no recoverable reviewed-source evidence -> trusted `READY`;
 - unmerged branch edit -> published Ghost projection `OUTDATED(PUBLISHED)`;
-- `PREPARE_PUBLISH` -> any Ghost write;
+- `PREPARE_PUBLISH` -> any Ghost or resource-storage write;
+- unsafe/credential-bearing public publication resource -> Ghost write;
+- required external publication resource without current host approval -> production Ghost write;
+- changed/stale resource target or host-policy evidence after planning -> Ghost write without re-planning;
 - `OUTDATED(PUBLISHED)` -> `DRAFT_CURRENT` as routine staging;
 - prior managed mapping + missing Ghost target -> silently `NOT_PROJECTED` and recreated;
+- post create/update may have succeeded but final revision/sync evidence is missing/invalid -> `NOT_PROJECTED`;
 - partial locale publication -> whole-Article publication success;
-- recovered partial publication after session loss -> implicit reuse of old publish authorization;
+- recovered partial publication after session loss -> implicit reuse of old publish authorization or old host-policy evidence;
 - `CANDIDATE` -> merge without explicit merge judgment and exact-HEAD gate;
 - `MERGE_REVIEW` remaining valid after HEAD moves;
 - recovered `MERGE_REVIEW` state -> implicit merge authorization in a fresh task;
