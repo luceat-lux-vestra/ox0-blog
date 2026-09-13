@@ -25,6 +25,7 @@ function requireHttpsUrl(value, name) {
   let parsed;
   try { parsed = new URL(source); } catch { throw new Error(`${name} must be a valid URL`); }
   if (parsed.protocol !== 'https:') throw new Error(`${name} must use https`);
+  if (parsed.username || parsed.password) throw new Error(`${name} must not contain URL credentials`);
   return parsed.href;
 }
 
