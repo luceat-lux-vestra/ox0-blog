@@ -2,6 +2,7 @@ import { lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { requireAssetPublisher } from './asset-publisher.mjs';
+import { requireRemoteResourcePolicy } from './remote-resource-policy.mjs';
 
 function isOutside(root, candidate) {
   const relative = path.relative(root, candidate);
@@ -74,7 +75,7 @@ export async function loadHostRuntime({
   moduleRef = process.env.OX0_HOST_RUNTIME_MODULE ?? null
 } = {}) {
   if (moduleRef == null || moduleRef === '') {
-    return { assetPublisher: null, projectContext: {} };
+    return { assetPublisher: null, projectContext: {}, remoteResourcePolicy: null };
   }
   const ref = requireModuleRef(moduleRef);
   const absolute = await confinedHostModule(repoRoot, ref);
@@ -84,10 +85,14 @@ export async function loadHostRuntime({
     ? null
     : requireAssetPublisher(loaded.assetPublisher);
   const projectContext = normalizeProjectContextExport(loaded.projectContext);
+  const remoteResourcePolicy = loaded.remoteResourcePolicy == null
+    ? null
+    : requireRemoteResourcePolicy(loaded.remoteResourcePolicy);
 
-  if (assetPublisher == null && Object.keys(loaded).every((key) => key !== 'projectContext')) {
-    throw new Error('host runtime module must export assetPublisher and/or projectContext');
+  const hasProjectContext = Object.prototype.hasOwnProperty.call(loaded, 'projectContext');
+  if (assetPublisher == null && !hasProjectContext && remoteResourcePolicy == null) {
+    throw new Error('host runtime module must export assetPublisher, projectContext and/or remoteResourcePolicy');
   }
 
-  return { assetPublisher, projectContext };
+  return { assetPublisher, projectContext, remoteResourcePolicy };
 }
