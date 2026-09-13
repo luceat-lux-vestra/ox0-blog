@@ -31,7 +31,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: article-ghost-${{ inputs.manifest_path }}
+  group: article-ghost-control
   cancel-in-progress: false
 
 jobs:
@@ -39,6 +39,7 @@ jobs:
     name: Guarded Article Ghost operation
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     environment: ox0-blog
     env:
       MANIFEST_PATH: ${{ inputs.manifest_path }}
