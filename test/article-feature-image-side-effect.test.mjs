@@ -9,7 +9,11 @@ import {
 } from '../src/article-publication.mjs';
 
 class FailingAfterImageUploadGhostClient {
-  constructor() { this.uploads = []; }
+  constructor({ uploadUrl = 'https://ghost.example/content/images/cover.png' } = {}) {
+    this.uploads = [];
+    this.uploadUrl = uploadUrl;
+    this.createCalls = 0;
+  }
   async getPostsBySourceTag() { return []; }
   async getPostBySlug() { return null; }
   async getPageBySlug() { return null; }
@@ -17,12 +21,13 @@ class FailingAfterImageUploadGhostClient {
     const upload = {
       ref,
       filename: file.filename,
-      url: 'https://ghost.example/content/images/cover.png'
+      url: this.uploadUrl
     };
     this.uploads.push(upload);
     return { url: upload.url };
   }
   async createPost() {
+    this.createCalls += 1;
     throw new Error('injected post create failure after feature image upload');
   }
 }
@@ -86,4 +91,55 @@ test('Article mutation surfaces successful feature-image upload when later Ghost
   );
 
   assert.equal(client.uploads.length, 1);
+  assert.equal(client.createCalls, 1);
+});
+
+test('target Article refuses non-HTTPS Ghost feature-image upload result before post mutation while preserving side-effect evidence', async () => {
+  const value = await fixture();
+  const client = new FailingAfterImageUploadGhostClient({
+    uploadUrl: 'http://ghost.example/content/images/cover.png'
+  });
+
+  await assert.rejects(
+    synchronizeArticlePublication({ ...value, action: 'draft', client }),
+    (error) => {
+      assert.ok(error instanceof ArticlePublicationError);
+      assert.equal(error.stage, 'GHOST_MUTATION');
+      assert.match(error.cause.message, /feature-image upload result must use https/);
+      assert.deepEqual(error.featureImageUploads, [{
+        method: 'uploadImageBytes',
+        ref: 'assets/article/cover.png',
+        url: 'http://ghost.example/content/images/cover.png'
+      }]);
+      return true;
+    }
+  );
+
+  assert.equal(client.uploads.length, 1);
+  assert.equal(client.createCalls, 0);
+});
+
+test('target Article refuses credentialed Ghost feature-image upload result before post mutation while preserving side-effect evidence', async () => {
+  const value = await fixture();
+  const client = new FailingAfterImageUploadGhostClient({
+    uploadUrl: 'https://user:password@ghost.example/content/images/cover.png'
+  });
+
+  await assert.rejects(
+    synchronizeArticlePublication({ ...value, action: 'draft', client }),
+    (error) => {
+      assert.ok(error instanceof ArticlePublicationError);
+      assert.equal(error.stage, 'GHOST_MUTATION');
+      assert.match(error.cause.message, /must not contain URL credentials/);
+      assert.deepEqual(error.featureImageUploads, [{
+        method: 'uploadImageBytes',
+        ref: 'assets/article/cover.png',
+        url: 'https://user:password@ghost.example/content/images/cover.png'
+      }]);
+      return true;
+    }
+  );
+
+  assert.equal(client.uploads.length, 1);
+  assert.equal(client.createCalls, 0);
 });
