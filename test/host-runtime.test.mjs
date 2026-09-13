@@ -11,7 +11,7 @@ async function fixture() {
   return repoRoot;
 }
 
-test('host runtime loads repository-confined AssetPublisher and ProjectContext exports', async () => {
+test('host runtime loads repository-confined AssetPublisher, ProjectContext and remote resource policy exports', async () => {
   const repoRoot = await fixture();
   await writeFile(path.join(repoRoot, 'host', 'runtime.mjs'), `
 export const assetPublisher = {
@@ -25,6 +25,9 @@ export const assetPublisher = {
   }
 };
 export const projectContext = (variant) => ({ marker: 'ctx-' + variant.locale });
+export async function remoteResourcePolicy(resource) {
+  return { decision: 'ALLOW', evidence: 'trusted-cdn-v1:' + resource.kind };
+}
 `, 'utf8');
 
   const runtime = await loadHostRuntime({
@@ -33,14 +36,33 @@ export const projectContext = (variant) => ({ marker: 'ctx-' + variant.locale })
   });
   assert.equal(typeof runtime.assetPublisher.planAsset, 'function');
   assert.equal(typeof runtime.projectContext, 'function');
+  assert.equal(typeof runtime.remoteResourcePolicy, 'function');
   assert.deepEqual(runtime.projectContext({ locale: 'en' }), { marker: 'ctx-en' });
+  assert.deepEqual(
+    await runtime.remoteResourcePolicy({ kind: 'body-image' }),
+    { decision: 'ALLOW', evidence: 'trusted-cdn-v1:body-image' }
+  );
 });
 
-test('missing host runtime configuration produces no implicit publisher and empty context', async () => {
+test('missing host runtime configuration produces no implicit publisher/policy and empty context', async () => {
   const repoRoot = await fixture();
   const runtime = await loadHostRuntime({ repoRoot, moduleRef: null });
   assert.equal(runtime.assetPublisher, null);
+  assert.equal(runtime.remoteResourcePolicy, null);
   assert.deepEqual(runtime.projectContext, {});
+});
+
+test('host runtime accepts a remote-resource-policy-only module', async () => {
+  const repoRoot = await fixture();
+  await writeFile(path.join(repoRoot, 'host', 'runtime.mjs'), `
+export function remoteResourcePolicy() {
+  return { decision: 'DENY', reason: 'not trusted' };
+}
+`, 'utf8');
+  const runtime = await loadHostRuntime({ repoRoot, moduleRef: 'host/runtime.mjs' });
+  assert.equal(runtime.assetPublisher, null);
+  assert.deepEqual(runtime.projectContext, {});
+  assert.equal(typeof runtime.remoteResourcePolicy, 'function');
 });
 
 test('host runtime rejects traversal, absolute paths, wrong extension and modules outside host', async () => {
@@ -69,11 +91,20 @@ test('host runtime rejects symlinked module files', async () => {
   );
 });
 
-test('host runtime rejects modules that provide neither supported host dependency', async () => {
+test('host runtime rejects malformed remoteResourcePolicy exports', async () => {
+  const repoRoot = await fixture();
+  await writeFile(path.join(repoRoot, 'host', 'runtime.mjs'), 'export const remoteResourcePolicy = {};\n', 'utf8');
+  await assert.rejects(
+    loadHostRuntime({ repoRoot, moduleRef: 'host/runtime.mjs' }),
+    /remoteResourcePolicy.*function/
+  );
+});
+
+test('host runtime rejects modules that provide no supported host dependency', async () => {
   const repoRoot = await fixture();
   await writeFile(path.join(repoRoot, 'host', 'runtime.mjs'), 'export const unrelated = 1;\n', 'utf8');
   await assert.rejects(
     loadHostRuntime({ repoRoot, moduleRef: 'host/runtime.mjs' }),
-    /must export assetPublisher and\/or projectContext/
+    /must export assetPublisher, projectContext and\/or remoteResourcePolicy/
   );
 });
