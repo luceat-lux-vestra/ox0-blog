@@ -22,6 +22,7 @@ function requireHttpsBaseUrl(value) {
   let parsed;
   try { parsed = new URL(value.trim()); } catch { throw new Error('publicBaseUrl must be a valid HTTPS URL'); }
   if (parsed.protocol !== 'https:') throw new Error('publicBaseUrl must use https');
+  if (parsed.username || parsed.password) throw new Error('publicBaseUrl must not contain URL credentials');
   if (parsed.search || parsed.hash) throw new Error('publicBaseUrl must not contain query or fragment');
   if (!parsed.pathname.endsWith('/')) parsed.pathname += '/';
   return parsed;
