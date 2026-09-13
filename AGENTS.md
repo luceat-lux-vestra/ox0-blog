@@ -36,7 +36,8 @@ Once merge judgment has explicitly started, correctness/safety not proven is FAI
 - Preserve publisher-owned `#ox0-*` state tags; authors must not add them manually.
 - Never put Ghost Admin credentials in source, logs, examples, issues, or pull requests.
 - Use Article-wide dry-run/read-only planning before first target mutation when the publication workflow supports it.
-- Treat translation checkpoint, Article semantic readiness, projection revision, and production authorization as separate proofs. None substitutes for another.
+- Treat translation checkpoint, Article semantic readiness, projection revision, remote-resource trust, and production authorization as separate proofs. None substitutes for another.
+- A remote HTTPS image URL is not immutable-byte evidence. Production use of remote body/feature images requires explicit host `remoteResourcePolicy` approval; otherwise fail closed before Ghost access.
 
 ## Target Article contract
 
@@ -47,6 +48,7 @@ For new architecture work, prefer the Article path documented by:
 - `docs/article-readiness-v1.md`
 - `docs/article-operations.md`
 - `docs/asset-publisher.md`
+- `docs/remote-resource-policy.md`
 - `docs/article-publication.md`
 
 `npm run dry-run` is the target Article planner. `npm run validate` currently checks both migration-era models. Legacy one-file commands/workflows are explicitly marked compatibility-only.
