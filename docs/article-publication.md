@@ -112,6 +112,22 @@ Draft planning/mutation may retain remote HTTPS image dependencies without produ
 
 See `docs/remote-resource-policy.md`.
 
+## Public URL safety boundary
+
+URLs that become public projection or publication targets must not embed URL credentials.
+
+The target path applies this rule independently at the relevant boundaries rather than assuming one upstream validator protects every caller:
+
+- Markdown `http`/`https` links and HTTPS images reject `user:password@host` user-info;
+- remote feature-image and canonical URLs reject URL credentials;
+- AssetPublisher planned/result HTTPS URLs reject URL credentials, including low-level material-resource helpers;
+- remote-resource policy descriptors reject credentialed HTTPS URLs;
+- Ghost Image API response URLs used as feature-image projection URLs must be absolute, HTTPS, and credential-free.
+
+The Ghost Admin transport base URL is also constrained separately: it must use HTTPS, must not contain URL credentials, and must not contain a query or fragment.
+
+These checks prevent configuration/source mistakes from turning credentials into persisted public content or request URLs. They are transport/projection safety rules, not substitutes for Article readiness, remote-resource trust approval, or production publication authorization.
+
 ## Plan binding
 
 The normal read-only PREPARE_PUBLISH operation binds each locale plan to observed Ghost state including:
@@ -187,7 +203,16 @@ Local feature images are still uploaded through Ghost's Image API inside the low
 
 That upload is not transactional with subsequent Ghost post creation/update. A successful image upload followed by a post mutation failure can therefore leave an orphan Ghost media object.
 
-The target planned-projection wrapper records each successful `uploadImage` / `uploadImageBytes` result before returning control to the publisher. If a later projection step fails, the Article-level `GHOST_MUTATION` error exposes:
+The Ghost client validates an image-upload response URL as a bounded absolute credential-free HTTPS URL. The target planned-projection wrapper also treats the returned URL as a public projection boundary. It records the raw returned URL as side-effect evidence before validating it for use in a post mutation.
+
+Therefore, if Ghost has already accepted the media bytes but returns an invalid, non-HTTPS, or credentialed URL:
+
+1. the media-upload side effect is still reported;
+2. post create/update is not attempted with that URL;
+3. the locale operation fails closed as `GHOST_MUTATION`;
+4. fresh projection recovery still runs.
+
+For any later projection failure, the Article-level `GHOST_MUTATION` error exposes:
 
 ```text
 featureImageUploads[] = {
@@ -224,7 +249,16 @@ ko-KR -> DRAFT_CURRENT
 en    -> NOT_PROJECTED
 ```
 
-Ambiguous ownership, missing operation-known managed target, unmanaged drift, unsupported status, or recovery-read failure are represented as reconciliation-required outcomes. The system never implicitly adopts a conflicting unmanaged post.
+A particularly important failure window is:
+
+```text
+Ghost post create/update succeeds
+    -> final ox0 revision/sync stamp fails
+```
+
+The fresh recovery must not collapse that locale to `NOT_PROJECTED`, because a target post now exists. Missing or inconsistent publisher revision/sync evidence is recovered as `RECONCILIATION_REQUIRED` so the partially mutated projection remains visible for explicit repair.
+
+Ambiguous ownership, missing operation-known managed target, unmanaged drift, unsupported status, malformed/missing sync evidence after a partial mutation, or recovery-read failure are represented as reconciliation-required outcomes. The system never implicitly adopts a conflicting unmanaged post.
 
 The explicit production authorization may remain conceptually valid only for the same intended active operation/source, but the next attempt must re-run source, policy, asset, identity and plan guards. A stale PublicationPlan is never replayed blindly.
 
