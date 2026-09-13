@@ -203,26 +203,33 @@ Local feature images are still uploaded through Ghost's Image API inside the low
 
 That upload is not transactional with subsequent Ghost post creation/update. A successful image upload followed by a post mutation failure can therefore leave an orphan Ghost media object.
 
-The Ghost client validates an image-upload response URL as a bounded absolute credential-free HTTPS URL. The target planned-projection wrapper also treats the returned URL as a public projection boundary. It records the raw returned URL as side-effect evidence before validating it for use in a post mutation.
+The Ghost client validates an image-upload response URL as a bounded absolute credential-free HTTPS URL. A response-validation error is marked as occurring after a successful upload API response so the Article wrapper can retain possible media side-effect evidence even though the transport client rejects the URL.
+
+The target planned-projection wrapper independently treats the returned URL/evidence as a public projection boundary. Side-effect evidence is sanitized before it is attached to an Article error:
+
+- valid non-credentialed absolute URLs may be recorded;
+- credentialed URLs have user-info removed and carry `urlCredentialsRedacted: true`;
+- malformed/overlong URL text is not echoed and may be recorded as `url: null`.
 
 Therefore, if Ghost has already accepted the media bytes but returns an invalid, non-HTTPS, or credentialed URL:
 
-1. the media-upload side effect is still reported;
+1. the possible media-upload side effect is still reported without exposing URL credentials;
 2. post create/update is not attempted with that URL;
 3. the locale operation fails closed as `GHOST_MUTATION`;
 4. fresh projection recovery still runs.
 
-For any later projection failure, the Article-level `GHOST_MUTATION` error exposes:
+For any later projection failure, the Article-level `GHOST_MUTATION` error exposes bounded evidence such as:
 
 ```text
 featureImageUploads[] = {
   method,
   ref,
-  url
+  url,
+  urlCredentialsRedacted?   // present only when credentials were removed
 }
 ```
 
-This is observability, not rollback. The system does not claim that the uploaded media was deleted or that cleanup is safe automatically.
+This is observability, not rollback or proof that Ghost definitely persisted an orphan media object. The system does not claim that media was deleted or that cleanup is safe automatically.
 
 A future deterministic prepublication/cleanup contract may reduce this side effect, but current correctness depends on reporting it rather than hiding it.
 
@@ -234,7 +241,7 @@ If locale N fails after earlier locale mutations succeeded:
 2. the error stage is `GHOST_MUTATION`;
 3. every target locale is fresh-read by stable projection identity;
 4. current per-locale projection state is derived using the exact prepared source fingerprint;
-5. successful feature-image uploads from the failing locale are retained as explicit side-effect evidence;
+5. successful or possibly-successful feature-image upload side effects from the failing locale are retained as bounded evidence;
 6. the recovery payload may therefore report mixed states such as:
 
 ```text
@@ -274,7 +281,7 @@ The target library distinguishes at least:
 - `GHOST_MUTATION` — one locale mutation failed; fresh all-locale recovery attached;
 - `POST_VERIFY` — mutations returned but fresh aggregate recovery is not the requested current state.
 
-Errors may contain successfully published body-asset records, feature-image upload side-effect evidence, and fresh projection recovery state to support safe continuation/reconciliation.
+Errors may contain successfully published body-asset records, bounded feature-image upload side-effect evidence, and fresh projection recovery state to support safe continuation/reconciliation.
 
 ## Low-level CLI boundary
 
