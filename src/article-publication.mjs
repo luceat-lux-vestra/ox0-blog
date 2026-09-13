@@ -211,9 +211,13 @@ export async function synchronizeArticlePublication({
   projectContext = {},
   assetPublisher = null,
   remoteResourcePolicy = null,
-  authorization = null
+  authorization = null,
+  publicationPlanGuard = null
 }) {
   if (action === 'publish') requireAuthorizationShape(authorization);
+  if (publicationPlanGuard != null && typeof publicationPlanGuard !== 'function') {
+    throw new Error('publicationPlanGuard must be a function when provided');
+  }
 
   let runtime;
   try {
@@ -227,6 +231,7 @@ export async function synchronizeArticlePublication({
       assetPublisher,
       remoteResourcePolicy
     });
+    if (publicationPlanGuard) await publicationPlanGuard(runtime.plan);
   } catch (cause) {
     throw new ArticlePublicationError('Article publication preflight failed', {
       stage: 'PREFLIGHT',
@@ -290,6 +295,7 @@ export async function synchronizeArticlePublication({
     });
     assertSourceSnapshotStable(runtime, refreshed);
     if (action === 'publish') validateAuthorizationForPlan(authorization, refreshed.plan);
+    if (publicationPlanGuard) await publicationPlanGuard(refreshed.plan);
   } catch (cause) {
     throw new ArticlePublicationError('Article source changed after preflight; refusing Ghost mutation', {
       stage: 'SOURCE_REVALIDATION',
