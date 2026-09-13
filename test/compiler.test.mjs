@@ -84,11 +84,12 @@ test('MarkedCompiler rejects active or ambiguous Markdown link protocols', async
     '&sol;&sol;evil.example/path',
     '\\\\evil.example\\path',
     '&#92;&#92;evil.example&#92;path',
-    '&bsol;&bsol;evil.example&bsol;path'
+    '&bsol;&bsol;evil.example&bsol;path',
+    'https://user:password@example.com/private'
   ]) {
     await assert.rejects(
       compiler.compile(variant({ body: `[unsafe](${href})\n` })),
-      /unsafe Markdown link URL protocol|protocol-relative|control characters|backslashes/,
+      /unsafe Markdown link URL protocol|protocol-relative|control characters|backslashes|URL credentials/,
       href
     );
   }
@@ -119,7 +120,8 @@ test('MarkedCompiler rejects unsafe image protocols before resource resolution',
     '//images.example/a.png',
     '&sol;&sol;images.example/a.png',
     '..\\..\\assets\\diagram.png',
-    '..&bsol;..&bsol;assets&bsol;diagram.png'
+    '..&bsol;..&bsol;assets&bsol;diagram.png',
+    'https://user:password@images.example/a.png'
   ]) {
     let resolverCalled = false;
     await assert.rejects(
@@ -129,7 +131,7 @@ test('MarkedCompiler rejects unsafe image protocols before resource resolution',
           return { href: 'https://cdn.example/safe.png' };
         }
       }),
-      /unsafe Markdown image URL protocol|protocol-relative|backslashes/,
+      /unsafe Markdown image URL protocol|protocol-relative|backslashes|URL credentials/,
       href
     );
     assert.equal(resolverCalled, false);
@@ -161,6 +163,14 @@ test('MarkedCompiler rejects an unsafe URL returned by the host image resolver',
       }
     }),
     /protocol-relative/
+  );
+  await assert.rejects(
+    compiler.compile(variant(), {
+      resolveResource() {
+        return { href: 'https://user:password@cdn.example/unsafe.png' };
+      }
+    }),
+    /URL credentials/
   );
 });
 
