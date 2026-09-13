@@ -55,8 +55,12 @@ function requireSafeHref(rawHref, kind) {
   if (!allowed.has(protocol)) {
     throw new Error(`unsafe Markdown ${kind} URL protocol ${protocol}`);
   }
-  try { new URL(value); } catch {
+  let parsed;
+  try { parsed = new URL(value); } catch {
     throw new Error(`Markdown ${kind} URL is invalid: ${rawHref}`);
+  }
+  if ((protocol === 'http:' || protocol === 'https:') && (parsed.username || parsed.password)) {
+    throw new Error(`Markdown ${kind} URL must not contain URL credentials`);
   }
   return rawHref;
 }
