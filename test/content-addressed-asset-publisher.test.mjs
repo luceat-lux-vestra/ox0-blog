@@ -118,7 +118,7 @@ test('publish verifies bytes digest and verifies stored metadata after put', asy
   );
 });
 
-test('content-addressed public target rejects insecure base URLs and unsupported extensions', async () => {
+test('content-addressed public target rejects insecure/credentialed base URLs and unsupported extensions', async () => {
   const store = memoryStore();
   assert.throws(
     () => createContentAddressedAssetPublisher({
@@ -127,6 +127,14 @@ test('content-addressed public target rejects insecure base URLs and unsupported
       putObject: store.putObject
     }),
     /must use https/
+  );
+  assert.throws(
+    () => createContentAddressedAssetPublisher({
+      publicBaseUrl: 'https://user:password@cdn.example/assets/',
+      headObject: store.headObject,
+      putObject: store.putObject
+    }),
+    /must not contain URL credentials/
   );
 
   const publisher = createContentAddressedAssetPublisher({
