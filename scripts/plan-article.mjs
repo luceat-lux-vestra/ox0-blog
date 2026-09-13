@@ -24,6 +24,7 @@ const plan = await planArticlePublication({
   client,
   repoRoot,
   assetPublisher: hostRuntime.assetPublisher,
-  projectContext: hostRuntime.projectContext
+  projectContext: hostRuntime.projectContext,
+  remoteResourcePolicy: hostRuntime.remoteResourcePolicy
 });
 process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
