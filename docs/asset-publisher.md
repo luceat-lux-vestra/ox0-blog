@@ -49,7 +49,7 @@ The provider returns:
 }
 ```
 
-The returned ref/fingerprint must match the exact requested asset and the target URL must be HTTPS.
+The returned ref/fingerprint must match the exact requested asset and the target URL must be credential-free HTTPS. URL user-info such as `https://user:password@host/...` is rejected at the generic AssetPublisher boundary rather than copied into public compiled HTML.
 
 `planAsset` is a read-only operation. It may inspect provider state to decide `reuse` versus `publish`, but must not upload or mutate storage.
 
@@ -93,9 +93,9 @@ Only those exact bytes are passed to:
 AssetPublisher.publishAsset(asset, bytes, plan)
 ```
 
-The provider result URL must equal the read-only planned URL. A provider cannot silently upload the content under another URL after the Article projection fingerprint was computed.
+The provider result URL must equal the read-only planned URL and remain credential-free HTTPS. A provider cannot silently upload the content under another URL after the Article projection fingerprint was computed.
 
-For `action=reuse`, the host still revalidates the local source snapshot but performs no storage mutation.
+For `action=reuse`, the host still revalidates the local source snapshot but performs no storage mutation. The low-level reuse helper validates the planned public URL even when invoked independently of the normal planning path.
 
 ## Content-addressed object-store adapter
 
@@ -104,7 +104,7 @@ The branch includes `createContentAddressedAssetPublisher(...)` as a vendor-neut
 It requires:
 
 ```text
-publicBaseUrl: HTTPS base URL
+publicBaseUrl: credential-free HTTPS base URL
 headObject({ key }) -> null | { size, sha256 }
 putObject({ key, bytes, contentType, sha256, size, sourceRef })
 ```
