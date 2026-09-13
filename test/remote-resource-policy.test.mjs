@@ -46,10 +46,17 @@ test('remote resource DENY fails closed with host reason', async () => {
   );
 });
 
-test('remote resource descriptors require supported kind and HTTPS', async () => {
+test('remote resource descriptors require supported kind, credential-free HTTPS', async () => {
   await assert.rejects(
     approveRemoteResource(() => ({ decision: 'ALLOW', evidence: 'x' }), resource({ href: 'http://cdn.example/a.png' })),
     /must use https/
+  );
+  await assert.rejects(
+    approveRemoteResource(
+      () => ({ decision: 'ALLOW', evidence: 'x' }),
+      resource({ href: 'https://user:password@cdn.example/a.png' })
+    ),
+    /must not contain URL credentials/
   );
   await assert.rejects(
     approveRemoteResource(() => ({ decision: 'ALLOW', evidence: 'x' }), resource({ kind: 'script' })),
