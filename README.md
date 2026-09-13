@@ -53,7 +53,9 @@ See:
 - A normal Git push does not mutate Ghost.
 - Target `PREPARE_PUBLISH` is Article-wide and read-only with respect to Ghost.
 - Production use of external HTTPS body/feature images requires explicit host trust approval; URL-only source is not treated as proof of immutable remote bytes.
+- Public projection/publication URLs must not embed URL credentials. HTTPS alone is not sufficient if user-info is present.
 - Per-locale Ghost projection state remains independently recoverable; partial multi-locale failure is never collapsed into aggregate success.
+- A post that was created/updated but failed final revision/sync stamping is recovered as reconciliation-required rather than forgotten as not projected.
 - No unmanaged Ghost post is implicitly adopted because a public slug happens to match.
 
 ## Article manifest example
@@ -231,6 +233,7 @@ Target Article mutation preserves these boundaries:
 - exact Article + required-locale source-fingerprint authorization for production publish;
 - Article-wide preflight;
 - explicit production approval for external HTTPS image resources;
+- credential-free public URL boundaries for Markdown/projected images/canonical URLs/asset targets/Ghost image results;
 - body-asset publication/reuse before Ghost mutation;
 - full source/plan/policy revalidation after asset side effects;
 - stale Ghost observation rejection;
@@ -254,7 +257,7 @@ Compiler code does not own storage/CDN policy. Local body assets are source evid
 
 Resolved ProjectContext is preserved through validation, review, planning, AssetPublisher recompilation, and publication so a future Arkst/VirtualProject backend does not lose host context.
 
-Canonical Markdown rejects raw HTML and active/ambiguous URL forms. Links are limited to relative URLs or `http/https/mailto/tel`; images are relative source refs or HTTPS. `javascript:`, `data:`, `file:`, protocol-relative URLs, control-character schemes, and backslash-ambiguous hrefs fail closed before publication planning.
+Canonical Markdown rejects raw HTML and active/ambiguous URL forms. Links are limited to relative URLs or `http/https/mailto/tel`; images are relative source refs or HTTPS. `javascript:`, `data:`, `file:`, protocol-relative URLs, control/entity-obfuscated schemes, slash/backslash named-entity ambiguity, backslash-ambiguous hrefs, and credentialed HTTP(S) URLs fail closed before publication planning. Host resolver output is revalidated through the same image URL guard.
 
 ## Ghost projection identity
 
@@ -280,11 +283,15 @@ OUTDATED(visibility=DRAFT|PUBLISHED)
 RECONCILIATION_REQUIRED(reason)
 ```
 
+If post creation/update succeeds but final publisher revision/sync stamping fails, the fresh post is retained as a reconciliation-required projection state; it is not collapsed to `NOT_PROJECTED`.
+
 ## Feature images
 
 Local feature images are separate from body AssetPublisher delivery and currently use Ghost's Image API.
 
 The publisher verifies the local feature-image digest and uploads the exact validated snapshot bytes. Because Ghost media upload and post mutation are not transactional, an upload can succeed before a later post mutation fails.
+
+Ghost Image API response URLs used by the target Article path must be absolute credential-free HTTPS URLs. The target wrapper records the raw returned URL as side-effect evidence before validating it for use in a post payload. If the returned URL is invalid, insecure, or credentialed, post create/update is refused while the already-completed upload remains visible in `featureImageUploads[]`.
 
 Target Article errors preserve successful feature-image upload evidence (`method`, repository ref, returned URL) so orphan-media side effects are visible. This is observability, not an automatic rollback claim.
 
@@ -294,8 +301,8 @@ Remote HTTPS feature images are not fetched by ox0-blog. Production use requires
 
 For target planning/synchronization and legacy compatibility, configure:
 
-- `GHOST_ADMIN_URL` — e.g. `https://blog.ox0.uk`
-- `GHOST_ADMIN_API_KEY` — Ghost Custom Integration Admin API key (`id:hexsecret`)
+- `GHOST_ADMIN_URL` — e.g. `https://blog.ox0.uk`; HTTPS only, no embedded URL credentials, query, or fragment;
+- `GHOST_ADMIN_API_KEY` — Ghost Custom Integration Admin API key (`id:hexsecret`).
 
 Never commit or paste the Admin API key into source, logs, issues, or pull requests.
 
