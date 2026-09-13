@@ -98,10 +98,15 @@ async function main() {
   // workflow_dispatch is the external production-authorization surface. Build a
   // fresh publish plan, require every LocaleVariant to be an exact-current managed
   // draft, bind the explicit dispatch intent to those exact fingerprints, then let
-  // the publication library independently re-plan/revalidate before mutation.
+  // the publication library independently re-plan/revalidate the same transition
+  // policy before any resource or Ghost mutation.
   const prepared = await prepareArticlePublicationOperation(common);
   const authorization = publicationAuthorizationForDispatchPlan(context, prepared.plan);
-  const result = await synchronizeArticlePublication({ ...common, authorization });
+  const result = await synchronizeArticlePublication({
+    ...common,
+    authorization,
+    publicationPlanGuard: requireExactCurrentDraftsForProduction
+  });
   process.stdout.write(`${JSON.stringify({
     status: result.status,
     sourceSha: context.sourceSha,
