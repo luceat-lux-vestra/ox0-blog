@@ -20,7 +20,8 @@ function normalizeManifestRef(value) {
   }
   const normalized = path.posix.normalize(ref);
   if (
-    normalized === '..'
+    normalized !== ref
+    || normalized === '..'
     || normalized.startsWith('../')
     || normalized.startsWith('./')
     || !normalized.startsWith('posts/')
