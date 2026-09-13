@@ -21,9 +21,15 @@ import { ARTICLE_READINESS_REVIEW_CONTRACT_VERSION } from '../src/article-readin
 import { TRANSLATION_REVIEW_CONTRACT_VERSION } from '../src/translation-checkpoint.mjs';
 
 class FakeGhostClient {
-  constructor({ failSlug = null, injectOwnerAtIdentityRead = null, log = [] } = {}) {
+  constructor({
+    failSlug = null,
+    failStampSlug = null,
+    injectOwnerAtIdentityRead = null,
+    log = []
+  } = {}) {
     this.posts = new Map();
     this.failSlug = failSlug;
+    this.failStampSlug = failStampSlug;
     this.injectOwnerAtIdentityRead = injectOwnerAtIdentityRead;
     this.log = log;
     this.identityReads = 0;
@@ -90,6 +96,9 @@ class FakeGhostClient {
   async updatePostMetadata(id, payload) {
     this.log.push(['ghost-stamp', id]);
     const current = this.posts.get(id);
+    if (current?.slug === this.failStampSlug) {
+      throw new Error(`injected metadata stamp failure: ${current.slug}`);
+    }
     const post = {
       ...current,
       ...structuredClone(payload),
@@ -349,7 +358,7 @@ test('Ghost ownership created after refreshed planning is rejected before the pl
   assert.equal(client.log.some(([kind]) => kind === 'ghost-create'), false);
 });
 
-test('second locale failure never returns aggregate success and recovers mixed actual states', async () => {
+test('second locale create failure never returns aggregate success and recovers mixed actual states', async () => {
   const value = await fixture();
   const client = new FakeGhostClient({ failSlug: 'article-en' });
   await assert.rejects(
@@ -364,4 +373,24 @@ test('second locale failure never returns aggregate success and recovers mixed a
       return true;
     }
   );
+});
+
+test('post created before second-locale sync-stamp failure is recovered as reconciliation-required, not NOT_PROJECTED', async () => {
+  const value = await fixture();
+  const client = new FakeGhostClient({ failStampSlug: 'article-en' });
+  await assert.rejects(
+    synchronizeArticlePublication({ ...value, action: 'draft', client }),
+    (error) => {
+      assert.ok(error instanceof ArticlePublicationError);
+      assert.equal(error.stage, 'GHOST_MUTATION');
+      assert.match(error.cause.message, /metadata stamp failure/);
+      assert.deepEqual(error.recovery.map((entry) => [entry.locale, entry.state.state]), [
+        ['ko-KR', 'DRAFT_CURRENT'],
+        ['en', 'RECONCILIATION_REQUIRED']
+      ]);
+      assert.match(error.recovery[1].state.diagnostic, /not managed by ox0-blog/);
+      return true;
+    }
+  );
+  assert.equal([...client.posts.values()].some((post) => post.slug === 'article-en'), true);
 });
