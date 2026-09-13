@@ -51,7 +51,7 @@ test('staging verifier rejects stale SHA, dirty tree and deployment host module'
   );
 });
 
-test('staging verifier requires exact credential-free HTTPS staging origin and refuses production', () => {
+test('staging verifier requires exact credential-free HTTPS staging origin and refuses production aliases', () => {
   assert.throws(
     () => requireArticleStagingLiveContext(input({ ghostAdminUrl: 'http://staging-blog.example' })),
     /must use https/
@@ -64,11 +64,14 @@ test('staging verifier requires exact credential-free HTTPS staging origin and r
     () => requireArticleStagingLiveContext(input({ expectedStagingUrl: 'https://other.example' })),
     /must exactly match/
   );
-  assert.throws(
-    () => requireArticleStagingLiveContext(input({
-      ghostAdminUrl: 'https://blog.ox0.uk',
-      expectedStagingUrl: 'https://blog.ox0.uk'
-    })),
-    /refuses production Ghost host/
-  );
+
+  for (const productionUrl of ['https://blog.ox0.uk', 'https://BLOG.OX0.UK', 'https://blog.ox0.uk.']) {
+    assert.throws(
+      () => requireArticleStagingLiveContext(input({
+        ghostAdminUrl: productionUrl,
+        expectedStagingUrl: productionUrl
+      })),
+      /refuses production Ghost host/
+    );
+  }
 });
