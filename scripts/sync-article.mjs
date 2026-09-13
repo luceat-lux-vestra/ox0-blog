@@ -72,6 +72,7 @@ async function main() {
     repoRoot,
     assetPublisher: hostRuntime.assetPublisher,
     projectContext: hostRuntime.projectContext,
+    remoteResourcePolicy: hostRuntime.remoteResourcePolicy,
     authorization
   });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
