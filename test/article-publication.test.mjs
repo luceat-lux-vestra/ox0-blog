@@ -129,7 +129,7 @@ function publication() {
   };
 }
 
-async function fixture({ englishLocalAsset = false } = {}) {
+async function fixture({ englishLocalAsset = false, englishRemoteAsset = false } = {}) {
   const repoRoot = await mkdtemp(path.join(os.tmpdir(), 'ox0-article-publish-'));
   const articleDir = path.join(repoRoot, 'posts', 'article');
   const assetDir = path.join(repoRoot, 'assets', 'article');
@@ -138,11 +138,10 @@ async function fixture({ englishLocalAsset = false } = {}) {
   await mkdir(articleDir, { recursive: true });
   await mkdir(assetDir, { recursive: true });
   await writeFile(koPath, '# 본문\n', 'utf8');
-  await writeFile(
-    enPath,
-    englishLocalAsset ? '# Body\n\n![diagram](../../assets/article/diagram.png)\n' : '# Body\n',
-    'utf8'
-  );
+  let enBody = '# Body\n';
+  if (englishLocalAsset) enBody += '\n![diagram](../../assets/article/diagram.png)\n';
+  if (englishRemoteAsset) enBody += '\n![remote](https://cdn.example/content/diagram.png)\n';
+  await writeFile(enPath, enBody, 'utf8');
   if (englishLocalAsset) await writeFile(path.join(assetDir, 'diagram.png'), 'diagram-v1');
   const manifestPath = path.join(articleDir, 'article.json');
   await writeFile(manifestPath, `${JSON.stringify({
@@ -248,6 +247,45 @@ test('plan-bound production authorization permits exact ready source publication
   assert.deepEqual(result.variants.map((entry) => entry.state.state), [
     'PUBLISHED_CURRENT', 'PUBLISHED_CURRENT'
   ]);
+});
+
+test('remote-resource policy evidence drift aborts before every Ghost mutation', async () => {
+  const value = await fixture({ englishRemoteAsset: true });
+  await makeReady(value);
+  const client = new FakeGhostClient();
+  const stablePolicy = () => ({ decision: 'ALLOW', evidence: 'trusted-static-v1' });
+  const runtime = await prepareArticlePublicationOperation({
+    ...value,
+    action: 'publish',
+    client,
+    remoteResourcePolicy: stablePolicy
+  });
+  const authorization = authorizationFromPlan(runtime.plan);
+  client.log.length = 0;
+
+  let policyCalls = 0;
+  await assert.rejects(
+    synchronizeArticlePublication({
+      ...value,
+      action: 'publish',
+      client,
+      authorization,
+      remoteResourcePolicy() {
+        policyCalls += 1;
+        return {
+          decision: 'ALLOW',
+          evidence: policyCalls === 1 ? 'trusted-static-v1' : 'trusted-static-v2'
+        };
+      }
+    }),
+    (error) => {
+      assert.ok(error instanceof ArticlePublicationError);
+      assert.equal(error.stage, 'SOURCE_REVALIDATION');
+      assert.match(error.cause.message, /remote-resource approval/);
+      return true;
+    }
+  );
+  assert.equal(client.log.some(([kind]) => kind === 'ghost-create' || kind === 'ghost-update'), false);
 });
 
 test('body assets publish before the first Ghost mutation and use the planned exact bytes', async () => {
