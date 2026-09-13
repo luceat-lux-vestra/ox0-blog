@@ -25,6 +25,8 @@ The check runs after Article `SYNCED + READY` recovery but before the first Ghos
 
 This rule does not apply to ordinary hyperlinks. It applies to externally rendered image resources whose bytes can change independently of the canonical Blog repository.
 
+All public external resource URLs must be credential-free HTTPS URLs. User-info such as `https://user:password@host/...` is rejected rather than copied into public projection/source evidence.
+
 ## Host policy contract
 
 A repository-confined `host/*.mjs` runtime module may export:
@@ -42,7 +44,7 @@ The input contains only normalized source identity/context:
 
 ```text
 kind      = body-image | feature-image
-href      = normalized HTTPS URL
+href      = normalized credential-free HTTPS URL
 articleId
 locale
 variantId
@@ -61,6 +63,8 @@ or:
 ```
 
 Missing policy, malformed decisions, missing ALLOW evidence, or explicit DENY all fail closed for production publish.
+
+`remoteResourcePolicy` is part of **read-only planning policy**. The host implementation must not mutate Blog/Ghost/storage state as a side effect of evaluating a resource, and should be deterministic for the same deployment policy snapshot. The core cannot enforce purity of arbitrary operator code, so violating this requirement is a host-contract violation rather than an allowed planning behavior.
 
 ## What ALLOW means
 
