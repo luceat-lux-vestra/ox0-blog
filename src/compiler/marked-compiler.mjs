@@ -38,6 +38,9 @@ function requireSafeHref(rawHref, kind) {
   if (/[\u0000-\u001f\u007f]/.test(value)) {
     throw new Error(`Markdown ${kind} href must not contain control characters`);
   }
+  if (value.includes('\\')) {
+    throw new Error(`Markdown ${kind} href must not contain backslashes: ${rawHref}`);
+  }
   if (value.startsWith('//')) {
     throw new Error(`protocol-relative Markdown ${kind} hrefs are not allowed: ${rawHref}`);
   }
