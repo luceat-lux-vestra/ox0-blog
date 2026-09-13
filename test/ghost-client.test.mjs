@@ -40,6 +40,27 @@ test('creates Ghost-compatible five-minute HS256 token', () => {
   assert.equal(signature, expected);
 });
 
+test('Ghost Admin URL requires credential-free HTTPS base without query/fragment', () => {
+  const key = `abc:${'10'.repeat(32)}`;
+  const fetchImpl = async () => new Response('{}');
+  assert.throws(
+    () => new GhostAdminClient({ url: 'http://blog.example', key, fetchImpl }),
+    /must use https/
+  );
+  assert.throws(
+    () => new GhostAdminClient({ url: 'https://user:password@blog.example', key, fetchImpl }),
+    /must not contain URL credentials/
+  );
+  assert.throws(
+    () => new GhostAdminClient({ url: 'https://blog.example?x=1', key, fetchImpl }),
+    /must not contain query or fragment/
+  );
+  assert.throws(
+    () => new GhostAdminClient({ url: 'https://blog.example#fragment', key, fetchImpl }),
+    /must not contain query or fragment/
+  );
+});
+
 test('GET by slug turns 404 into null and pins API version header', async () => {
   let seen;
   const client = new GhostAdminClient({
@@ -157,7 +178,7 @@ test('source identity lookup ignores non-exact tag-name results and does not bro
   assert.equal(calls, 1);
 });
 
-test('image upload accepts a bounded absolute HTTPS URL', async () => {
+test('image upload accepts a bounded absolute credential-free HTTPS URL', async () => {
   const temp = await tempPng();
   try {
     const client = new GhostAdminClient({
@@ -189,6 +210,7 @@ test('image upload rejects malformed or unsafe returned URLs before post mutatio
       [{ url: 123 }, /valid images\[0\]\.url string/],
       [{ url: 'relative/content/images/cover.png' }, /valid absolute URL/],
       [{ url: 'http://cdn.example/cover.png' }, /must use https/],
+      [{ url: 'https://user:password@cdn.example/cover.png' }, /must not contain URL credentials/],
       [{ url: `https://cdn.example/${'a'.repeat(2000)}` }, /at most 2000 characters/]
     ];
     for (const [image, pattern] of cases) {
