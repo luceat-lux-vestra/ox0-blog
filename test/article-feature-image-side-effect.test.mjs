@@ -32,6 +32,17 @@ class FailingAfterImageUploadGhostClient {
   }
 }
 
+class TransportRejectingAfterUploadGhostClient extends FailingAfterImageUploadGhostClient {
+  async uploadImageBytes(file, ref) {
+    this.uploads.push({ ref, filename: file.filename, url: null });
+    const error = new Error('Ghost image upload response URL must use https');
+    error.name = 'GhostImageUploadResponseError';
+    error.ghostImageUploadSideEffect = true;
+    error.uploadEvidence = { url: 'http://ghost.example/content/images/cover.png' };
+    throw error;
+  }
+}
+
 async function fixture() {
   const repoRoot = await mkdtemp(path.join(os.tmpdir(), 'ox0-feature-side-effect-'));
   const articleDir = path.join(repoRoot, 'posts', 'article');
@@ -119,7 +130,7 @@ test('target Article refuses non-HTTPS Ghost feature-image upload result before 
   assert.equal(client.createCalls, 0);
 });
 
-test('target Article refuses credentialed Ghost feature-image upload result before post mutation while preserving side-effect evidence', async () => {
+test('target Article redacts credentials from rejected feature-image upload side-effect evidence', async () => {
   const value = await fixture();
   const client = new FailingAfterImageUploadGhostClient({
     uploadUrl: 'https://user:password@ghost.example/content/images/cover.png'
@@ -134,8 +145,32 @@ test('target Article refuses credentialed Ghost feature-image upload result befo
       assert.deepEqual(error.featureImageUploads, [{
         method: 'uploadImageBytes',
         ref: 'assets/article/cover.png',
-        url: 'https://user:password@ghost.example/content/images/cover.png'
+        url: 'https://ghost.example/content/images/cover.png',
+        urlCredentialsRedacted: true
       }]);
+      return true;
+    }
+  );
+
+  assert.equal(client.uploads.length, 1);
+  assert.equal(client.createCalls, 0);
+});
+
+test('target Article preserves transport-level upload side-effect evidence when Ghost client rejects its response', async () => {
+  const value = await fixture();
+  const client = new TransportRejectingAfterUploadGhostClient();
+
+  await assert.rejects(
+    synchronizeArticlePublication({ ...value, action: 'draft', client }),
+    (error) => {
+      assert.ok(error instanceof ArticlePublicationError);
+      assert.equal(error.stage, 'GHOST_MUTATION');
+      assert.deepEqual(error.featureImageUploads, [{
+        method: 'uploadImageBytes',
+        ref: 'assets/article/cover.png',
+        url: 'http://ghost.example/content/images/cover.png'
+      }]);
+      assert.equal(error.recovery[0].state.state, 'NOT_PROJECTED');
       return true;
     }
   );
