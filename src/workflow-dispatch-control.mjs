@@ -114,6 +114,13 @@ export function requireExactCurrentDraftsForProduction(plan) {
     if (!SOURCE_FINGERPRINT_RE.test(sourceFingerprint ?? '')) {
       throw new Error(`publication plan source fingerprint is invalid for locale: ${locale}`);
     }
+
+    for (const assetPlan of variant?.assetPlans ?? []) {
+      if (!assetPlan || assetPlan.action !== 'reuse') {
+        throw new Error(`production workflow requires every local body asset to be pre-staged/reuse-only for locale: ${locale}`);
+      }
+    }
+
     const ghost = variant?.ghost;
     if (!ghost || typeof ghost !== 'object' || Array.isArray(ghost)) {
       throw new Error(`production workflow requires Ghost plan evidence for locale: ${locale}`);
