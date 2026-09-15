@@ -24,6 +24,20 @@ test('validates a well-formed bilingual draft', async () => {
   assert.equal(posts.length, 1);
 });
 
+test('legacy validation skips Article bundle Markdown owned by article.json', async () => {
+  const root = await repo();
+  await writeFile(path.join(root, 'posts', 'legacy.md'), doc({ title: 'Legacy', slug: 'legacy' }));
+  const articleDir = path.join(root, 'posts', 'article');
+  await mkdir(articleDir);
+  await writeFile(path.join(articleDir, 'article.json'), '{}\n', 'utf8');
+  await writeFile(path.join(articleDir, 'ko-KR.md'), '# target Article source without legacy frontmatter\n', 'utf8');
+  await writeFile(path.join(articleDir, 'en.md'), '# target Article source without legacy frontmatter\n', 'utf8');
+
+  const posts = await validateRepository(root);
+  assert.equal(posts.length, 1);
+  assert.equal(path.relative(root, posts[0].postPath), path.join('posts', 'legacy.md'));
+});
+
 test('repository validation renders and validates local body images', async () => {
   const root = await repo();
   await mkdir(path.join(root, 'assets', 'one'));
