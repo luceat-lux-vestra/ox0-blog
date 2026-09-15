@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { GhostAdminClient } from '../src/ghost-client.mjs';
+import { planPostSynchronization } from '../src/legacy-publisher.mjs';
 import { renderMarkdown } from '../src/markdown.mjs';
-import { planPostSynchronization } from '../src/publisher.mjs';
 import { validateRepository } from '../src/validation.mjs';
 
 const [postPath] = process.argv.slice(2);
