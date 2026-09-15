@@ -189,6 +189,13 @@ function expectedIdentity(variant) {
   });
 }
 
+function rememberCleanupTag(name, id) {
+  if (!id) return;
+  const prior = cleanupTagIds.get(name);
+  if (prior && prior !== id) throw new Error(`temporary verifier tag changed identity: ${name}`);
+  cleanupTagIds.set(name, id);
+}
+
 async function assertOwnedPost(id, variant, allowedStatuses) {
   const post = await postByIdOrNull(id);
   if (!post) return null;
@@ -220,10 +227,17 @@ async function rememberCleanupTags(post) {
   for (const name of tagNames(post)) {
     if (!name.startsWith('#ox0-') || name.startsWith('#ox0-locale-')) continue;
     const tag = await findExactTag(name);
-    if (!tag?.id) continue;
-    const prior = cleanupTagIds.get(name);
-    if (prior && prior !== tag.id) throw new Error(`temporary verifier tag changed identity: ${name}`);
-    cleanupTagIds.set(name, tag.id);
+    rememberCleanupTag(name, tag?.id);
+  }
+}
+
+async function rememberExpectedIdentityTags() {
+  for (const variant of variants) {
+    for (const name of expectedIdentity(variant)) {
+      if (name.startsWith('#ox0-locale-')) continue;
+      const tag = await findExactTag(name);
+      rememberCleanupTag(name, tag?.id);
+    }
   }
 }
 
@@ -294,6 +308,13 @@ async function cleanupGhost() {
   }
 
   if (postsClean) {
+    try {
+      await rememberExpectedIdentityTags();
+    } catch (error) {
+      errors.push(error);
+      return errors;
+    }
+
     for (const [name, id] of cleanupTagIds) {
       try {
         await deleteTagIfVerifierOwnedAndUnreferenced(name, id);
