@@ -23,6 +23,8 @@ This live proof is sufficient for:
 
 It is not proof of production publication.
 
+Cleanup is conservative. The verifier may delete a publisher tag only when it has evidence that the exact tag name was absent before the verifier mutation that could create it, the current tag identity still matches, and the tag is unreferenced. Seeing a publisher tag on a temporary post is not by itself deletion authority.
+
 ## Production publication proof
 
 Production publication remains tied to an actual explicit user publication request. Do not publish temporary public posts merely for evidence collection.
