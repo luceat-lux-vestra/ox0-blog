@@ -4,21 +4,17 @@ This document describes the target Article-oriented validation, planning, synchr
 
 It does not replace the durable authorization/state-machine policy in `docs/workflow/`. A successful validation or dry-run never grants merge or production publication authorization.
 
-## Validate Article source
+## Validate repository source
 
 ```bash
-npm run validate:articles
+npm run validate
 ```
 
-This scans repository `posts/` for exact-lowercase `article.json` manifests, loads each manifest and locale source, compiles each present LocaleVariant, derives current material/local semantic evidence, computes translation fingerprints, and recovers translation/readiness state.
+This is the migration-wide validator. It validates legacy one-file posts and target Article bundles under separate ownership rules, then checks invariants that span both models.
 
-Normal source validation allows valid work-in-progress states such as:
+Target Article discovery scans repository `posts/` for exact-lowercase regular-file `article.json` manifests. An Article manifest owns its source subtree for target validation; legacy validation does not reinterpret its LocaleVariant Markdown as frontmatter posts.
 
-- Article `DRAFT`;
-- translation `UNREVIEWED`;
-- translation `INCOMPLETE` while an Article is still being authored.
-
-Repository-wide target checks include at least:
+Repository-wide migration checks include at least:
 
 - strict manifest/source/path validation;
 - compiler/raw-HTML/resource validation;
@@ -26,25 +22,36 @@ Repository-wide target checks include at least:
 - semantic local feature-image confinement and hashing;
 - unique stable `articleId` values;
 - unique stable `variantId` values;
-- unique public Ghost slugs;
+- unique public Ghost slugs among Articles;
+- no public slug collision between legacy posts and Article variants;
+- no nested Article bundles with overlapping source ownership;
+- no unclaimed Markdown inside an Article-owned source subtree;
 - deterministic checkpoint/readiness recovery.
 
-Titles are presentation content, not repository identity. Target validation deliberately does not inherit the legacy repository-wide title-uniqueness rule.
+Titles are presentation content, not target repository identity. Target validation deliberately does not inherit the legacy repository-wide title-uniqueness rule.
 
-During migration the default combined command runs both source models:
-
-```bash
-npm run validate
-```
-
-Equivalent explicit commands are:
+Explicit model-specific commands remain available:
 
 ```bash
 npm run validate:legacy
 npm run validate:articles
 ```
 
-CI uses the combined command.
+CI uses the combined migration-wide command.
+
+## Validate Article source
+
+```bash
+npm run validate:articles
+```
+
+This loads each Article manifest and locale source, compiles each present LocaleVariant, derives current material/local semantic evidence, computes translation fingerprints, and recovers translation/readiness state.
+
+Normal source validation allows valid work-in-progress states such as:
+
+- Article `DRAFT`;
+- translation `UNREVIEWED`;
+- translation `INCOMPLETE` while an Article is still being authored.
 
 ## Require reviewed readiness
 
@@ -63,7 +70,7 @@ This is a stronger evidence check. It still does **not** mean merge or productio
 
 ## Validate selected manifests
 
-Repository-wide invariants are always checked first. The command may then return a selected subset:
+Repository-wide Article invariants are always checked first. The command may then return a selected subset:
 
 ```bash
 npm run validate:articles -- posts/example/article.json
@@ -102,7 +109,7 @@ The planner:
 4. for production `publish`, requires explicit host approval for every remote HTTPS body/feature image;
 5. refuses a partial Article plan if one sibling cannot be represented or trusted;
 6. only then reads Ghost;
-7. binds each locale plan to a fresh observed Ghost snapshot.
+7. binds each locale plan to a fresh observed Ghost snapshot including ID/version/status/revision/sync evidence.
 
 A `publish` plan additionally requires `SYNCED + READY` before Ghost access. That is eligibility for consideration, not publication authorization.
 
@@ -181,7 +188,7 @@ For local body assets, target AssetPublisher planning resolves a deterministic H
 
 Approved remote resources are bound into a production plan as `{ kind, href, evidence }`. Mutation repeats the full publication preparation before Ghost mutation and requires the refreshed approval evidence to match the initial plan.
 
-After body-asset side effects, the complete Article is loaded/evaluated/planned again before the first Ghost mutation. Source/evidence/remote-policy/target drift fails closed.
+After body-asset side effects, the complete Article is loaded/evaluated/planned again before the first Ghost mutation. The exact asset ref/fingerprint/target URL/size/filename must remain unchanged. An asset action may remain unchanged or converge from `publish` to `reuse` after a successful content-addressed write. `reuse -> publish`, target/source drift, or remote-policy drift fails closed.
 
 ## Low-level target synchronization CLI
 
@@ -196,7 +203,7 @@ This is a low-level control-surface entrypoint over the guarded Article mutation
 
 ### Draft
 
-Draft synchronization must not be given a production authorization envelope. Draft is a mutation and may stage repository-owned body assets and upload a local Ghost feature image before creating/updating the managed Ghost draft.
+Draft synchronization must not be given a production authorization envelope. Draft is a mutation and may stage repository-owned body assets and upload a local Ghost feature image before creating/updating the managed Ghost draft. Draft refuses to unpublish an existing published managed projection.
 
 ### Publish
 
@@ -209,6 +216,8 @@ OX0_ARTICLE_PUBLICATION_AUTHORIZATION_JSON
 The JSON must be the task-scoped exact-source authorization expected by the Article publication library. The CLI parses it with the strict JSON parser and does not generate it from Article `READY` state or from a dry-run plan.
 
 Missing, malformed, wrong-Article, incomplete-locale, or stale-fingerprint authorization fails closed.
+
+The generic library can execute the broader durable production transitions permitted by policy. Higher-level control surfaces may impose stricter transition modes through the double-checked `publicationPlanGuard`.
 
 The same optional `OX0_HOST_RUNTIME_MODULE` is used by planning and synchronization, so AssetPublisher, ProjectContext, and remote-resource trust semantics do not silently differ between the two entrypoints.
 
@@ -236,14 +245,15 @@ The workflow fails closed unless:
 - it is running from `refs/heads/main`;
 - `source_sha` is exactly the current workflow-dispatch `github.sha` and is lowercase 40-hex;
 - exact `source_sha` is checked out and reverified;
+- fresh current `main` still equals that source before the operation;
 - the manifest path is an unaliased repository-relative `posts/.../article.json` path;
 - the full Node 24 test suite and repository validation run before the selected operation.
 
-Article Ghost workflow executions are globally serialized (`article-ghost-control`) and use the `ox0-blog` environment.
+Target and legacy Ghost workflows share one `ox0-blog-ghost-control` concurrency lock and use the `ox0-blog` environment, so migration-era Ghost operations cannot run concurrently.
 
 ### `plan-draft`
 
-Read-only with respect to Ghost and body-asset storage. This is the normal first visibility check for the exact canonical source.
+Read-only with respect to Ghost and body-asset storage. This is the normal first visibility check for an unpublished Article source.
 
 ### `draft`
 
@@ -253,22 +263,31 @@ Explicit non-production mutation. This may:
 - upload a local feature image to Ghost;
 - create/update managed Ghost locale drafts.
 
-It must never unpublish an already-published managed projection.
+It must never unpublish an already-published managed projection. An already-published Article revision therefore does not return through `draft` merely for staging.
 
 ### `plan-publish`
 
-Read-only production readiness check. In addition to normal `SYNCED + READY`, remote-resource policy, identity, drift, and URL guards, every required locale must already be an **exact-current managed Ghost draft**.
+Read-only production eligibility/transition check. In addition to normal `SYNCED + READY`, remote-resource policy, identity, drift, and URL guards, the dispatch adapter classifies the fresh plan into exactly one production mode.
 
-For every required locale:
+#### `draft-promotion`
 
-- a managed Ghost post must exist;
-- current Ghost status must be `draft`;
-- observed projected source fingerprint must equal the exact current source fingerprint;
-- managed sync evidence must be present and fresh;
-- the publish operation must be exactly `status-update` to `published`;
-- every local body-asset plan must be `reuse`, so production planning proves those assets were already staged.
+This is the first-publication path. If any required locale remains `draft`, every locale must be either:
 
-A first-publish `create`, content `update`, already-published `noop`, unstaged body-asset `publish`, stale draft, or ambiguous/unmanaged projection fails closed.
+- an exact-current managed draft whose operation is exactly `status-update` to `published`; or
+- for recovery after a partial multi-locale promotion, an exact-current already-published sibling whose operation is `noop`.
+
+All local body-asset plans must be `reuse`; feature-image planning must be `none` or `preserve`. `create`, content `update`, stale published siblings, unstaged assets, feature-image upload/replacement, ambiguous ownership, or missing managed evidence fail closed.
+
+#### `published-revision`
+
+If every required locale is already a uniquely managed `published` post, later reviewed source changes are published in place instead of being temporarily unpublished/re-drafted.
+
+Every locale operation must be:
+
+- `update` when the currently projected source fingerprint differs from the exact current source; or
+- `noop` when the published sibling is already exact-current.
+
+A published revision may introduce a new repository-owned body asset or local feature image, so its fresh plan may legitimately contain resource `publish`/feature-image upload work. Those side effects remain bound to exact source/resource fingerprints, public target URLs, current trust policy, managed ownership, and refreshed plan evidence.
 
 ### `publish`
 
@@ -280,16 +299,18 @@ publish:<manifest_path>@<source_sha>
 
 This is an exact-target/source binding supplied by the external control surface; it is not inferred from Article/Git/Ghost/RTA state.
 
-The dispatch adapter creates the existing Article publication authorization envelope only from a fresh exact publish plan after the draft gate passes. The core publication library then independently recreates the plan and reruns the same draft-only plan guard:
+The dispatch adapter creates the Article publication authorization envelope only from a fresh valid production plan and records its selected mode (`draft-promotion` or `published-revision`). The core publication library then independently recreates the plan and reruns a mode-pinned guard:
 
 1. during its first internal preflight, before body-asset side effects;
 2. again after asset/source/policy revalidation, immediately before Ghost mutation.
 
-This closes the race where a draft could disappear/change between control-surface planning and core execution.
+If the fresh state would change the production mode, publication fails closed instead of widening the authorized transition.
 
-Under this manual production path, local body assets must remain `reuse` and every Ghost locale operation must remain draft-to-published `status-update`. Therefore the final production step is not allowed to create a post, rewrite Article content, upload a feature image, or newly publish repository-owned body assets.
+For `draft-promotion`, the final operation remains resource-write-free and content-rewrite-free: local body assets must stay `reuse`, feature images are preserved, drafts become published by status update, and already-promoted siblings may only noop.
 
-A stale plan, changed Ghost draft, changed source, changed asset target/action, changed remote-resource approval, or lost managed evidence aborts instead of widening the operation.
+For `published-revision`, managed public posts remain `published` while stale locales are updated in place and exact-current siblings noop. Resource writes are permitted only when required by the exact authorized revision and are completed/revalidated before Ghost mutation.
+
+Partial failures are retriable only from fresh current evidence. A first-publication retry may observe a mix of exact-current published no-op siblings and remaining exact-current drafts. A published-revision retry may observe already-updated exact-current no-op siblings and remaining stale published updates. A stale PublicationPlan is never replayed.
 
 ## Legacy compatibility entrypoints
 
