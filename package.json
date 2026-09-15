@@ -8,7 +8,7 @@
   },
   "scripts": {
     "test": "node --test",
-    "validate": "npm run validate:legacy && npm run validate:articles",
+    "validate": "node scripts/validate-repository.mjs",
     "validate:legacy": "node scripts/validate-post.mjs",
     "validate:articles": "node scripts/validate-articles.mjs",
     "dry-run": "node scripts/plan-article.mjs",
