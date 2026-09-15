@@ -24,6 +24,16 @@ test('live draft verifier accepts explicit clean exact-candidate production Ghos
   });
 });
 
+test('live draft verifier canonicalizes an equivalent trailing slash for double-entry matching', () => {
+  assert.deepEqual(requireArticleLiveDraftContext(input({
+    ghostAdminUrl: 'https://blog.ox0.uk/',
+    expectedGhostUrl: 'https://blog.ox0.uk'
+  })), {
+    sourceSha: SHA,
+    ghostUrl: 'https://blog.ox0.uk'
+  });
+});
+
 test('live draft verifier requires explicit mutation opt-in', () => {
   assert.throws(
     () => requireArticleLiveDraftContext(input({ verifyOptIn: '' })),
@@ -54,6 +64,14 @@ test('live draft verifier requires exact credential-free HTTPS Ghost origin', ()
   assert.throws(
     () => requireArticleLiveDraftContext(input({ ghostAdminUrl: 'https://user:pass@blog.ox0.uk' })),
     /must not contain URL credentials/
+  );
+  assert.throws(
+    () => requireArticleLiveDraftContext(input({ ghostAdminUrl: 'https://blog.ox0.uk?x=1' })),
+    /must not contain query or fragment/
+  );
+  assert.throws(
+    () => requireArticleLiveDraftContext(input({ expectedGhostUrl: 'https://blog.ox0.uk#verify' })),
+    /must not contain query or fragment/
   );
   assert.throws(
     () => requireArticleLiveDraftContext(input({ expectedGhostUrl: 'https://other.example' })),
