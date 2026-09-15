@@ -61,7 +61,7 @@ test('Ghost Admin URL requires credential-free HTTPS base without query/fragment
   );
 });
 
-test('GET by slug turns 404 into null and pins API version header', async () => {
+test('GET by slug turns 404 into null, pins API version header and explicitly requests tags', async () => {
   let seen;
   const client = new GhostAdminClient({
     url: 'https://blog.example',
@@ -76,6 +76,7 @@ test('GET by slug turns 404 into null and pins API version header', async () => 
   });
   assert.equal(await client.getPostBySlug('some-post'), null);
   assert.match(seen.url, /\/ghost\/api\/admin\/posts\/slug\/some-post\//);
+  assert.equal(new URL(seen.url).searchParams.get('include'), 'tags');
   assert.equal(seen.options.headers['Accept-Version'], 'v6.0');
   assert.match(seen.options.headers.Authorization, /^Ghost /);
   assert.ok(seen.options.signal instanceof AbortSignal);
@@ -119,7 +120,7 @@ test('Ghost Admin request timeout must be a positive integer', () => {
   }
 });
 
-test('browse by internal source tag uses a bounded exact tag filter', async () => {
+test('browse by internal source tag uses a bounded filter and explicitly includes tags', async () => {
   let seen;
   const client = new GhostAdminClient({
     url: 'https://blog.example',
@@ -134,6 +135,7 @@ test('browse by internal source tag uses a bounded exact tag filter', async () =
   const parsed = new URL(seen);
   assert.equal(parsed.searchParams.get('filter'), 'tag:hash-ox0-source-abc');
   assert.equal(parsed.searchParams.get('limit'), '2');
+  assert.equal(parsed.searchParams.get('include'), 'tags');
 });
 
 test('source identity resolves its current Ghost tag slug by exact tag name', async () => {
@@ -160,6 +162,7 @@ test('source identity resolves its current Ghost tag slug by exact tag name', as
   assert.equal(seen[0].searchParams.get('limit'), '2');
   assert.equal(seen[1].searchParams.get('filter'), 'tag:manually-renamed-source-tag');
   assert.equal(seen[1].searchParams.get('limit'), '2');
+  assert.equal(seen[1].searchParams.get('include'), 'tags');
 });
 
 test('source identity lookup ignores non-exact tag-name results and does not browse posts', async () => {
