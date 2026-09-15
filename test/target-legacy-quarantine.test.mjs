@@ -28,6 +28,10 @@ const LEGACY_MARKERS = [
   'createLegacyInlineImageResolver'
 ];
 
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 async function source(ref) {
   return readFile(new URL(ref, import.meta.url), 'utf8');
 }
@@ -36,11 +40,10 @@ test('target Article entrypoints and orchestration do not import legacy one-file
   for (const ref of TARGET_FILES) {
     const text = await source(ref);
     for (const moduleName of LEGACY_MODULES) {
-      assert.doesNotMatch(
-        text,
-        new RegExp(`(?:from\\s+|import\\s*\\()(['\"])\\.?\\.?\\/[^'\"]*${moduleName.replace('.', '\\.') }\\1`),
-        `${ref} must not import legacy module ${moduleName}`
+      const pattern = new RegExp(
+        `(?:from\\s+|import\\s*\\()['\"](?:\\.\\.\\/src\\/|\\.\\/)[^'\"]*${escapeRegex(moduleName)}['\"]`
       );
+      assert.doesNotMatch(text, pattern, `${ref} must not import legacy module ${moduleName}`);
     }
   }
 });
@@ -69,4 +72,12 @@ test('target manual workflow never invokes legacy publishing entrypoints', async
     assert.equal(workflow.includes(marker), false, `target workflow must not invoke ${marker}`);
   }
   assert.match(workflow, /workflow-dispatch-article\.mjs/);
+});
+
+test('target and legacy Ghost workflows share one mutation concurrency lock', async () => {
+  const targetWorkflow = await source('../.github/workflows/article-ghost.yml');
+  const legacyWorkflow = await source('../.github/workflows/ghost-publish.yml');
+  const expected = /concurrency:\s*\n\s*group:\s*ox0-blog-ghost-control\s*\n\s*cancel-in-progress:\s*false/;
+  assert.match(targetWorkflow, expected);
+  assert.match(legacyWorkflow, expected);
 });
