@@ -59,7 +59,7 @@ The optional `publicationPlanGuard` is a read-only policy callback supplied by a
 
 `draft` and `publish` remain explicit low-level operation parameters.
 
-A draft mutation does not require production-publication authorization, but all source/compiler/identity/asset safety invariants still apply. Draft is not read-only: it may stage repository-owned body assets and upload a local feature image before creating/updating managed Ghost drafts.
+A draft mutation does not require production-publication authorization, but all source/compiler/identity/asset safety invariants still apply. Draft is not read-only: it may stage repository-owned body assets and upload a local feature image before creating/updating managed Ghost drafts. Draft refuses to unpublish an existing managed published projection.
 
 A generic production `publish` mutation requires all of:
 
@@ -74,7 +74,7 @@ The publication library does not create that authorization assertion itself. Doi
 
 The authorization object is ephemeral. It is not persisted in `article.json`, Ghost, Git, or RTA.
 
-The target manual GitHub Actions production surface intentionally adds a stronger staged-promotion policy; see **Manual staged production control surface** below.
+The target manual GitHub Actions production surface intentionally adds a stronger mode-pinned policy; see **Manual production control surface** below.
 
 ## ProjectContext preservation
 
@@ -182,7 +182,7 @@ Before the first Ghost mutation, the orchestration runs a second complete Articl
 - planned public asset target URLs;
 - approved remote-resource kinds/URLs/policy evidence.
 
-Asset provider `publish -> reuse` action change after a successful upload is allowed by the generic library if the source digest and target URL remain identical. A changed target URL is not allowed because it changes the compiled projection.
+Asset provider `publish -> reuse` action change after a successful upload is allowed by the generic library when the exact source digest, target URL, size, filename and ref remain identical. This is the expected convergence for a content-addressed backend. `reuse -> publish`, target URL drift, or other asset target/evidence drift is rejected before Ghost mutation.
 
 Any source/evidence/remote-policy/target difference ends the operation with `SOURCE_REVALIDATION` before Ghost mutation.
 
@@ -207,26 +207,20 @@ Each locale still gets low-level safeguards such as:
 
 Sequential mutation does not imply transactionality across Ghost posts. The orchestration therefore treats partial failure as a first-class state rather than pretending distributed rollback exists.
 
-## Manual staged production control surface
+## Manual production control surface
 
 `.github/workflows/article-ghost.yml` is the target manual GitHub Actions control surface. It is `workflow_dispatch` only and operates only on the exact current `main` SHA supplied as `source_sha`.
 
-Its operation sequence is intentionally staged:
+The workflow may use four operations:
 
 ```text
-plan-draft       # read-only
-    |
-    v
-draft            # explicit staging mutation
-    |
-    v
-plan-publish     # read-only exact-current draft check
-    |
-    v
-publish           # explicit production confirmation + minimal promotion
+plan-draft
+ draft
+plan-publish
+ publish
 ```
 
-The workflow may be used without running every read-only operation as a historical marker, because each mutating operation recreates/validates its own current plan. No stale dry-run plan is replayed.
+Each operation recreates current evidence. A prior dry-run is never replayed as authorization or as a stale mutation plan.
 
 ### Exact source / target binding
 
@@ -235,6 +229,7 @@ The workflow fails closed unless:
 - event is `workflow_dispatch`;
 - ref is `refs/heads/main`;
 - user/control-surface `source_sha` equals the event's exact `github.sha`;
+- fresh current `main` still equals that source before checkout and again immediately before the operation;
 - the exact SHA is checked out and verified;
 - `manifest_path` is an unaliased repository-relative `posts/.../article.json` path.
 
@@ -246,45 +241,89 @@ publish:<manifest_path>@<source_sha>
 
 as `publish_confirmation`. This is an exact-target/source confirmation. It does not substitute for Article readiness, remote-resource trust, managed Ghost ownership, or source fingerprints.
 
-### Draft-stage requirement
+### Production mode classification
 
-Production `plan-publish` and `publish` require every required LocaleVariant to already be an exact-current managed Ghost draft.
+A fresh `plan-publish` / `publish` plan must classify into exactly one of two control-surface modes.
 
-For each locale, the fresh publish plan must prove:
+#### `draft-promotion`
+
+This is the first-publication path. If any required locale is still a managed `draft`, every locale must be either:
 
 ```text
-existingPostId != null
-currentStatus == draft
-projectedSourceFingerprint == exact current sourceFingerprint
-managed observed post/status/revision/sync evidence == current draft
-operation == status-update
-desiredStatus == published
+exact-current managed draft
+  currentStatus == draft
+  projectedSourceFingerprint == exact current sourceFingerprint
+  operation == status-update
+  desiredStatus == published
 ```
 
-A missing post (`create`), stale content (`update`), already-public current post (`noop`), missing/invalid managed evidence, or any other operation fails closed.
+or, when recovering a partial multi-locale promotion:
 
-The dispatch adapter performs this check before building the production authorization envelope. The core `synchronizeArticlePublication(...)` then receives the same predicate as `publicationPlanGuard`, so it reruns the gate:
+```text
+exact-current managed published sibling
+  currentStatus == published
+  projectedSourceFingerprint == exact current sourceFingerprint
+  operation == noop
+```
+
+Every local body-asset plan must already be `reuse`, and feature-image planning must be `none` or `preserve`. The first-production step therefore cannot first-create/rewrite Article content, upload/replace a feature image, or newly publish repository-owned body assets.
+
+A stale published sibling is not allowed to hide inside promotion recovery; it would require a content `update` and therefore fails the promotion mode.
+
+#### `published-revision`
+
+When every required locale is already a uniquely managed `published` projection, a later reviewed revision stays public and is updated in place. Each locale may be:
+
+```text
+stale managed published projection
+  currentStatus == published
+  projectedSourceFingerprint != exact current sourceFingerprint
+  operation == update
+```
+
+or:
+
+```text
+exact-current managed published sibling
+  currentStatus == published
+  projectedSourceFingerprint == exact current sourceFingerprint
+  operation == noop
+```
+
+The operation never temporarily unpublishes the Article merely to stage a revision.
+
+Because an authorized revision may add repository-owned body assets or replace a local feature image, this mode may include resource publication/image-upload work. Those side effects remain bound to exact source/resource fingerprints, planned public URLs, current remote-resource approval, managed ownership/version evidence and refreshed post-verification.
+
+### Bound managed observation
+
+Both production modes require an existing managed Ghost post for every locale and an exact bound observation containing the same post ID, status and projected source revision, a non-empty `updated_at`, and canonical sync evidence. The low-level planned synchronization re-reads that identity immediately before mutation and compares ownership/version/status/slug/revision/sync/tags again.
+
+Unmanaged, ambiguous, malformed, first-create, or otherwise unsupported states fail closed.
+
+### Mode pinning across replans
+
+The dispatch adapter classifies the first fresh production plan and then builds the exact-source publication authorization. The selected mode (`draft-promotion` or `published-revision`) is captured by the control surface.
+
+The core `synchronizeArticlePublication(...)` then runs the mode-pinned `publicationPlanGuard`:
 
 1. on the core library's first internal plan, before asset side effects;
 2. on the refreshed plan after source/asset/policy revalidation, immediately before Ghost mutation.
 
-Therefore Ghost state cannot widen from “exact current draft -> status update” to “create/update/noop” in the race between external planning and core execution.
+If concurrent Ghost activity would change promotion into revision, revision into promotion, or otherwise leave the selected mode, the operation fails closed rather than widening mutation authority.
 
-### Production resource mutation restriction
+### Partial-failure retry
 
-Every local body-asset plan must already be `reuse` during `plan-publish` and `publish`.
+Multi-locale mutation is sequential, not transactional.
 
-`reuse` re-snapshots/verifies exact source bytes but skips provider mutation. An asset plan that still says `publish` means staging is incomplete and production fails closed.
+For a first publication, if one locale was promoted before a sibling failed, a later fresh retry may legitimately contain an exact-current published `noop` sibling plus remaining exact-current draft `status-update` locales. It remains `draft-promotion` as long as at least one draft remains and every published sibling is exact-current/noop.
 
-Because the Ghost operation must be `status-update`, the low-level publisher also preserves the existing feature image rather than uploading a new one.
+For a published revision, if one stale locale was updated before another failed, a fresh retry may contain already-updated exact-current published `noop` siblings plus remaining stale published `update` locales. It remains `published-revision` because every locale remains published.
 
-The target manual production step therefore permits no new Article-content write, no first post creation, no local feature-image upload, and no new repository-owned body-asset publish. Its intended external mutation is the managed draft-to-published Ghost status transition, followed by normal sync/revision verification.
-
-This restriction is deliberately stronger than the generic low-level publication library. A future alternative control surface would need its own explicit policy and evidence rather than silently inheriting broader mutation authority.
+If a fresh retry observes every locale already exact-current published, the plan is a safe all-noop published state. A stale plan is never replayed; the fresh control-surface classification and explicit publication intent govern the new attempt.
 
 ## Feature-image side-effect observability
 
-Local feature images are still uploaded through Ghost's Image API inside low-level projection synchronization when a content create/update actually requires them, notably during staging/draft operations.
+Local feature images are still uploaded through Ghost's Image API inside low-level projection synchronization when a content create/update actually requires them, including draft preparation and an explicitly authorized stale published revision.
 
 That upload is not transactional with subsequent Ghost post creation/update. A successful image upload followed by a post mutation failure can therefore leave an orphan Ghost media object.
 
