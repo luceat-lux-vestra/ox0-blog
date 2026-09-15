@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
-const SYNC_SCRIPT = fileURLToPath(new URL('../scripts/sync-article.mjs', import.meta.url));
+const SYNC_SCRIPT_URL = new URL('../scripts/sync-article.mjs', import.meta.url);
+const SYNC_SCRIPT = fileURLToPath(SYNC_SCRIPT_URL);
 
 function run(args, extraEnv = {}) {
   return spawnSync(process.execPath, [SYNC_SCRIPT, ...args], {
@@ -48,4 +50,12 @@ test('draft CLI rejects a production authorization envelope instead of silently 
   const error = stderrJson(result);
   assert.match(error.message, /only valid for publish/);
   assert.doesNotMatch(result.stderr, /ENOTFOUND|fetch failed|invalid\.example/);
+});
+
+test('low-level publish CLI pins the same production mode guard used by the manual workflow', async () => {
+  const source = await readFile(SYNC_SCRIPT_URL, 'utf8');
+  assert.match(source, /prepareArticlePublicationOperation\(common\)/);
+  assert.match(source, /productionPublishModeForPlan\(prepared\.plan\)/);
+  assert.match(source, /requireProductionPublishMode\(plan, productionMode\)/);
+  assert.match(source, /publicationPlanGuard/);
 });
