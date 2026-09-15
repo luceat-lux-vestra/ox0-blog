@@ -1,3 +1,5 @@
+import { requireLocaleToken } from './locale.mjs';
+
 function requireString(value, name) {
   if (typeof value !== 'string' || value.trim() === '') {
     throw new Error(`${name} must be a non-empty string`);
@@ -22,7 +24,7 @@ function requireLocales(requiredLocales) {
   if (!Array.isArray(requiredLocales) || requiredLocales.length === 0) {
     throw new Error('Article.requiredLocales must be a non-empty array');
   }
-  const locales = requiredLocales.map((locale) => requireString(locale, 'required locale'));
+  const locales = requiredLocales.map((locale) => requireLocaleToken(locale, 'required locale'));
   if (new Set(locales).size !== locales.length) {
     throw new Error('Article.requiredLocales must not contain duplicates');
   }
@@ -36,7 +38,7 @@ export function normalizeLocaleVariant(raw) {
   }
   return {
     variantId: requireString(raw.variantId, 'LocaleVariant.variantId'),
-    locale: requireString(raw.locale, 'LocaleVariant.locale'),
+    locale: requireLocaleToken(raw.locale, 'LocaleVariant.locale'),
     title: requireString(raw.title, 'LocaleVariant.title'),
     excerpt: optionalString(raw.excerpt, 'LocaleVariant.excerpt'),
     slug: requireString(raw.slug, 'LocaleVariant.slug'),
