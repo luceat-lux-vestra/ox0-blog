@@ -73,10 +73,13 @@ jobs:
       - name: Test publisher
         run: npm test
 
-      - name: Validate legacy repository and selected post
+      - name: Validate migration repository and selected legacy post
         env:
           POST_PATH: ${{ inputs.post_path }}
-        run: node scripts/validate-post.mjs "$POST_PATH"
+        run: |
+          set -eu
+          npm run validate
+          node scripts/validate-post.mjs "$POST_PATH"
 
       - name: Reverify current main immediately before Ghost operation
         env:
