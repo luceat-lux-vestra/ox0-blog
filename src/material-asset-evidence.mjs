@@ -33,6 +33,9 @@ function parseImageHref(href) {
     if (parsed.protocol !== 'https:') {
       throw new Error(`remote Markdown images must use https: ${value}`);
     }
+    if (parsed.username || parsed.password) {
+      throw new Error('remote Markdown image URL must not contain URL credentials');
+    }
     if (parsed.href.length > MAX_REMOTE_IMAGE_URL_LENGTH) {
       throw new Error(`remote Markdown image URL must be at most ${MAX_REMOTE_IMAGE_URL_LENGTH} characters`);
     }
