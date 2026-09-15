@@ -31,7 +31,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: article-ghost-control
+  group: ox0-blog-ghost-control
   cancel-in-progress: false
 
 jobs:
