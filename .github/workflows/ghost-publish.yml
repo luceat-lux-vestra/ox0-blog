@@ -21,7 +21,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ghost-publish-legacy
+  group: ox0-blog-ghost-control
   cancel-in-progress: false
 
 jobs:
