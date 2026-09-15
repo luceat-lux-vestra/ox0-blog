@@ -31,7 +31,8 @@ See:
 - `docs/asset-publisher.md` — repository-owned body-resource publication contract;
 - `docs/remote-resource-policy.md` — production trust policy for external HTTPS images;
 - `docs/article-publication.md` — guarded Article-level mutation orchestration;
-- `docs/live-draft-verification.md` — exact-candidate live draft verification without a separate staging Ghost;
+- `docs/live-draft-verification.md` — exact-candidate live draft verification without a separate Ghost staging environment;
+- `docs/live-verification-policy.md` — personal-blog live evidence policy;
 - `docs/workflow/` — durable state/authorization/Git/RTA policy.
 
 ## Core invariants
@@ -44,7 +45,7 @@ See:
 - Production publication authorization is task-scoped and explicit. It is never inferred from source metadata, Git state, RTA state, Ghost state, or a prior dry-run.
 - A normal Git push/PR does not mutate Ghost.
 - `PREPARE_PUBLISH` / planning is read-only with respect to Ghost and publication resource storage.
-- A `draft` operation is a real mutation and may stage repository-owned body assets or upload a local Ghost feature image.
+- A `draft` operation is a real draft-preparation mutation and may stage repository-owned body assets or upload a local Ghost feature image.
 - Production use of external HTTPS body/feature images requires explicit current host trust approval.
 - Public projection/publication URLs must be credential-free HTTPS where HTTPS is required.
 - Per-locale Ghost state is independently recoverable; partial multi-locale failure is never whole-Article success.
@@ -134,9 +135,9 @@ npm run sync:article -- posts/example/article.json publish
 
 It is an execution primitive, **not an authorization generator**.
 
-### Draft
+### Draft preparation
 
-Draft rejects a production authorization envelope. It may stage body assets, upload a local feature image, and create/update managed Ghost drafts.
+Draft rejects a production authorization envelope. It may prepare body assets, upload a local feature image, and create/update managed Ghost drafts.
 
 ### Publish
 
@@ -167,7 +168,7 @@ It fails closed unless it runs from `refs/heads/main`, `source_sha` is the exact
 
 Before the selected operation it runs Node 24 locked install, `npm test`, combined repository validation, and selected-Article validation. All target Article Ghost operations are globally serialized under one concurrency group.
 
-### Staged path
+### Draft-first path
 
 The intended manual production path is:
 
@@ -175,16 +176,16 @@ The intended manual production path is:
 plan-draft      # read-only
     |
     v
-draft           # explicit preparation mutation
+draft           # explicit Ghost draft-preparation mutation
     |
     v
 plan-publish    # read-only exact-current draft gate
     |
     v
-publish          # explicit exact-target production promotion
+publish         # explicit exact-target production promotion
 ```
 
-Here `draft` means Ghost draft preparation. It does **not** imply a separate staging Ghost environment.
+Here `draft` is preparation on the configured Ghost instance. It does **not** imply or require a separate Ghost staging environment.
 
 A stale earlier plan is never replayed; each operation creates fresh current evidence.
 
@@ -217,7 +218,7 @@ Therefore target production `publish` rejects:
 
 The dispatch adapter first checks this on a fresh publish plan and creates the normal exact-source authorization envelope. The core publication library then receives the same predicate as a plan guard and reruns it on its own initial plan and again on the refreshed plan immediately before Ghost mutation.
 
-This closes the race where a draft could disappear/change after external planning. Under the target manual path, final production publication is restricted to pre-staged body-asset reuse plus managed Ghost draft-to-published status transition; it is not allowed to create/rewrite posts or upload new feature/body assets during the final production step.
+This closes the race where a draft could disappear/change after external planning. Under the target manual path, final production publication is restricted to prepared body-asset reuse plus managed Ghost draft-to-published status transition; it is not allowed to create/rewrite posts or upload new feature/body assets during the final production step.
 
 ## Live draft verification
 
@@ -229,7 +230,7 @@ npm run verify:article-live-draft
 
 Required operator inputs are documented in `docs/live-draft-verification.md`.
 
-The verifier creates a unique bilingual Article, reaches `SYNCED + READY`, creates only managed Ghost drafts, verifies both locales as `DRAFT_CURRENT`, and then deletes the temporary posts/owned tags and fresh-checks namespace absence. It never constructs production publication authorization and never requests `published` status.
+The verifier creates a unique bilingual Article, reaches `SYNCED + READY`, creates only managed Ghost drafts, verifies both locales as `DRAFT_CURRENT`, and then deletes the temporary posts and only publisher tags whose verifier ownership/creation is proven. It fresh-checks namespace absence afterwards. It never constructs production publication authorization and never requests `published` status.
 
 A PASS therefore proves draft mutation/recovery/cleanup semantics only. It is not evidence that production publication or GitHub `workflow_dispatch` has executed.
 
@@ -271,6 +272,8 @@ RECONCILIATION_REQUIRED(reason)
 ```
 
 `revision` identifies the exact projection source; `sync` protects managed Ghost state from unmanaged drift.
+
+Ghost ownership reads explicitly request related tag data rather than relying on API default inclusion.
 
 If create/update succeeds but final publisher stamping fails, fresh recovery keeps that post visible as reconciliation-required rather than collapsing it to `NOT_PROJECTED`.
 
