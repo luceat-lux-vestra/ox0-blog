@@ -3,6 +3,7 @@ import { ARTICLE_PUBLICATION_AUTHORIZATION_VERSION } from './article-publication
 
 const SHA_RE = /^[a-f0-9]{40}$/;
 const SOURCE_FINGERPRINT_RE = /^sha256:[a-f0-9]{64}$/;
+const HASH_RE = /^[a-f0-9]{64}$/;
 const OPERATIONS = new Set(['plan-draft', 'plan-publish', 'draft', 'publish']);
 
 export const PRODUCTION_PUBLISH_MODE = Object.freeze({
@@ -87,14 +88,18 @@ function requireGhostPlan(variant, locale) {
   if (ghost.desiredStatus !== 'published') {
     throw new Error(`production workflow requires desired Ghost status=published for locale: ${locale}`);
   }
+  if (!SOURCE_FINGERPRINT_RE.test(ghost.projectedSourceFingerprint ?? '')) {
+    throw new Error(`production workflow requires canonical projected source fingerprint for locale: ${locale}`);
+  }
   const observed = ghost.observed;
   if (
     !observed
     || observed.postId !== ghost.existingPostId
     || observed.status !== ghost.currentStatus
     || observed.projectedSourceFingerprint !== ghost.projectedSourceFingerprint
-    || typeof observed.syncHash !== 'string'
-    || observed.syncHash === ''
+    || typeof observed.updatedAt !== 'string'
+    || observed.updatedAt === ''
+    || !HASH_RE.test(observed.syncHash ?? '')
   ) {
     throw new Error(`production workflow requires exact bound managed-post observation for locale: ${locale}`);
   }
