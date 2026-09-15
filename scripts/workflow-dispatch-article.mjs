@@ -11,9 +11,10 @@ import {
 import { GhostAdminClient } from '../src/ghost-client.mjs';
 import { loadHostRuntime } from '../src/host-runtime.mjs';
 import {
+  productionPublishModeForPlan,
   publicationAuthorizationForDispatchPlan,
   requireArticleWorkflowDispatchContext,
-  requireExactCurrentDraftsForProduction
+  requireProductionPublishMode
 } from '../src/workflow-dispatch-control.mjs';
 
 function errorReport(error) {
@@ -71,11 +72,14 @@ async function main() {
 
   if (context.operation === 'plan-draft' || context.operation === 'plan-publish') {
     const plan = await planArticlePublication(common);
-    if (context.operation === 'plan-publish') requireExactCurrentDraftsForProduction(plan);
+    const productionMode = context.operation === 'plan-publish'
+      ? productionPublishModeForPlan(plan)
+      : null;
     process.stdout.write(`${JSON.stringify({
       status: 'PLANNED',
       sourceSha: context.sourceSha,
       operation: context.operation,
+      ...(productionMode ? { productionMode } : {}),
       plan
     }, null, 2)}\n`);
     return;
@@ -95,22 +99,28 @@ async function main() {
     return;
   }
 
-  // workflow_dispatch is the external production-authorization surface. Build a
-  // fresh publish plan, require every LocaleVariant to be an exact-current managed
-  // draft, bind the explicit dispatch intent to those exact fingerprints, then let
-  // the publication library independently re-plan/revalidate the same transition
-  // policy before any resource or Ghost mutation.
+  // workflow_dispatch is the external production-authorization surface. A fresh
+  // plan chooses exactly one production mode:
+  //   - draft-promotion: exact-current drafts (plus exact-current published no-op
+  //     siblings when recovering a partial multi-locale promotion), or
+  //   - published-revision: existing managed published posts updated in place.
+  // The selected mode is pinned across both publication-library replans so Ghost
+  // races cannot widen a promotion into a content rewrite or vice versa.
   const prepared = await prepareArticlePublicationOperation(common);
+  const productionMode = productionPublishModeForPlan(prepared.plan);
   const authorization = publicationAuthorizationForDispatchPlan(context, prepared.plan);
   const result = await synchronizeArticlePublication({
     ...common,
     authorization,
-    publicationPlanGuard: requireExactCurrentDraftsForProduction
+    publicationPlanGuard(plan) {
+      return requireProductionPublishMode(plan, productionMode);
+    }
   });
   process.stdout.write(`${JSON.stringify({
     status: result.status,
     sourceSha: context.sourceSha,
     operation: context.operation,
+    productionMode,
     articleId: result.articleId,
     action: result.action,
     publishedAssets: result.publishedAssets,
