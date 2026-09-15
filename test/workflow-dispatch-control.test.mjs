@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  PRODUCTION_PUBLISH_MODE,
+  productionPublishModeForPlan,
   publicationAuthorizationForDispatchPlan,
   requireArticleWorkflowDispatchContext,
-  requireExactCurrentDraftsForProduction
+  requireExactCurrentDraftsForProduction,
+  requireProductionPublishMode
 } from '../src/workflow-dispatch-control.mjs';
 
 const SHA = 'a'.repeat(40);
@@ -24,8 +27,12 @@ function context(overrides = {}) {
   };
 }
 
+function fingerprint(digit) {
+  return `sha256:${digit.repeat(64)}`;
+}
+
 function draftVariant(locale, digit, overrides = {}) {
-  const sourceFingerprint = `sha256:${digit.repeat(64)}`;
+  const sourceFingerprint = fingerprint(digit);
   return {
     locale,
     sourceFingerprint,
@@ -36,6 +43,7 @@ function draftVariant(locale, digit, overrides = {}) {
       currentStatus: 'draft',
       desiredStatus: 'published',
       projectedSourceFingerprint: sourceFingerprint,
+      featureImage: { action: 'none' },
       observed: {
         postId: `post-${locale}`,
         status: 'draft',
@@ -44,6 +52,36 @@ function draftVariant(locale, digit, overrides = {}) {
       }
     },
     ...overrides
+  };
+}
+
+function publishedVariant(locale, targetDigit, {
+  projectedDigit = targetDigit,
+  operation = projectedDigit === targetDigit ? 'noop' : 'update',
+  assetPlans = [],
+  ...overrides
+} = {}) {
+  const sourceFingerprint = fingerprint(targetDigit);
+  const projectedSourceFingerprint = fingerprint(projectedDigit);
+  return {
+    locale,
+    sourceFingerprint,
+    assetPlans,
+    ghost: {
+      operation,
+      existingPostId: `post-${locale}`,
+      currentStatus: 'published',
+      desiredStatus: 'published',
+      projectedSourceFingerprint,
+      featureImage: operation === 'noop' ? { action: 'none' } : { action: 'reuse', url: 'https://cdn.example/cover.png' },
+      observed: {
+        postId: `post-${locale}`,
+        status: 'published',
+        projectedSourceFingerprint,
+        syncHash: projectedDigit.repeat(64)
+      },
+      ...overrides
+    }
   };
 }
 
@@ -143,7 +181,7 @@ test('production publish confirmation binds exact normalized manifest and source
   }
 });
 
-test('production workflow accepts exact-current managed drafts with reuse-only staged assets', () => {
+test('first production publication uses draft-promotion and keeps assets reuse-only', () => {
   const plan = publishPlan({
     variants: [
       draftVariant('ko-KR', '1', {
@@ -152,42 +190,121 @@ test('production workflow accepts exact-current managed drafts with reuse-only s
       draftVariant('en', '2')
     ]
   });
+  assert.equal(productionPublishModeForPlan(plan), PRODUCTION_PUBLISH_MODE.DRAFT_PROMOTION);
   assert.equal(requireExactCurrentDraftsForProduction(plan).articleId, 'article-1');
 });
 
-test('production workflow rejects first-publish, stale, already-published, rewrite, unbound or unstaged asset plans', () => {
+test('draft-promotion retry accepts exact-current published no-op siblings after partial locale success', () => {
+  const plan = publishPlan({
+    variants: [
+      publishedVariant('ko-KR', '1'),
+      draftVariant('en', '2')
+    ]
+  });
+  assert.equal(productionPublishModeForPlan(plan), PRODUCTION_PUBLISH_MODE.DRAFT_PROMOTION);
+  assert.throws(
+    () => requireExactCurrentDraftsForProduction(plan),
+    /exact-current managed draft/
+  );
+});
+
+test('draft-promotion rejects first-create, stale published sibling, rewrite, unbound or unstaged resource plans', () => {
   const base = draftVariant('en', '2');
   const cases = [
-    [draftVariant('en', '2', { ghost: { ...base.ghost, existingPostId: null, observed: null, operation: 'create' } }), /existing managed draft/],
-    [draftVariant('en', '2', { ghost: { ...base.ghost, currentStatus: 'published', observed: { ...base.ghost.observed, status: 'published' }, operation: 'noop' } }), /status=draft/],
-    [draftVariant('en', '2', { ghost: { ...base.ghost, projectedSourceFingerprint: `sha256:${'3'.repeat(64)}`, operation: 'update' } }), /not exact-current/],
-    [draftVariant('en', '2', { ghost: { ...base.ghost, operation: 'update' } }), /draft-to-published status update/],
-    [draftVariant('en', '2', { ghost: { ...base.ghost, observed: null } }), /exact bound managed-draft observation/],
-    [draftVariant('en', '2', { ghost: { ...base.ghost, observed: { ...base.ghost.observed, syncHash: '' } } }), /exact bound managed-draft observation/],
-    [draftVariant('en', '2', { assetPlans: [{ action: 'publish', ref: 'assets/a.png' }] }), /pre-staged\/reuse-only/]
+    [draftVariant('en', '2', { ghost: { ...base.ghost, existingPostId: null, observed: null, operation: 'create' } }), /existing managed Ghost post/],
+    [publishedVariant('en', '2', { projectedDigit: '3' }), /draft-promotion retry requires exact-current published no-op/],
+    [draftVariant('en', '2', { ghost: { ...base.ghost, projectedSourceFingerprint: fingerprint('3'), operation: 'update' } }), /draft is not exact-current/],
+    [draftVariant('en', '2', { ghost: { ...base.ghost, operation: 'update' } }), /may only promote an exact-current draft/],
+    [draftVariant('en', '2', { ghost: { ...base.ghost, observed: null } }), /exact bound managed-post observation/],
+    [draftVariant('en', '2', { ghost: { ...base.ghost, observed: { ...base.ghost.observed, syncHash: '' } } }), /exact bound managed-post observation/],
+    [draftVariant('en', '2', { assetPlans: [{ action: 'publish', ref: 'assets/a.png' }] }), /pre-staged\/reuse-only/],
+    [draftVariant('en', '2', { ghost: { ...base.ghost, featureImage: { action: 'upload' } } }), /must not upload or replace featureImage/]
   ];
 
   for (const [variant, pattern] of cases) {
     assert.throws(
-      () => requireExactCurrentDraftsForProduction(publishPlan({ variants: [draftVariant('ko-KR', '1'), variant] })),
+      () => productionPublishModeForPlan(publishPlan({ variants: [draftVariant('ko-KR', '1'), variant] })),
       pattern
     );
   }
 });
 
-test('workflow dispatch control binds external publish intent to exact fresh draft-plan fingerprints', () => {
-  const dispatch = requireArticleWorkflowDispatchContext(context());
-  const authorization = publicationAuthorizationForDispatchPlan(dispatch, publishPlan());
-
-  assert.deepEqual(authorization, {
-    version: 1,
-    kind: 'explicit-production-publication',
-    articleId: 'article-1',
-    sourceFingerprints: {
-      'ko-KR': `sha256:${'1'.repeat(64)}`,
-      en: `sha256:${'2'.repeat(64)}`
-    }
+test('published revision updates changed managed public projections in place and permits resource publication', () => {
+  const plan = publishPlan({
+    variants: [
+      publishedVariant('ko-KR', '1'),
+      publishedVariant('en', '2', {
+        projectedDigit: '3',
+        assetPlans: [{ action: 'publish', ref: 'assets/new.png' }]
+      })
+    ]
   });
+  assert.equal(productionPublishModeForPlan(plan), PRODUCTION_PUBLISH_MODE.PUBLISHED_REVISION);
+  assert.equal(
+    requireProductionPublishMode(plan, PRODUCTION_PUBLISH_MODE.PUBLISHED_REVISION).articleId,
+    'article-1'
+  );
+});
+
+test('published revision rejects create/status transitions, draft states and inconsistent no-op/update fingerprints', () => {
+  const cases = [
+    [publishedVariant('en', '2', { operation: 'create' }), /may only update or no-op/],
+    [publishedVariant('en', '2', { operation: 'status-update' }), /may only update or no-op/],
+    [publishedVariant('en', '2', { operation: 'noop', projectedDigit: '3' }), /no-op is not exact-current/],
+    [publishedVariant('en', '2', { operation: 'update', projectedDigit: '2' }), /update must represent a changed projection/]
+  ];
+  for (const [variant, pattern] of cases) {
+    assert.throws(
+      () => productionPublishModeForPlan(publishPlan({
+        variants: [publishedVariant('ko-KR', '1'), variant]
+      })),
+      pattern
+    );
+  }
+
+  assert.throws(
+    () => productionPublishModeForPlan(publishPlan({
+      variants: [publishedVariant('ko-KR', '1'), {
+        ...draftVariant('en', '2'),
+        ghost: { ...draftVariant('en', '2').ghost, operation: 'noop' }
+      }]
+    })),
+    /draft-promotion/
+  );
+});
+
+test('production publish mode is pinned across replans', () => {
+  const promotion = publishPlan();
+  const revision = publishPlan({
+    variants: [publishedVariant('ko-KR', '1'), publishedVariant('en', '2', { projectedDigit: '3' })]
+  });
+  assert.equal(
+    requireProductionPublishMode(promotion, PRODUCTION_PUBLISH_MODE.DRAFT_PROMOTION),
+    promotion
+  );
+  assert.throws(
+    () => requireProductionPublishMode(revision, PRODUCTION_PUBLISH_MODE.DRAFT_PROMOTION),
+    /production publish mode changed after authorization/
+  );
+});
+
+test('workflow dispatch control binds external publish intent to exact fresh plan fingerprints for both modes', () => {
+  const dispatch = requireArticleWorkflowDispatchContext(context());
+  for (const plan of [
+    publishPlan(),
+    publishPlan({ variants: [publishedVariant('ko-KR', '1'), publishedVariant('en', '2', { projectedDigit: '3' })] })
+  ]) {
+    const authorization = publicationAuthorizationForDispatchPlan(dispatch, plan);
+    assert.deepEqual(authorization, {
+      version: 1,
+      kind: 'explicit-production-publication',
+      articleId: 'article-1',
+      sourceFingerprints: {
+        'ko-KR': fingerprint('1'),
+        en: fingerprint('2')
+      }
+    });
+  }
 });
 
 test('workflow dispatch authorization rejects non-publish contexts and malformed plans', () => {
