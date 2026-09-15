@@ -76,6 +76,18 @@ test('Article validation rejects nested Article bundles with overlapping source 
   );
 });
 
+test('Article validation rejects article.json when it is a directory instead of a manifest file', async () => {
+  const repoRoot = await root();
+  const dir = path.join(repoRoot, 'posts', 'alpha');
+  await mkdir(path.join(dir, 'article.json'), { recursive: true });
+  await writeFile(path.join(dir, 'legacy-looking.md'), '# not silently hidden\n', 'utf8');
+
+  await assert.rejects(
+    collectArticleManifestPaths(repoRoot),
+    /Article manifest must be a regular file/
+  );
+});
+
 test('Article manifest may intentionally own a normalized nested Markdown source path', async () => {
   const repoRoot = await root();
   await writeArticle(
