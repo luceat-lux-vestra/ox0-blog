@@ -6,12 +6,24 @@ import { loadPost } from './post.mjs';
 async function collectMarkdownFiles(dir, repoRoot) {
   const entries = await readdir(dir, { withFileTypes: true });
   entries.sort((a, b) => a.name.localeCompare(b.name));
+
+  // Article bundles own their whole source subtree. The target Article validator
+  // validates article.json plus every Markdown source below it; the legacy
+  // one-file validator must not reinterpret LocaleVariant Markdown as old
+  // frontmatter posts during the migration.
+  for (const entry of entries) {
+    if (entry.isSymbolicLink()) {
+      const absolute = path.join(dir, entry.name);
+      throw new Error(`symlinks are not allowed under posts/: ${path.relative(repoRoot, absolute)}`);
+    }
+  }
+  if (entries.some((entry) => entry.name.toLowerCase() === 'article.json')) {
+    return [];
+  }
+
   const files = [];
   for (const entry of entries) {
     const absolute = path.join(dir, entry.name);
-    if (entry.isSymbolicLink()) {
-      throw new Error(`symlinks are not allowed under posts/: ${path.relative(repoRoot, absolute)}`);
-    }
     if (entry.isDirectory()) {
       files.push(...await collectMarkdownFiles(absolute, repoRoot));
     } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
