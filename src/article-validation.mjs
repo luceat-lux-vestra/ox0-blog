@@ -39,10 +39,68 @@ async function collectManifestFiles(dir, repoRoot) {
   return manifests;
 }
 
+function isInside(parent, candidate) {
+  const relative = path.relative(parent, candidate);
+  return relative !== ''
+    && relative !== '..'
+    && !relative.startsWith(`..${path.sep}`)
+    && !path.isAbsolute(relative);
+}
+
+function assertNonOverlappingArticleDirectories(manifests, repoRoot) {
+  const directories = manifests.map((manifest) => path.dirname(manifest));
+  for (let outer = 0; outer < directories.length; outer += 1) {
+    for (let inner = outer + 1; inner < directories.length; inner += 1) {
+      const left = directories[outer];
+      const right = directories[inner];
+      if (isInside(left, right) || isInside(right, left)) {
+        throw new Error(
+          `nested Article bundles are not allowed: ${path.relative(repoRoot, left)} and ${path.relative(repoRoot, right)}`
+        );
+      }
+    }
+  }
+}
+
+async function collectArticleMarkdownFiles(dir, repoRoot) {
+  const entries = await readdir(dir, { withFileTypes: true });
+  entries.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+  const files = [];
+  for (const entry of entries) {
+    const absolute = path.join(dir, entry.name);
+    if (entry.isSymbolicLink()) {
+      throw new Error(`symlinks are not allowed under posts/: ${path.relative(repoRoot, absolute)}`);
+    }
+    if (entry.isDirectory()) {
+      files.push(...await collectArticleMarkdownFiles(absolute, repoRoot));
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.md')) continue;
+    if (!entry.name.endsWith('.md')) {
+      throw new Error(`Article Markdown source extension must be lowercase .md: ${path.relative(repoRoot, absolute)}`);
+    }
+    files.push(path.resolve(absolute));
+  }
+  return files;
+}
+
+async function assertArticleMarkdownOwnership(article, repoRoot) {
+  const markdownFiles = await collectArticleMarkdownFiles(article.articleDir, repoRoot);
+  const claimed = new Set(
+    article.bundle.article.variants.map((variant) => path.resolve(variant.sourcePath))
+  );
+  for (const file of markdownFiles) {
+    if (!claimed.has(file)) {
+      throw new Error(`Article bundle contains unclaimed Markdown source: ${path.relative(repoRoot, file)}`);
+    }
+  }
+}
+
 export async function collectArticleManifestPaths(repoRoot = process.cwd()) {
   const root = path.resolve(repoRoot);
   const postsRoot = await requirePostsRoot(root);
   const manifests = await collectManifestFiles(postsRoot, root);
+  assertNonOverlappingArticleDirectories(manifests, root);
   return manifests.map((absolute) => path.relative(root, absolute).split(path.sep).join('/'));
 }
 
@@ -79,6 +137,7 @@ export async function validateArticleRepository(
       manifestPath: path.resolve(root, ...manifestPath.split('/')),
       repoRoot: root
     });
+    await assertArticleMarkdownOwnership(loaded, root);
     const evaluation = await evaluateArticleBundle({
       bundle: loaded.bundle,
       compiler,
