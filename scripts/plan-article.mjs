@@ -3,6 +3,7 @@ import path from 'node:path';
 import { planArticlePublication } from '../src/article-planning.mjs';
 import { GhostAdminClient } from '../src/ghost-client.mjs';
 import { loadHostRuntime } from '../src/host-runtime.mjs';
+import { productionPublishModeForPlan } from '../src/workflow-dispatch-control.mjs';
 
 const [manifestRef, action, ...extra] = process.argv.slice(2);
 if (!manifestRef || !action || extra.length > 0) {
@@ -27,4 +28,8 @@ const plan = await planArticlePublication({
   projectContext: hostRuntime.projectContext,
   remoteResourcePolicy: hostRuntime.remoteResourcePolicy
 });
-process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
+const productionMode = action === 'publish' ? productionPublishModeForPlan(plan) : null;
+process.stdout.write(`${JSON.stringify({
+  ...(productionMode ? { productionMode } : {}),
+  ...plan
+}, null, 2)}\n`);
