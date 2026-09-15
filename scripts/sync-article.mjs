@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import path from 'node:path';
 import {
+  ARTICLE_PUBLICATION_AUTHORIZATION_VERSION,
   ArticlePublicationError,
   synchronizeArticlePublication
 } from '../src/article-publication.mjs';
@@ -12,6 +13,40 @@ import {
   productionPublishModeForPlan,
   requireProductionPublishMode
 } from '../src/workflow-dispatch-control.mjs';
+
+const SOURCE_FINGERPRINT_RE = /^sha256:[a-f0-9]{64}$/;
+
+function requireAuthorizationEnvelope(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('OX0_ARTICLE_PUBLICATION_AUTHORIZATION_JSON must contain one authorization object');
+  }
+  if (value.version !== ARTICLE_PUBLICATION_AUTHORIZATION_VERSION) {
+    throw new Error(`unsupported Article publication authorization version: ${value.version}`);
+  }
+  if (value.kind !== 'explicit-production-publication') {
+    throw new Error('production publication authorization kind must be explicit-production-publication');
+  }
+  if (typeof value.articleId !== 'string' || value.articleId.trim() === '') {
+    throw new Error('production publication authorization articleId is required');
+  }
+  if (
+    !value.sourceFingerprints
+    || typeof value.sourceFingerprints !== 'object'
+    || Array.isArray(value.sourceFingerprints)
+  ) {
+    throw new Error('production publication authorization sourceFingerprints are required');
+  }
+  const entries = Object.entries(value.sourceFingerprints);
+  if (entries.length === 0) {
+    throw new Error('production publication authorization sourceFingerprints must not be empty');
+  }
+  for (const [locale, fingerprint] of entries) {
+    if (locale.trim() === '' || !SOURCE_FINGERPRINT_RE.test(fingerprint)) {
+      throw new Error(`production publication authorization contains invalid source fingerprint for locale: ${locale}`);
+    }
+  }
+  return value;
+}
 
 function authorizationForAction(action) {
   const raw = process.env.OX0_ARTICLE_PUBLICATION_AUTHORIZATION_JSON;
@@ -30,10 +65,7 @@ function authorizationForAction(action) {
   try { parsed = parseStrictJson(raw); } catch (error) {
     throw new Error(`failed to parse OX0_ARTICLE_PUBLICATION_AUTHORIZATION_JSON: ${error.message}`);
   }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('OX0_ARTICLE_PUBLICATION_AUTHORIZATION_JSON must contain one authorization object');
-  }
-  return parsed;
+  return requireAuthorizationEnvelope(parsed);
 }
 
 function errorReport(error) {
