@@ -46,6 +46,7 @@ function draftVariant(locale, digit, overrides = {}) {
       featureImage: { action: 'none' },
       observed: {
         postId: `post-${locale}`,
+        updatedAt: '2026-09-15T00:00:00.000Z',
         status: 'draft',
         projectedSourceFingerprint: sourceFingerprint,
         syncHash: digit.repeat(64)
@@ -76,6 +77,7 @@ function publishedVariant(locale, targetDigit, {
       featureImage: operation === 'noop' ? { action: 'none' } : { action: 'reuse', url: 'https://cdn.example/cover.png' },
       observed: {
         postId: `post-${locale}`,
+        updatedAt: '2026-09-15T00:00:00.000Z',
         status: 'published',
         projectedSourceFingerprint,
         syncHash: projectedDigit.repeat(64)
@@ -217,6 +219,7 @@ test('draft-promotion rejects first-create, stale published sibling, rewrite, un
     [draftVariant('en', '2', { ghost: { ...base.ghost, operation: 'update' } }), /may only promote an exact-current draft/],
     [draftVariant('en', '2', { ghost: { ...base.ghost, observed: null } }), /exact bound managed-post observation/],
     [draftVariant('en', '2', { ghost: { ...base.ghost, observed: { ...base.ghost.observed, syncHash: '' } } }), /exact bound managed-post observation/],
+    [draftVariant('en', '2', { ghost: { ...base.ghost, observed: { ...base.ghost.observed, updatedAt: null } } }), /exact bound managed-post observation/],
     [draftVariant('en', '2', { assetPlans: [{ action: 'publish', ref: 'assets/a.png' }] }), /pre-staged\/reuse-only/],
     [draftVariant('en', '2', { ghost: { ...base.ghost, featureImage: { action: 'upload' } } }), /must not upload or replace featureImage/]
   ];
@@ -270,6 +273,27 @@ test('published revision rejects create/status transitions, draft states and inc
       }]
     })),
     /draft-promotion/
+  );
+});
+
+test('production plan rejects malformed managed revision and sync evidence', () => {
+  const malformedRevision = publishedVariant('en', '2', { projectedDigit: '3' });
+  malformedRevision.ghost.projectedSourceFingerprint = 'sha256:not-valid';
+  malformedRevision.ghost.observed.projectedSourceFingerprint = 'sha256:not-valid';
+  assert.throws(
+    () => productionPublishModeForPlan(publishPlan({
+      variants: [publishedVariant('ko-KR', '1'), malformedRevision]
+    })),
+    /canonical projected source fingerprint/
+  );
+
+  const malformedSync = publishedVariant('en', '2');
+  malformedSync.ghost.observed.syncHash = 'abc';
+  assert.throws(
+    () => productionPublishModeForPlan(publishPlan({
+      variants: [publishedVariant('ko-KR', '1'), malformedSync]
+    })),
+    /exact bound managed-post observation/
   );
 });
 
