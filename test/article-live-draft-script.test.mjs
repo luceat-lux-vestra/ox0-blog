@@ -23,7 +23,9 @@ test('live Article verifier is draft-only and uses durable review contracts', ()
   assert.doesNotMatch(source, /OX0_ARTICLE_PUBLISH_CONFIRMATION/);
 });
 
-test('live Article verifier verifies cleanup residue instead of assuming deletion succeeded', () => {
+test('live Article verifier verifies and cleans bounded temporary namespace residue', () => {
+  assert.match(source, /rememberExpectedIdentityTags/);
+  assert.match(source, /deleteTagIfVerifierOwnedAndUnreferenced/);
   assert.match(source, /assertTemporaryNamespaceAbsent/);
   assert.match(source, /temporary verifier source identity residue remains/);
   assert.match(source, /temporary verifier identity-tag residue remains/);
