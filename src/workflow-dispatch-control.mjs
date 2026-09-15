@@ -5,6 +5,11 @@ const SHA_RE = /^[a-f0-9]{40}$/;
 const SOURCE_FINGERPRINT_RE = /^sha256:[a-f0-9]{64}$/;
 const OPERATIONS = new Set(['plan-draft', 'plan-publish', 'draft', 'publish']);
 
+export const PRODUCTION_PUBLISH_MODE = Object.freeze({
+  DRAFT_PROMOTION: 'draft-promotion',
+  PUBLISHED_REVISION: 'published-revision'
+});
+
 function requireString(value, name) {
   if (typeof value !== 'string' || value.trim() === '') {
     throw new Error(`${name} must be a non-empty string`);
@@ -54,7 +59,111 @@ function requirePublishPlan(plan) {
   if (!Array.isArray(plan.variants) || plan.variants.length === 0) {
     throw new Error('publication plan must contain required LocaleVariant plans');
   }
+  const locales = new Set();
+  for (const variant of plan.variants) {
+    const locale = requireString(variant?.locale, 'publication plan locale');
+    if (locales.has(locale)) throw new Error(`publication plan contains duplicate locale: ${locale}`);
+    locales.add(locale);
+  }
   return plan;
+}
+
+function requireSourceFingerprint(variant, locale) {
+  const sourceFingerprint = variant?.sourceFingerprint;
+  if (!SOURCE_FINGERPRINT_RE.test(sourceFingerprint ?? '')) {
+    throw new Error(`publication plan source fingerprint is invalid for locale: ${locale}`);
+  }
+  return sourceFingerprint;
+}
+
+function requireGhostPlan(variant, locale) {
+  const ghost = variant?.ghost;
+  if (!ghost || typeof ghost !== 'object' || Array.isArray(ghost)) {
+    throw new Error(`production workflow requires Ghost plan evidence for locale: ${locale}`);
+  }
+  if (typeof ghost.existingPostId !== 'string' || ghost.existingPostId === '') {
+    throw new Error(`production workflow requires an existing managed Ghost post for locale: ${locale}`);
+  }
+  if (ghost.desiredStatus !== 'published') {
+    throw new Error(`production workflow requires desired Ghost status=published for locale: ${locale}`);
+  }
+  const observed = ghost.observed;
+  if (
+    !observed
+    || observed.postId !== ghost.existingPostId
+    || observed.status !== ghost.currentStatus
+    || observed.projectedSourceFingerprint !== ghost.projectedSourceFingerprint
+    || typeof observed.syncHash !== 'string'
+    || observed.syncHash === ''
+  ) {
+    throw new Error(`production workflow requires exact bound managed-post observation for locale: ${locale}`);
+  }
+  return ghost;
+}
+
+function requireReuseOnlyAssets(variant, locale) {
+  for (const assetPlan of variant?.assetPlans ?? []) {
+    if (!assetPlan || assetPlan.action !== 'reuse') {
+      throw new Error(`draft-promotion workflow requires every local body asset to be pre-staged/reuse-only for locale: ${locale}`);
+    }
+  }
+}
+
+function requireNonMutatingFeatureImagePlan(ghost, locale) {
+  const action = ghost.featureImage?.action ?? 'none';
+  if (!['none', 'preserve'].includes(action)) {
+    throw new Error(`draft-promotion workflow must not upload or replace featureImage for locale: ${locale}`);
+  }
+}
+
+function requireDraftPromotionVariant(variant) {
+  const locale = requireString(variant?.locale, 'publication plan locale');
+  const sourceFingerprint = requireSourceFingerprint(variant, locale);
+  const ghost = requireGhostPlan(variant, locale);
+  requireReuseOnlyAssets(variant, locale);
+  requireNonMutatingFeatureImagePlan(ghost, locale);
+
+  if (ghost.currentStatus === 'draft') {
+    if (ghost.projectedSourceFingerprint !== sourceFingerprint) {
+      throw new Error(`production workflow draft is not exact-current for locale: ${locale}`);
+    }
+    if (ghost.operation !== 'status-update') {
+      throw new Error(`draft-promotion workflow may only promote an exact-current draft for locale: ${locale}`);
+    }
+    return 'draft';
+  }
+
+  // A retry after a partial multi-locale publish may observe an already-promoted
+  // sibling. Accept only an exact-current published no-op; never widen the retry
+  // into a content rewrite.
+  if (ghost.currentStatus === 'published') {
+    if (ghost.projectedSourceFingerprint !== sourceFingerprint || ghost.operation !== 'noop') {
+      throw new Error(`draft-promotion retry requires exact-current published no-op for locale: ${locale}`);
+    }
+    return 'published';
+  }
+
+  throw new Error(`draft-promotion workflow requires managed draft/published recovery state for locale: ${locale}`);
+}
+
+function requirePublishedRevisionVariant(variant) {
+  const locale = requireString(variant?.locale, 'publication plan locale');
+  const sourceFingerprint = requireSourceFingerprint(variant, locale);
+  const ghost = requireGhostPlan(variant, locale);
+
+  if (ghost.currentStatus !== 'published') {
+    throw new Error(`published-revision workflow requires current Ghost status=published for locale: ${locale}`);
+  }
+  if (!['update', 'noop'].includes(ghost.operation)) {
+    throw new Error(`published-revision workflow may only update or no-op a managed published post for locale: ${locale}`);
+  }
+  if (ghost.operation === 'noop' && ghost.projectedSourceFingerprint !== sourceFingerprint) {
+    throw new Error(`published-revision no-op is not exact-current for locale: ${locale}`);
+  }
+  if (ghost.operation === 'update' && ghost.projectedSourceFingerprint === sourceFingerprint) {
+    throw new Error(`published-revision update must represent a changed projection for locale: ${locale}`);
+  }
+  return ghost.operation;
 }
 
 export function requireArticleWorkflowDispatchContext({
@@ -106,47 +215,46 @@ export function requireArticleWorkflowDispatchContext({
   };
 }
 
+export function productionPublishModeForPlan(plan) {
+  requirePublishPlan(plan);
+  const statuses = [];
+  for (const variant of plan.variants) {
+    const locale = requireString(variant?.locale, 'publication plan locale');
+    requireSourceFingerprint(variant, locale);
+    statuses.push(requireGhostPlan(variant, locale).currentStatus);
+  }
+
+  if (statuses.includes('draft')) {
+    for (const variant of plan.variants) requireDraftPromotionVariant(variant);
+    return PRODUCTION_PUBLISH_MODE.DRAFT_PROMOTION;
+  }
+
+  if (statuses.every((status) => status === 'published')) {
+    for (const variant of plan.variants) requirePublishedRevisionVariant(variant);
+    return PRODUCTION_PUBLISH_MODE.PUBLISHED_REVISION;
+  }
+
+  throw new Error('production workflow requires either draft-promotion recovery or managed published revision state for every locale');
+}
+
+export function requireProductionPublishMode(plan, expectedMode) {
+  if (!Object.values(PRODUCTION_PUBLISH_MODE).includes(expectedMode)) {
+    throw new Error(`unsupported production publish mode: ${expectedMode}`);
+  }
+  const actualMode = productionPublishModeForPlan(plan);
+  if (actualMode !== expectedMode) {
+    throw new Error(`production publish mode changed after authorization: expected ${expectedMode}, got ${actualMode}`);
+  }
+  return plan;
+}
+
+// Kept as the strict first-publication predicate for callers/tests that need to
+// prove every locale is still an exact-current draft before promotion begins.
 export function requireExactCurrentDraftsForProduction(plan) {
   requirePublishPlan(plan);
   for (const variant of plan.variants) {
-    const locale = requireString(variant?.locale, 'publication plan locale');
-    const sourceFingerprint = variant?.sourceFingerprint;
-    if (!SOURCE_FINGERPRINT_RE.test(sourceFingerprint ?? '')) {
-      throw new Error(`publication plan source fingerprint is invalid for locale: ${locale}`);
-    }
-
-    for (const assetPlan of variant?.assetPlans ?? []) {
-      if (!assetPlan || assetPlan.action !== 'reuse') {
-        throw new Error(`production workflow requires every local body asset to be pre-staged/reuse-only for locale: ${locale}`);
-      }
-    }
-
-    const ghost = variant?.ghost;
-    if (!ghost || typeof ghost !== 'object' || Array.isArray(ghost)) {
-      throw new Error(`production workflow requires Ghost plan evidence for locale: ${locale}`);
-    }
-    if (typeof ghost.existingPostId !== 'string' || ghost.existingPostId === '') {
-      throw new Error(`production workflow requires an existing managed draft for locale: ${locale}`);
-    }
-    if (ghost.currentStatus !== 'draft') {
-      throw new Error(`production workflow requires current Ghost status=draft for locale: ${locale}`);
-    }
-    if (ghost.projectedSourceFingerprint !== sourceFingerprint) {
-      throw new Error(`production workflow draft is not exact-current for locale: ${locale}`);
-    }
-    if (ghost.operation !== 'status-update' || ghost.desiredStatus !== 'published') {
-      throw new Error(`production workflow may only publish by draft-to-published status update for locale: ${locale}`);
-    }
-    const observed = ghost.observed;
-    if (
-      !observed
-      || observed.postId !== ghost.existingPostId
-      || observed.status !== 'draft'
-      || observed.projectedSourceFingerprint !== sourceFingerprint
-      || typeof observed.syncHash !== 'string'
-      || observed.syncHash === ''
-    ) {
-      throw new Error(`production workflow requires exact bound managed-draft observation for locale: ${locale}`);
+    if (requireDraftPromotionVariant(variant) !== 'draft') {
+      throw new Error(`production workflow requires an exact-current managed draft for locale: ${variant.locale}`);
     }
   }
   return plan;
@@ -156,15 +264,12 @@ export function publicationAuthorizationForDispatchPlan(context, plan) {
   if (!context || context.productionPublish !== true || context.operation !== 'publish') {
     throw new Error('production publication authorization requires an exact publish workflow_dispatch context');
   }
-  requireExactCurrentDraftsForProduction(plan);
+  productionPublishModeForPlan(plan);
   const articleId = requireString(plan.articleId, 'publication plan articleId');
 
   const sourceFingerprints = {};
   for (const variant of plan.variants) {
     const locale = requireString(variant?.locale, 'publication plan locale');
-    if (Object.hasOwn(sourceFingerprints, locale)) {
-      throw new Error(`publication plan contains duplicate locale: ${locale}`);
-    }
     sourceFingerprints[locale] = variant.sourceFingerprint;
   }
 
