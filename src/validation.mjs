@@ -17,7 +17,7 @@ async function collectMarkdownFiles(dir, repoRoot) {
       throw new Error(`symlinks are not allowed under posts/: ${path.relative(repoRoot, absolute)}`);
     }
   }
-  if (entries.some((entry) => entry.name.toLowerCase() === 'article.json')) {
+  if (entries.some((entry) => entry.isFile() && entry.name.toLowerCase() === 'article.json')) {
     return [];
   }
 
