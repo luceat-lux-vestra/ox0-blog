@@ -139,12 +139,44 @@ function sourceSnapshot(runtime) {
   };
 }
 
+function assetActionMap(runtime) {
+  const map = new Map();
+  for (const variant of runtime.plan.variants) {
+    for (const asset of variant.assetPlans ?? []) {
+      const key = `${variant.locale}\u0000${asset.ref}`;
+      if (map.has(key) && map.get(key) !== asset.action) {
+        throw new Error(`LocaleVariant contains conflicting AssetPublisher actions for ${asset.ref}: ${variant.locale}`);
+      }
+      map.set(key, asset.action);
+    }
+  }
+  return map;
+}
+
+function assertAssetActionConverged(initial, refreshed) {
+  const before = assetActionMap(initial);
+  const after = assetActionMap(refreshed);
+  if (before.size !== after.size) {
+    throw new Error('planned asset action coverage changed after publication preflight');
+  }
+  for (const [key, priorAction] of before) {
+    const nextAction = after.get(key);
+    if (nextAction == null) {
+      throw new Error('planned asset action coverage changed after publication preflight');
+    }
+    if (priorAction === nextAction) continue;
+    if (priorAction === 'publish' && nextAction === 'reuse') continue;
+    throw new Error(`planned asset action changed unsafely after publication preflight: ${priorAction} -> ${nextAction}`);
+  }
+}
+
 function assertSourceSnapshotStable(initial, refreshed) {
   const before = JSON.stringify(sourceSnapshot(initial));
   const after = JSON.stringify(sourceSnapshot(refreshed));
   if (before !== after) {
     throw new Error('Article source/evidence, remote-resource approval or planned asset target changed after publication preflight');
   }
+  assertAssetActionConverged(initial, refreshed);
 }
 
 async function recoverProjectionStates(runtime, client, successfulLocales = new Set()) {
