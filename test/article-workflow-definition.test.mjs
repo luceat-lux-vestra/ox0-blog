@@ -13,7 +13,7 @@ test('target Article Ghost workflow remains manual-only, exact-main-bound and gl
   assert.doesNotMatch(source, /^  push:$/m);
   assert.doesNotMatch(source, /^  pull_request:$/m);
 
-  assert.match(source, /^  group: article-ghost-control$/m);
+  assert.match(source, /^  group: ox0-blog-ghost-control$/m);
   assert.match(source, /^    if: github\.ref == 'refs\/heads\/main'$/m);
   assert.match(source, /^          persist-credentials: false$/m);
   assert.match(source, /source_sha must equal the exact workflow_dispatch main SHA/);
