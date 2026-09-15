@@ -91,3 +91,14 @@ test('legacy Ghost workflow refuses stale main before compatibility operation', 
   assert.equal(mainReads.length, 2, 'legacy workflow must check current main before checkout and before Ghost operation');
   assert.match(workflow, /main advanced during legacy workflow; refusing stale Ghost operation/);
 });
+
+test('legacy Ghost workflow validates the whole migration repository before compatibility Ghost access', async () => {
+  const workflow = await source('../.github/workflows/ghost-publish.yml');
+  assert.match(workflow, /timeout-minutes:\s*20/);
+  assert.match(workflow, /npm run validate/);
+  assert.match(workflow, /node scripts\/validate-post\.mjs "\$POST_PATH"/);
+  assert.ok(
+    workflow.indexOf('npm run validate') < workflow.indexOf('Preview legacy Ghost changes'),
+    'migration-wide validation must precede legacy Ghost access'
+  );
+});
