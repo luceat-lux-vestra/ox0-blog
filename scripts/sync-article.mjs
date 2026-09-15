@@ -4,9 +4,14 @@ import {
   ArticlePublicationError,
   synchronizeArticlePublication
 } from '../src/article-publication.mjs';
+import { prepareArticlePublicationOperation } from '../src/article-planning.mjs';
 import { GhostAdminClient } from '../src/ghost-client.mjs';
 import { loadHostRuntime } from '../src/host-runtime.mjs';
 import { parseStrictJson } from '../src/strict-json.mjs';
+import {
+  productionPublishModeForPlan,
+  requireProductionPublishMode
+} from '../src/workflow-dispatch-control.mjs';
 
 function authorizationForAction(action) {
   const raw = process.env.OX0_ARTICLE_PUBLICATION_AUTHORIZATION_JSON;
@@ -65,17 +70,33 @@ async function main() {
   const manifestPath = path.resolve(repoRoot, manifestRef);
   const hostRuntime = await loadHostRuntime({ repoRoot });
   const client = new GhostAdminClient({ url, key });
-  const result = await synchronizeArticlePublication({
+  const common = {
     manifestPath,
     action,
     client,
     repoRoot,
     assetPublisher: hostRuntime.assetPublisher,
     projectContext: hostRuntime.projectContext,
-    remoteResourcePolicy: hostRuntime.remoteResourcePolicy,
-    authorization
+    remoteResourcePolicy: hostRuntime.remoteResourcePolicy
+  };
+
+  let publicationPlanGuard = null;
+  let productionMode = null;
+  if (action === 'publish') {
+    const prepared = await prepareArticlePublicationOperation(common);
+    productionMode = productionPublishModeForPlan(prepared.plan);
+    publicationPlanGuard = (plan) => requireProductionPublishMode(plan, productionMode);
+  }
+
+  const result = await synchronizeArticlePublication({
+    ...common,
+    authorization,
+    publicationPlanGuard
   });
-  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({
+    ...result,
+    ...(productionMode ? { productionMode } : {})
+  }, null, 2)}\n`);
 }
 
 try {
