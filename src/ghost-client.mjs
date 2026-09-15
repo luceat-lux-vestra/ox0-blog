@@ -165,7 +165,7 @@ export class GhostAdminClient {
 
   async getPostsByTagSlug(tagSlug) {
     const payload = await this.request('posts/', {
-      query: { filter: `tag:${tagSlug}`, limit: 2, formats: 'lexical' }
+      query: { filter: `tag:${tagSlug}`, limit: 2, formats: 'lexical', include: 'tags' }
     });
     return payload.posts ?? [];
   }
@@ -185,7 +185,9 @@ export class GhostAdminClient {
 
   async getPostBySlug(slug) {
     try {
-      const payload = await this.request(`posts/slug/${encodeURIComponent(slug)}/`, { query: { formats: 'lexical' } });
+      const payload = await this.request(`posts/slug/${encodeURIComponent(slug)}/`, {
+        query: { formats: 'lexical', include: 'tags' }
+      });
       return payload.posts[0];
     } catch (error) {
       if (error.status === 404) return null;
@@ -204,7 +206,9 @@ export class GhostAdminClient {
   }
 
   async getPostById(id) {
-    const payload = await this.request(`posts/${encodeURIComponent(id)}/`, { query: { formats: 'lexical' } });
+    const payload = await this.request(`posts/${encodeURIComponent(id)}/`, {
+      query: { formats: 'lexical', include: 'tags' }
+    });
     return payload.posts[0];
   }
 
