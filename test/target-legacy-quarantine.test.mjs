@@ -81,3 +81,13 @@ test('target and legacy Ghost workflows share one mutation concurrency lock', as
   assert.match(targetWorkflow, expected);
   assert.match(legacyWorkflow, expected);
 });
+
+test('legacy Ghost workflow refuses stale main before compatibility operation', async () => {
+  const workflow = await source('../.github/workflows/ghost-publish.yml');
+  assert.match(workflow, /OX0_LEGACY_SOURCE_SHA:\s*\$\{\{ github\.sha \}\}/);
+  assert.match(workflow, /ref:\s*\$\{\{ github\.sha \}\}/);
+  assert.match(workflow, /git rev-parse HEAD/);
+  const mainReads = workflow.match(/git\/ref\/heads\/main/g) ?? [];
+  assert.equal(mainReads.length, 2, 'legacy workflow must check current main before checkout and before Ghost operation');
+  assert.match(workflow, /main advanced during legacy workflow; refusing stale Ghost operation/);
+});
