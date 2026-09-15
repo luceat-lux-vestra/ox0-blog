@@ -63,14 +63,9 @@ npm test
 npm run validate
 ```
 
-`npm run validate` runs both migration-era validators:
+`npm run validate` is the migration-wide repository validator. It validates legacy one-file posts and target Article bundles under separate ownership rules, rejects unclaimed Markdown inside Article-owned subtrees, rejects nested Article bundles, and checks public slug collisions across both models.
 
-```text
-validate:legacy
-validate:articles
-```
-
-Target Article checks:
+Target-only checks remain available:
 
 ```bash
 npm run validate:articles
@@ -138,7 +133,7 @@ It is an execution primitive, **not an authorization generator**.
 
 ### Draft preparation
 
-Draft rejects a production authorization envelope. It may prepare body assets, upload a local feature image, and create/update managed Ghost drafts.
+Draft rejects a production authorization envelope. It may prepare body assets, upload a local feature image, and create/update managed Ghost drafts. It refuses to unpublish an already-published managed projection.
 
 ### Publish
 
@@ -169,9 +164,17 @@ It fails closed unless it runs from `refs/heads/main`, `source_sha` is the exact
 
 Before the selected operation it runs Node 24 locked install, `npm test`, combined repository validation, and selected-Article validation. Target and legacy Ghost workflows share the same `ox0-blog-ghost-control` concurrency group, so migration-era writes are serialized across both paths.
 
-### Draft-first path
+A stale earlier plan is never replayed; each operation creates fresh current evidence. `publish` additionally requires exact confirmation:
 
-The intended manual production path is:
+```text
+publish:<manifest_path>@<source_sha>
+```
+
+This confirmation binds the control-surface intent to one Article source version. It does not bypass readiness, trust, ownership, drift, or authorization checks.
+
+### First publication: draft-promotion
+
+The normal first-publication path is:
 
 ```text
 plan-draft      # read-only
@@ -180,7 +183,7 @@ plan-draft      # read-only
 draft           # explicit Ghost draft-preparation mutation
     |
     v
-plan-publish    # read-only exact-current draft gate
+plan-publish    # read-only production gate
     |
     v
 publish         # explicit exact-target production promotion
@@ -188,32 +191,25 @@ publish         # explicit exact-target production promotion
 
 Here `draft` is preparation on the configured Ghost instance. It does **not** imply or require a second Ghost deployment.
 
-A stale earlier plan is never replayed; each operation creates fresh current evidence.
+For `draft-promotion`, every required locale must be either:
 
-`publish` additionally requires exact confirmation:
+- an exact-current managed `draft` whose planned Ghost operation is `status-update` to `published`; or
+- when recovering a partial multi-locale promotion, an already-promoted exact-current managed `published` sibling whose planned operation is `noop`.
 
-```text
-publish:<manifest_path>@<source_sha>
-```
+Every local body-asset plan must already be `reuse`; feature-image planning must be `none` or `preserve`. The final first-publication step therefore cannot first-create/rewrite Article content, upload a new feature image, or newly publish repository-owned body assets.
 
-This confirmation binds the control-surface intent to one Article source version. It does not bypass readiness, trust, ownership, drift, or authorization checks.
+### Updating an already-published Article: published-revision
 
-### Production publish is promotion-only
+Once every required locale is already a uniquely managed `published` projection, a later READY/SYNCED source revision does **not** get pushed back through draft. A fresh authorized publish plan may instead:
 
-For every required locale, `plan-publish` and `publish` require:
+- `update` a stale managed published locale in place while keeping status `published`; and
+- `noop` an exact-current published sibling.
 
-- an existing uniquely managed Ghost post;
-- current status `draft`;
-- projected source fingerprint equal to the exact current source fingerprint;
-- valid bound managed revision/sync evidence;
-- planned Ghost operation exactly `status-update` to `published`;
-- every local body-asset plan exactly `reuse`.
+This permits normal blog edits after the first publication without temporarily unpublishing the post. Because the revision itself may introduce new repository-owned assets or a new local feature image, an explicitly authorized `published-revision` operation may perform the corresponding resource publication/upload before updating the managed public post. Those side effects remain bound to exact source/resource fingerprints, planned target URLs, current remote-resource policy, ownership/drift evidence, and fresh post-verification.
 
-Therefore target production `publish` rejects first-create, content update, already-published noop, stale/unmanaged/ambiguous draft state, and a body asset that still needs publication.
+The dispatch adapter chooses exactly one production mode from the fresh plan: `draft-promotion` or `published-revision`. That mode is then pinned across the publication library's initial and refreshed pre-mutation plans. If Ghost state changes such that the mode would change, publication fails closed instead of widening the authorized operation.
 
-The dispatch adapter checks this on a fresh publish plan. The core publication library reruns the same guard on its own initial plan and on the refreshed plan immediately before Ghost mutation.
-
-Under the target manual path, final production publication cannot create/rewrite Article content, upload a new feature image, or newly publish repository-owned body assets.
+Partial multi-locale failures are retriable within the same mode: first-publication retries may combine exact-current published no-op siblings with remaining exact-current drafts; published-revision retries may combine already-updated no-op siblings with still-stale published updates.
 
 ## Live draft verification
 
@@ -245,6 +241,12 @@ DocumentCompiler.compile(LocaleVariant, ProjectContext)
 Compiler code does not own storage/CDN policy. Local body assets are source evidence; the host AssetPublisher plans delivery and the compiler sees only a host `resolveResource` callback. Resolved ProjectContext is preserved through evaluation, review, planning, resource-delivery recompilation, and publication.
 
 Canonical Markdown rejects raw HTML and unsafe/ambiguous active URLs. `javascript:`, `data:`, `file:`, protocol-relative, control/entity-obfuscated, backslash-ambiguous, and credential-bearing HTTP(S) URLs fail closed at the relevant compiler/projection boundaries.
+
+## Body-asset replan convergence
+
+Article publication applies planned local body-asset side effects before the first Ghost mutation, then reloads/re-evaluates/re-plans the entire Article.
+
+The refreshed plan must preserve the exact asset ref, fingerprint, public URL, size, and filename. Asset action may remain unchanged or converge from `publish` to `reuse` after a successful content-addressed write. `reuse -> publish`, target URL drift, digest/size/filename drift, source drift, or remote-resource approval drift fails closed before Ghost mutation.
 
 ## Ghost projection identity and recovery
 
