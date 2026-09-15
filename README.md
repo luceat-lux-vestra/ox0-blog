@@ -31,6 +31,7 @@ See:
 - `docs/asset-publisher.md` — repository-owned body-resource publication contract;
 - `docs/remote-resource-policy.md` — production trust policy for external HTTPS images;
 - `docs/article-publication.md` — guarded Article-level mutation orchestration;
+- `docs/live-draft-verification.md` — exact-candidate live draft verification without a separate staging Ghost;
 - `docs/workflow/` — durable state/authorization/Git/RTA policy.
 
 ## Core invariants
@@ -174,7 +175,7 @@ The intended manual production path is:
 plan-draft      # read-only
     |
     v
-draft           # explicit staging mutation
+draft           # explicit preparation mutation
     |
     v
 plan-publish    # read-only exact-current draft gate
@@ -182,6 +183,8 @@ plan-publish    # read-only exact-current draft gate
     v
 publish          # explicit exact-target production promotion
 ```
+
+Here `draft` means Ghost draft preparation. It does **not** imply a separate staging Ghost environment.
 
 A stale earlier plan is never replayed; each operation creates fresh current evidence.
 
@@ -215,6 +218,20 @@ Therefore target production `publish` rejects:
 The dispatch adapter first checks this on a fresh publish plan and creates the normal exact-source authorization envelope. The core publication library then receives the same predicate as a plan guard and reruns it on its own initial plan and again on the refreshed plan immediately before Ghost mutation.
 
 This closes the race where a draft could disappear/change after external planning. Under the target manual path, final production publication is restricted to pre-staged body-asset reuse plus managed Ghost draft-to-published status transition; it is not allowed to create/rewrite posts or upload new feature/body assets during the final production step.
+
+## Live draft verification
+
+A personal blog does not require a second Ghost deployment merely to prove draft synchronization. Exact-candidate live evidence can use the configured real Ghost instance with a temporary **draft-only** Article:
+
+```bash
+npm run verify:article-live-draft
+```
+
+Required operator inputs are documented in `docs/live-draft-verification.md`.
+
+The verifier creates a unique bilingual Article, reaches `SYNCED + READY`, creates only managed Ghost drafts, verifies both locales as `DRAFT_CURRENT`, and then deletes the temporary posts/owned tags and fresh-checks namespace absence. It never constructs production publication authorization and never requests `published` status.
+
+A PASS therefore proves draft mutation/recovery/cleanup semantics only. It is not evidence that production publication or GitHub `workflow_dispatch` has executed.
 
 ## Compiler/resource boundary
 
@@ -303,4 +320,4 @@ Tests and workflows existing in the tree are not proof by themselves. Merge revi
 
 This branch has repeatedly seen `Validate blog source` jobs terminate before runner allocation (`steps=[]`, `runner_id=0`), so canonical Node 24 hosted-CI execution remains unverified until an exact candidate actually executes checkout/test/validation steps.
 
-Controlled staging/live Ghost evidence must likewise be collected on the exact eventual candidate; stale evidence from an earlier HEAD does not carry forward.
+Exact-candidate live Ghost evidence may use the draft-only verifier on the real blog because that verifier cannot intentionally publish temporary content. Production publication remains a separate explicit operation and proof obligation.
