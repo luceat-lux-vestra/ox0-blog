@@ -30,6 +30,6 @@ const plan = await planArticlePublication({
 });
 const productionMode = action === 'publish' ? productionPublishModeForPlan(plan) : null;
 process.stdout.write(`${JSON.stringify({
-  ...(productionMode ? { productionMode } : {}),
-  ...plan
+  ...plan,
+  ...(productionMode ? { productionMode } : {})
 }, null, 2)}\n`);
