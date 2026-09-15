@@ -43,6 +43,21 @@ test('target publish CLI parses authorization with strict duplicate-key rejectio
   assert.doesNotMatch(result.stderr, /ENOTFOUND|fetch failed|invalid\.example/);
 });
 
+test('target publish CLI rejects malformed authorization shape before source or Ghost planning', () => {
+  for (const raw of [
+    '{}',
+    '{"version":2,"kind":"explicit-production-publication","articleId":"a","sourceFingerprints":{"en":"sha256:1111111111111111111111111111111111111111111111111111111111111111"}}',
+    '{"version":1,"kind":"wrong","articleId":"a","sourceFingerprints":{"en":"sha256:1111111111111111111111111111111111111111111111111111111111111111"}}',
+    '{"version":1,"kind":"explicit-production-publication","articleId":"a","sourceFingerprints":{"en":"bad"}}'
+  ]) {
+    const result = run(['posts/missing/article.json', 'publish'], {
+      OX0_ARTICLE_PUBLICATION_AUTHORIZATION_JSON: raw
+    });
+    stderrJson(result);
+    assert.doesNotMatch(result.stderr, /ENOENT|ENOTFOUND|fetch failed|invalid\.example/);
+  }
+});
+
 test('draft CLI rejects a production authorization envelope instead of silently ignoring it', () => {
   const result = run(['posts/missing/article.json', 'draft'], {
     OX0_ARTICLE_PUBLICATION_AUTHORIZATION_JSON: '{}'
