@@ -64,10 +64,12 @@ On success or failure after namespace ownership is established, cleanup:
 4. may remove an accidentally published verifier-owned post only as failure cleanup, never as a successful verification state;
 5. deletes posts by ID and verifies persisted absence;
 6. never deletes shared `#ox0-locale-*` tags;
-7. deletes other observed verifier/publisher tags only when exact tag ID/name still match and the tag is unreferenced;
+7. deletes a publisher tag only when the verifier proved that exact tag name was absent before the mutation that could create it, the current tag ID/name still match, and the tag is now unreferenced;
 8. fresh-reads temporary slugs/source identities/non-shared identity tags and requires the verifier namespace to be absent;
 9. removes the temporary Article directory;
 10. requires the checkout to be clean again.
+
+Identity-tag absence is proven during namespace preflight. Revision/sync-tag absence is observed immediately before publisher metadata stamping. Merely seeing an existing publisher tag on the temporary post is **not** enough authority to delete it, because Ghost may have reused a tag that predated the verifier.
 
 Ambiguous or changed ownership fails cleanup closed instead of deleting by slug or guessing ownership.
 
