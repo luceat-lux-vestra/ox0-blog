@@ -26,15 +26,19 @@ async function collectManifestFiles(dir, repoRoot) {
     if (entry.isSymbolicLink()) {
       throw new Error(`symlinks are not allowed under posts/: ${path.relative(repoRoot, absolute)}`);
     }
-    if (entry.isDirectory()) {
-      manifests.push(...await collectManifestFiles(absolute, repoRoot));
+    if (entry.name.toLowerCase() === 'article.json') {
+      if (entry.name !== 'article.json') {
+        throw new Error(`Article manifest filename must use exact lowercase article.json: ${path.relative(repoRoot, absolute)}`);
+      }
+      if (!entry.isFile()) {
+        throw new Error(`Article manifest must be a regular file: ${path.relative(repoRoot, absolute)}`);
+      }
+      manifests.push(absolute);
       continue;
     }
-    if (!entry.isFile()) continue;
-    if (entry.name.toLowerCase() === 'article.json' && entry.name !== 'article.json') {
-      throw new Error(`Article manifest filename must use exact lowercase article.json: ${path.relative(repoRoot, absolute)}`);
+    if (entry.isDirectory()) {
+      manifests.push(...await collectManifestFiles(absolute, repoRoot));
     }
-    if (entry.name === 'article.json') manifests.push(absolute);
   }
   return manifests;
 }
