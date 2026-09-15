@@ -15,7 +15,7 @@
     "dry-run:article": "node scripts/plan-article.mjs",
     "dry-run:legacy": "node scripts/plan-post.mjs",
     "sync:article": "node scripts/sync-article.mjs",
-    "verify:article-staging-live": "node scripts/verify-article-staging-live.mjs",
+    "verify:article-live-draft": "node scripts/verify-article-live-draft.mjs",
     "verify:ghost-live:legacy": "node scripts/verify-ghost-live.mjs && node scripts/verify-body-image-live.mjs"
   },
   "dependencies": {
