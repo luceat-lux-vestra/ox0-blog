@@ -121,6 +121,28 @@ function requireNonMutatingFeatureImagePlan(ghost, locale) {
   }
 }
 
+function requirePublishedRevisionAssets(variant, locale) {
+  const assetPlans = variant?.assetPlans ?? [];
+  if (!Array.isArray(assetPlans)) {
+    throw new Error(`published-revision asset plans must be an array for locale: ${locale}`);
+  }
+  for (const assetPlan of assetPlans) {
+    if (!assetPlan || !['publish', 'reuse'].includes(assetPlan.action)) {
+      throw new Error(`published-revision workflow permits only publish/reuse local body asset plans for locale: ${locale}`);
+    }
+  }
+}
+
+function requirePublishedRevisionFeatureImagePlan(ghost, locale) {
+  const action = ghost.featureImage?.action ?? 'none';
+  const allowed = ghost.operation === 'noop'
+    ? ['none', 'preserve']
+    : ['none', 'reuse', 'upload'];
+  if (!allowed.includes(action)) {
+    throw new Error(`published-revision featureImage plan is incompatible with ${ghost.operation} for locale: ${locale}`);
+  }
+}
+
 function requireDraftPromotionVariant(variant) {
   const locale = requireString(variant?.locale, 'publication plan locale');
   const sourceFingerprint = requireSourceFingerprint(variant, locale);
@@ -162,6 +184,8 @@ function requirePublishedRevisionVariant(variant) {
   if (!['update', 'noop'].includes(ghost.operation)) {
     throw new Error(`published-revision workflow may only update or no-op a managed published post for locale: ${locale}`);
   }
+  requirePublishedRevisionAssets(variant, locale);
+  requirePublishedRevisionFeatureImagePlan(ghost, locale);
   if (ghost.operation === 'noop' && ghost.projectedSourceFingerprint !== sourceFingerprint) {
     throw new Error(`published-revision no-op is not exact-current for locale: ${locale}`);
   }
