@@ -1,6 +1,6 @@
 # Live verification policy
 
-ox0-blog is a personal blog workflow. A separate Ghost staging deployment is **not** a required architectural dependency.
+ox0-blog is a personal blog workflow. A second Ghost deployment is **not** a required architectural dependency.
 
 Live verification should minimize user/infrastructure burden and avoid publishing temporary public content merely to prove mechanics.
 
@@ -39,6 +39,6 @@ The repository's static/adversarial tests and read-only plans must prove the pro
 
 When the user eventually authorizes a real article publication, the actual operation and subsequent fresh projection recovery become the live production-path evidence for that exact source.
 
-## Separate infrastructure
+## Optional separate infrastructure
 
-A dedicated staging Ghost may be used voluntarily if one already exists, but the workflow must never require the user to provision and maintain one solely for ox0-blog verification.
+A separate Ghost instance may be used voluntarily if one already exists, but the workflow must never require the user to provision and maintain one solely for ox0-blog verification.
