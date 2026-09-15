@@ -23,8 +23,10 @@ test('live Article verifier is draft-only and uses durable review contracts', ()
   assert.doesNotMatch(source, /OX0_ARTICLE_PUBLISH_CONFIRMATION/);
 });
 
-test('live Article verifier verifies and cleans bounded temporary namespace residue', () => {
-  assert.match(source, /rememberExpectedIdentityTags/);
+test('live Article verifier deletes only publisher tags proven absent before its mutation', () => {
+  assert.match(source, /cleanupTagNamesProvenAbsent/);
+  assert.match(source, /recordPublisherStampTagsAbsentBeforeMutation/);
+  assert.match(source, /rememberProvenAbsentCleanupTags/);
   assert.match(source, /deleteTagIfVerifierOwnedAndUnreferenced/);
   assert.match(source, /assertTemporaryNamespaceAbsent/);
   assert.match(source, /temporary verifier source identity residue remains/);
