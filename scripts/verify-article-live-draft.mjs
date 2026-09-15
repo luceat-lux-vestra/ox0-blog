@@ -17,7 +17,11 @@ import { requireArticleLiveDraftContext } from '../src/article-live-draft-guard.
 import { MarkedCompiler } from '../src/compiler/marked-compiler.mjs';
 import { GhostAdminClient } from '../src/ghost-client.mjs';
 import { projectionIdentityTags } from '../src/projection-identity.mjs';
-import { projectionLookupTag } from '../src/projection-managed-state.mjs';
+import {
+  REVISION_TAG_PREFIX,
+  SYNC_TAG_PREFIX,
+  projectionLookupTag
+} from '../src/projection-managed-state.mjs';
 import { TRANSLATION_REVIEW_CONTRACT_VERSION } from '../src/translation-checkpoint.mjs';
 
 const repoRoot = process.cwd();
@@ -65,6 +69,7 @@ const variants = [
 const client = new GhostAdminClient({ url: context.ghostUrl, key });
 const knownPostIds = new Map();
 const cleanupTagIds = new Map();
+const cleanupTagNamesProvenAbsent = new Set();
 let ownsTemporaryNamespace = false;
 let primaryError = null;
 let successSummary = null;
@@ -196,6 +201,26 @@ function rememberCleanupTag(name, id) {
   cleanupTagIds.set(name, id);
 }
 
+async function recordPublisherStampTagsAbsentBeforeMutation(tags) {
+  for (const name of tagNames({ tags })) {
+    if (!name.startsWith(REVISION_TAG_PREFIX) && !name.startsWith(SYNC_TAG_PREFIX)) continue;
+    if (await findExactTag(name) == null) cleanupTagNamesProvenAbsent.add(name);
+  }
+}
+
+const synchronizationClient = new Proxy(client, {
+  get(target, property) {
+    if (property === 'updatePostMetadata') {
+      return async (id, post) => {
+        await recordPublisherStampTagsAbsentBeforeMutation(post?.tags ?? []);
+        return target.updatePostMetadata(id, post);
+      };
+    }
+    const value = Reflect.get(target, property, target);
+    return typeof value === 'function' ? value.bind(target) : value;
+  }
+});
+
 async function assertOwnedPost(id, variant, allowedStatuses) {
   const post = await postByIdOrNull(id);
   if (!post) return null;
@@ -225,19 +250,16 @@ async function recoverOwnedPost(variant, allowedStatuses = ['draft', 'published'
 
 async function rememberCleanupTags(post) {
   for (const name of tagNames(post)) {
-    if (!name.startsWith('#ox0-') || name.startsWith('#ox0-locale-')) continue;
+    if (!cleanupTagNamesProvenAbsent.has(name)) continue;
     const tag = await findExactTag(name);
     rememberCleanupTag(name, tag?.id);
   }
 }
 
-async function rememberExpectedIdentityTags() {
-  for (const variant of variants) {
-    for (const name of expectedIdentity(variant)) {
-      if (name.startsWith('#ox0-locale-')) continue;
-      const tag = await findExactTag(name);
-      rememberCleanupTag(name, tag?.id);
-    }
+async function rememberProvenAbsentCleanupTags() {
+  for (const name of cleanupTagNamesProvenAbsent) {
+    const tag = await findExactTag(name);
+    rememberCleanupTag(name, tag?.id);
   }
 }
 
@@ -248,6 +270,7 @@ async function assertNamespaceUnused() {
     for (const name of expectedIdentity(variant)) {
       if (name.startsWith('#ox0-locale-')) continue;
       assert.equal(await findExactTag(name), null, `temporary verifier identity tag already exists: ${name}`);
+      cleanupTagNamesProvenAbsent.add(name);
     }
   }
 }
@@ -309,7 +332,7 @@ async function cleanupGhost() {
 
   if (postsClean) {
     try {
-      await rememberExpectedIdentityTags();
+      await rememberProvenAbsentCleanupTags();
     } catch (error) {
       errors.push(error);
       return errors;
@@ -355,7 +378,7 @@ try {
   const draft = await synchronizeArticlePublication({
     manifestPath,
     action: 'draft',
-    client,
+    client: synchronizationClient,
     repoRoot
   });
   assert.equal(draft.status, 'SUCCESS');
@@ -383,7 +406,8 @@ try {
       'temporary Article translation checkpoint and readiness review to SYNCED + READY',
       'two-locale managed Ghost draft creation with fresh DRAFT_CURRENT recovery',
       'no publish operation executed',
-      'ID/recovered-identity-bound temporary post cleanup and safe unreferenced verifier-tag cleanup',
+      'ID/recovered-identity-bound temporary post cleanup',
+      'only publisher tags proven absent before verifier mutation are eligible for unreferenced-tag cleanup',
       'fresh post-cleanup namespace absence verification'
     ]
   };
