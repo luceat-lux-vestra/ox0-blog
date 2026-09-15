@@ -51,6 +51,7 @@ See:
 - Per-locale Ghost state is independently recoverable; partial multi-locale failure is never whole-Article success.
 - A post created/updated but missing valid final revision/sync evidence is reconciliation-required, never silently forgotten.
 - No unmanaged Ghost post is implicitly adopted because a slug happens to match.
+- During migration, target and legacy GitHub workflows share one `ox0-blog-ghost-control` concurrency lock so they cannot mutate the same Ghost deployment concurrently.
 
 ## Local validation
 
@@ -166,7 +167,7 @@ publish_confirmation
 
 It fails closed unless it runs from `refs/heads/main`, `source_sha` is the exact current dispatch `github.sha`, that SHA is checked out and reverified, and the manifest is an unaliased repository-relative `posts/.../article.json` path.
 
-Before the selected operation it runs Node 24 locked install, `npm test`, combined repository validation, and selected-Article validation. All target Article Ghost operations are globally serialized under one concurrency group.
+Before the selected operation it runs Node 24 locked install, `npm test`, combined repository validation, and selected-Article validation. Target and legacy Ghost workflows share the same `ox0-blog-ghost-control` concurrency group, so migration-era writes are serialized across both paths.
 
 ### Draft-first path
 
@@ -293,7 +294,7 @@ npm run dry-run:legacy -- posts/example.md
 npm run verify:ghost-live:legacy
 ```
 
-`.github/workflows/ghost-publish.yml` remains legacy compatibility only.
+`.github/workflows/ghost-publish.yml` remains legacy compatibility only. While it exists, it shares the same Ghost concurrency lock as the target workflow, checks out the exact dispatch SHA, fresh-checks current `main` before and immediately before the Ghost operation, and has a 20-minute timeout so it cannot monopolize the shared lock indefinitely.
 
 ## Verification status
 
