@@ -1,13 +1,10 @@
+import { requireLocaleToken } from './locale.mjs';
+
 function requireLocaleList(requiredLocales) {
   if (!Array.isArray(requiredLocales) || requiredLocales.length === 0) {
     throw new Error('requiredLocales must be a non-empty array');
   }
-  const normalized = requiredLocales.map((locale) => {
-    if (typeof locale !== 'string' || locale.trim() === '') {
-      throw new Error('requiredLocales must contain non-empty strings');
-    }
-    return locale.trim();
-  });
+  const normalized = requiredLocales.map((locale) => requireLocaleToken(locale, 'required locale'));
   if (new Set(normalized).size !== normalized.length) {
     throw new Error('requiredLocales must not contain duplicates');
   }
