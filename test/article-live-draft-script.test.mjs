@@ -9,9 +9,18 @@ test('live Article verifier is draft-only and uses durable review contracts', ()
   assert.match(source, /origin: 'blog-audit'/);
   assert.match(source, /action: 'draft'/);
   assert.match(source, /DRAFT_CURRENT/);
+
+  const synchronizationCalls = [...source.matchAll(/synchronizeArticlePublication\s*\(\s*\{/g)];
+  assert.equal(synchronizationCalls.length, 1, 'live verifier must have exactly one Article synchronization call');
+
   assert.doesNotMatch(source, /action:\s*'publish'/);
   assert.doesNotMatch(source, /PUBLISHED_CURRENT/);
   assert.doesNotMatch(source, /ARTICLE_PUBLICATION_AUTHORIZATION_VERSION/);
+  assert.doesNotMatch(source, /publicationAuthorizationForDispatchPlan/);
+  assert.doesNotMatch(source, /prepareArticlePublicationOperation/);
+  assert.doesNotMatch(source, /assertExactCurrentDraftPublicationPlan/);
+  assert.doesNotMatch(source, /publish_confirmation/);
+  assert.doesNotMatch(source, /OX0_ARTICLE_PUBLISH_CONFIRMATION/);
 });
 
 test('live Article verifier verifies cleanup residue instead of assuming deletion succeeded', () => {
