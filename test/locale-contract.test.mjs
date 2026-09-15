@@ -42,7 +42,7 @@ test('malformed or object-special locale keys fail at the Article source boundar
 
 test('structurally invalid or noncanonical BCP47 aliases fail instead of creating distinct identities', () => {
   for (const [locale, pattern] of [
-    ['en-XYZ', /structurally valid BCP47/],
+    ['en-a', /structurally valid BCP47/],
     ['EN-us', /canonical BCP47 form: en-US/],
     ['iw', /canonical BCP47 form: he/]
   ]) {
