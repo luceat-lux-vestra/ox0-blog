@@ -1,10 +1,5 @@
-import { marked } from 'marked';
+import { Marked } from 'marked';
 import { requireCompiledDocument, requireLocaleVariant } from './document-compiler.mjs';
-
-marked.use({
-  gfm: true,
-  breaks: false
-});
 
 const LINK_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:']);
 const IMAGE_PROTOCOLS = new Set(['https:']);
@@ -75,6 +70,17 @@ function requireResolvedHref(result, originalHref) {
 }
 
 export class MarkedCompiler {
+  #marked;
+
+  constructor() {
+    // Marked's default export stores options/extensions in global mutable state.
+    // Canonical compilation must be isolated from unrelated marked.use() calls.
+    this.#marked = new Marked({
+      gfm: true,
+      breaks: false
+    });
+  }
+
   async compile(variant, projectContext = {}) {
     requireLocaleVariant(variant);
     const resolveResource = projectContext.resolveResource;
@@ -82,9 +88,9 @@ export class MarkedCompiler {
       throw new Error('ProjectContext.resolveResource must be a function when provided');
     }
 
-    const tokens = marked.lexer(variant.body);
+    const tokens = this.#marked.lexer(variant.body);
     const referencedAssets = [];
-    const pending = marked.walkTokens(tokens, (token) => {
+    const pending = this.#marked.walkTokens(tokens, (token) => {
       if (token.type === 'html') {
         throw new Error('raw HTML is not supported in canonical Markdown');
       }
@@ -122,7 +128,7 @@ export class MarkedCompiler {
     if (pending.length > 0) await Promise.all(pending);
 
     return requireCompiledDocument({
-      htmlFragment: marked.parser(tokens),
+      htmlFragment: this.#marked.parser(tokens),
       locale: variant.locale,
       referencedAssets,
       diagnostics: []
