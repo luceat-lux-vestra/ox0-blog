@@ -15,7 +15,7 @@ Then recover current repository, Article, RTA, PR, and Ghost-related state relev
 ## Authority
 
 - Git repository policy is canonical. Account memory and prior chat context are bootstrap aids only.
-- `posts/` / future Article-bundle source is canonical public-content source; Ghost is a projection target, not an editing source.
+- Article bundles under `posts/<article>/` are canonical public-content source; Ghost is a projection target, not an editing source.
 - `research-to-action` owns research/evidence/promotion governance. RTA state does not authorize Blog publication or project mutation.
 - The user normally supplies intent and material decisions. The agent owns routine editing, translation synchronization/review/checkpoints, Git/PR mechanics, validation, and authorized Ghost mechanics.
 - Production publication requires an explicit publication instruction unless a separately approved automation policy exists.
@@ -47,20 +47,9 @@ A prior PublicationPlan or prior host external-resource approval is not durable 
 - If a Ghost post write may have succeeded but final publisher revision/sync evidence is missing or invalid, recover it as reconciliation-required rather than silently treating it as not projected.
 - A currently published managed projection is not a routine draft-staging surface; preserve published visibility unless an explicitly designed/authorized production-impacting operation says otherwise.
 
-## Transitional implementation warning
+## Article implementation boundary
 
-The current authoring work may contain one-file `:::lang ko/en` and self-contained data-URI body-image mechanisms. They are **transitional implementation**, not the long-term content-model contract.
-
-Target architecture is tracked by:
-
-- #3 — Article + LocaleVariant + reviewed translation checkpoints
-- #4 — compiler boundary and staged Marked -> Arkst migration
-- #5 — agent-operated authoring/Git/publication workflow
-- #6 — independent Conversation <-> Blog <-> RTA edge contracts
-- #7 — orthogonal workflow state machines, events, and guards
-- #8 — durable bootstrap/state-machine governance
-
-Do not extend transitional bilingual/image mechanisms as new long-term invariants without reconciling those target issues and workflow docs first.
+The active architecture is the Article + LocaleVariant model tracked by issues #3–#8. The earlier one-file frontmatter/`:::lang`/path-derived-identity/data-URI publication path has been retired from the active implementation. Do not reintroduce those mechanisms as compatibility behavior without a new explicit design decision and reconciliation with the workflow contract.
 
 ## Fail closed
 
