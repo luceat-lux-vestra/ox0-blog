@@ -35,15 +35,13 @@ function sameTagNames(left, right) {
 function requireProjectionDescriptor(projection) {
   if (!projection || typeof projection !== 'object') throw new Error('projection descriptor is required');
   const identityTags = normalizeProjectionIdentityTags(projection.identityTags);
-  if (identityTags.length !== 1 && identityTags.length !== 3) {
-    throw new Error('projection identity must be legacy source-only or complete article + locale + variant identity');
+  if (identityTags.length !== 3) {
+    throw new Error('projection identity must contain article + locale + variant identity');
   }
-  const sourceFingerprint = projection.sourceFingerprint == null
-    ? null
-    : normalizeSourceFingerprint(projection.sourceFingerprint, 'projection.sourceFingerprint');
-  if (identityTags.length === 3 && sourceFingerprint == null) {
-    throw new Error('stable Article/LocaleVariant projection requires projection.sourceFingerprint');
-  }
+  const sourceFingerprint = normalizeSourceFingerprint(
+    projection.sourceFingerprint,
+    'projection.sourceFingerprint'
+  );
 
   const metadata = normalizeProjectionMetadata({
     title: projection.title,
@@ -60,7 +58,7 @@ function requireProjectionDescriptor(projection) {
   const featureImageFingerprint = projection.featureImageFingerprint == null
     ? null
     : normalizeSourceFingerprint(projection.featureImageFingerprint, 'projection.featureImageFingerprint');
-  if (identityTags.length === 3 && localFeatureImage && featureImageFingerprint == null) {
+  if (localFeatureImage && featureImageFingerprint == null) {
     throw new Error('stable local featureImage requires projection.featureImageFingerprint');
   }
   if (!localFeatureImage && featureImageFingerprint != null) {
@@ -69,9 +67,6 @@ function requireProjectionDescriptor(projection) {
 
   const materialAssets = projection.materialAssets ?? [];
   if (!Array.isArray(materialAssets)) throw new Error('projection.materialAssets must be an array');
-  if (identityTags.length === 1 && materialAssets.length > 0) {
-    throw new Error('legacy source-only projection cannot carry stable material asset fingerprint evidence');
-  }
 
   return {
     identityTags,
@@ -84,7 +79,6 @@ function requireProjectionDescriptor(projection) {
 }
 
 function assertProjectionFingerprintIntegrity(projection, compiledDocument) {
-  if (projection.identityTags.length === 1) return;
   const recomputed = projectionSourceFingerprintV1(projection, compiledDocument, {
     materialAssets: projection.materialAssets,
     featureImageFingerprint: projection.featureImageFingerprint
@@ -95,7 +89,6 @@ function assertProjectionFingerprintIntegrity(projection, compiledDocument) {
 }
 
 async function snapshotStableLocalFeatureImage(projection, repoRoot) {
-  if (projection.identityTags.length === 1) return null;
   if (!projection.featureImage || /^https:\/\//.test(projection.featureImage)) return null;
   const snapshot = await readRepositoryAssetSnapshot(projection.featureImage, repoRoot, 'local featureImage');
   if (snapshot.fingerprint !== projection.featureImageFingerprint) {
@@ -107,10 +100,10 @@ async function snapshotStableLocalFeatureImage(projection, repoRoot) {
 async function assertExclusiveProjectionIdentity(client, lookupTag, projection, postId) {
   const matches = await client.getPostsBySourceTag(lookupTag);
   if (matches.length !== 1 || matches[0]?.id !== postId) {
-    throw new Error('Ghost source identity ownership changed during synchronization; projection identity is no longer exclusive; refusing sync stamp');
+    throw new Error('Ghost projection identity ownership changed during synchronization; projection identity is no longer exclusive; refusing sync stamp');
   }
   assertProjectionManagedAndUnchanged(matches[0], projection.identityTags, {
-    requireSourceFingerprint: projection.sourceFingerprint != null
+    requireSourceFingerprint: true
   });
 }
 
@@ -118,16 +111,16 @@ async function assertProjectionIdentityStableBeforeMutation(client, lookupTag, p
   const matches = await client.getPostsBySourceTag(lookupTag);
   if (!existing) {
     if (matches.length !== 0) {
-      throw new Error('Ghost source identity ownership changed before mutation; projection identity is no longer unowned; refusing write');
+      throw new Error('Ghost projection identity ownership changed before mutation; projection identity is no longer unowned; refusing write');
     }
     return;
   }
 
   if (matches.length !== 1 || matches[0]?.id !== existing.id) {
-    throw new Error('Ghost source identity ownership changed before mutation; projection identity owner changed; refusing write');
+    throw new Error('Ghost projection identity ownership changed before mutation; projection identity owner changed; refusing write');
   }
   assertProjectionManagedAndUnchanged(matches[0], projection.identityTags, {
-    requireSourceFingerprint: projection.sourceFingerprint != null
+    requireSourceFingerprint: true
   });
   if (matches[0]?.updated_at !== existing.updated_at) {
     throw new Error('Ghost managed projection changed before mutation; refusing stale write');
@@ -136,8 +129,7 @@ async function assertProjectionIdentityStableBeforeMutation(client, lookupTag, p
 
 function synchronizationOperation(inspected) {
   if (!inspected.existing) return 'create';
-  const sameRevision = inspected.projection.sourceFingerprint != null
-    && inspected.projectedSourceFingerprint === inspected.projection.sourceFingerprint;
+  const sameRevision = inspected.projectedSourceFingerprint === inspected.projection.sourceFingerprint;
   if (!sameRevision) return 'update';
   return inspected.existing.status === inspected.desiredStatus ? 'noop' : 'status-update';
 }
@@ -156,7 +148,7 @@ async function inspectProjectionSynchronization({ projection: rawProjection, com
   const lexical = createHtmlCardLexical(compiledDocument.htmlFragment);
   const lookupTag = projectionLookupTag(projection.identityTags);
   const identityMatches = await client.getPostsBySourceTag(lookupTag);
-  if (identityMatches.length > 1) throw new Error('multiple Ghost posts claim the same ox0 source identity / projection identity');
+  if (identityMatches.length > 1) throw new Error('multiple Ghost posts claim the same projection identity');
   const existing = identityMatches[0] ?? null;
 
   if (action === 'draft' && existing?.status === 'published') {
@@ -164,7 +156,7 @@ async function inspectProjectionSynchronization({ projection: rawProjection, com
   }
   if (existing) {
     assertProjectionManagedAndUnchanged(existing, projection.identityTags, {
-      requireSourceFingerprint: projection.sourceFingerprint != null
+      requireSourceFingerprint: true
     });
   }
 
@@ -296,7 +288,7 @@ async function synchronizeStatusOnly(client, inspected) {
   await assertDesiredSlugAvailable(client, inspected.projection.slug, fresh);
   const ownershipMatches = await client.getPostsBySourceTag(inspected.lookupTag);
   if (ownershipMatches.length !== 1 || ownershipMatches[0]?.id !== fresh.id) {
-    throw new Error('Ghost source identity ownership changed after status mutation; projection identity owner changed; refusing sync stamp');
+    throw new Error('Ghost projection identity ownership changed after status mutation; projection identity owner changed; refusing sync stamp');
   }
 
   const hash = projectionSnapshotHash(fresh);
@@ -367,7 +359,7 @@ export async function synchronizeProjection(args) {
 
   const ownershipMatches = await client.getPostsBySourceTag(inspected.lookupTag);
   if (ownershipMatches.length !== 1 || ownershipMatches[0]?.id !== fresh.id) {
-    throw new Error('Ghost source identity ownership changed after mutation; projection identity owner changed; refusing sync stamp');
+    throw new Error('Ghost projection identity ownership changed after mutation; projection identity owner changed; refusing sync stamp');
   }
 
   const hash = projectionSnapshotHash(fresh);
@@ -378,24 +370,14 @@ export async function synchronizeProjection(args) {
     updated_at: fresh.updated_at
   });
   assertProjectionManagedAndUnchanged(stamped, inspected.projection.identityTags, {
-    requireSourceFingerprint: inspected.projection.sourceFingerprint != null
+    requireSourceFingerprint: true
   });
 
   const final = await client.getPostById(fresh.id);
   assertProjectionManagedAndUnchanged(final, inspected.projection.identityTags, {
-    requireSourceFingerprint: inspected.projection.sourceFingerprint != null
+    requireSourceFingerprint: true
   });
   await assertDesiredSlugAvailable(client, inspected.projection.slug, final);
   await assertExclusiveProjectionIdentity(client, inspected.lookupTag, inspected.projection, final.id);
   return final;
-}
-
-export async function planPostSynchronization(args) {
-  const legacy = await import('./legacy-publisher.mjs');
-  return legacy.planPostSynchronization(args);
-}
-
-export async function synchronizePost(args) {
-  const legacy = await import('./legacy-publisher.mjs');
-  return legacy.synchronizePost(args);
 }
