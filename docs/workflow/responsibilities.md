@@ -7,9 +7,14 @@ The user normally owns only:
 - intent, topic, direction, and desired outcome;
 - personal/domain facts unavailable to the agent;
 - decisions where meaning, privacy, or publication intent is genuinely ambiguous;
+- explicit merge / merge-judgment authorization when a work unit is to leave development and enter the strict exact-HEAD merge gate;
 - explicit production publication authorization, unless a separately approved automation policy exists.
 
 The user is not expected to manage repository mechanics.
+
+`merge 준비해`, validation, review, or ordinary PR preparation do not authorize merge. An explicit `merge해` may authorize both entering merge judgment and the final merge if every exact-HEAD proof obligation passes.
+
+Production publication is a separate boundary. `발행해` does not implicitly authorize a pending Git merge, and `merge해` does not imply production publication.
 
 ## Agent responsibilities
 
@@ -22,18 +27,20 @@ The agent normally owns:
 - a logically separate translation-equivalence review pass;
 - translation fingerprint/checkpoint maintenance;
 - asset/provenance handling;
-- RTA duplicate search and routing when justified;
+- RTA duplicate search and routing when justified and authorized;
 - branch, commit, rebase/restack, PR, and conflict mechanics;
-- validation, CI/review evidence, dry-run, and merge-gate preparation;
+- validation, CI/review evidence, dry-run, candidate preparation, and merge-gate execution after authorization;
 - authorized Ghost draft/publish mechanics and persisted-state verification.
 
 ## Escalation rule
 
 Do not ask the user to perform mechanical work merely because it is tedious or stateful. Ask only when a material decision cannot be safely inferred, for example:
 
+- which durable Article/RTA target is intended when several remain materially plausible after repository recovery;
 - whether company/private information may be published;
 - which of two materially different claims the user intends;
 - whether a knowingly divergent locale variant is acceptable;
+- whether strict merge judgment/merge is authorized when the active task has not authorized it;
 - whether production publication is authorized.
 
 If a required external capability is unavailable, report the exact missing capability rather than handing Git/document mechanics back to the user.

@@ -10,62 +10,57 @@ Before Article, localization, Conversation/RTA integration, Git/PR, or Ghost pub
 4. `docs/workflow/integrations.md`
 5. `docs/workflow/git-policy.md`
 
-Then recover the current repository, Article, RTA, PR, and Ghost-related state relevant to the task before mutation.
+Then recover current repository, Article, RTA, PR, and Ghost-related state relevant to the task before mutation.
 
 ## Authority
 
 - Git repository policy is canonical. Account memory and prior chat context are bootstrap aids only.
-- Public-content source is the Article bundle under `posts/<article>/`: strict `article.json` plus locale Markdown files.
-- Every Markdown file under `posts/` must belong to an Article manifest.
-- Ghost is a projection target, not an editing source.
-- `research-to-action` owns research/evidence/promotion governance. RTA state does not authorize Blog publication or repository mutation.
+- `posts/` / future Article-bundle source is canonical public-content source; Ghost is a projection target, not an editing source.
+- `research-to-action` owns research/evidence/promotion governance. RTA state does not authorize Blog publication or project mutation.
 - The user normally supplies intent and material decisions. The agent owns routine editing, translation synchronization/review/checkpoints, Git/PR mechanics, validation, and authorized Ghost mechanics.
 - Production publication requires an explicit publication instruction unless a separately approved automation policy exists.
-- Production authorization is transient/task-scoped and must not be reconstructed merely from Article `READY`, Git state, RTA state, Ghost state, or a prior plan.
+- Merge/merge-judgment authorization and production-publication authorization are separate and task-scoped. Do not infer either from recovered PR/Ghost state after task/session loss.
+- Production publication authorization does not substitute for current public-resource safety or required host trust for external publication resources. Recompute plan-bound resource targets/approvals from current source/current host policy after task/session loss.
 
 ## Development and merge policy
 
-Normal branch/HEAD movement and fix commits are allowed during development. Preparing a candidate is not the same as starting merge judgment.
+During development, normal branch/HEAD movement and fix commits are allowed. Do not rerun the complete strict merge gate after every edit or restack stacked PRs after every upstream commit.
 
-Do **not** enter strict merge judgment or merge unless the user/task explicitly requests merge or merge judgment.
+A coherent PR may reach `CANDIDATE` without beginning strict merge judgment. Do **not** enter exact-HEAD `MERGE_REVIEW`, and do not merge, unless the active user/task instruction explicitly asks to merge or explicitly asks to begin merge judgment.
 
-Once merge judgment has explicitly started, correctness/safety not proven is FAIL. `UNKNOWN`, `UNVERIFIED`, and `INSUFFICIENT EVIDENCE` are FAIL. Exact final HEAD is the evidence unit; if it moves, exact-HEAD evidence is invalidated. Squash merge is the default and exact reviewed-head locking should be used where supported.
+At merge judgment, correctness/safety not proven is FAIL. `UNKNOWN`, `UNVERIFIED`, and `INSUFFICIENT EVIDENCE` are FAIL. Exact final HEAD is the evidence unit; if it moves, exact-HEAD merge evidence is invalidated. Use squash merge and exact reviewed-head locking (`expected_head_sha`) where supported.
 
-## Article authoring safety
+## Publication boundary
+
+`발행 준비해` / `PREPARE_PUBLISH` is read-only with respect to Ghost and publication resource storage under contract v1: validate, resolve bounded read-only resource targets/current host approvals where applicable, fresh-read Ghost, and create a fresh publication plan. Ghost draft mutation requires an explicit draft-projection task. `발행해` authorizes production publication only after source/translation/public-resource/host-trust/identity/drift guards pass and does not implicitly authorize a pending Git merge.
+
+A prior PublicationPlan or prior host external-resource approval is not durable mutation authority. If source, resource target, host-policy evidence, or Ghost state changed—or the task/session was lost—re-plan before any new write.
+
+## Authoring safety
 
 - Technical claims must be traceable to evidence. Distinguish measurement, observation, inference, and opinion.
 - Do not publish credentials, personal secrets, private/customer/company details, or raw chat transcripts merely because they appeared in source conversation/RTA context.
 - Preserve publisher-owned `#ox0-*` state tags; authors must not add them manually.
 - Never put Ghost Admin credentials in source, logs, examples, issues, or pull requests.
-- Translation checkpoint, Article semantic readiness, projection revision, remote-resource trust, and production authorization are separate proofs. None substitutes for another.
-- `PREPARE_PUBLISH`/planning is read-only with respect to Ghost and publication resource storage.
-- A `draft` operation is a real mutation and may prepare repository-owned body assets or upload a local feature image before creating/updating managed drafts.
-- Remote HTTPS images are not immutable-byte evidence. Production use requires explicit current host `remoteResourcePolicy` approval.
-- First publication uses `draft-promotion`: exact-current managed drafts become published by status update; partial-retry published siblings may only noop. Local body assets must already be reuse-only and feature images must be preserved.
-- Later published revisions stay public. Fresh production planning may update stale managed published projections in place and noop exact-current siblings. Do not unpublish them merely to stage a revision.
-- The selected production mode (`draft-promotion` or `published-revision`) is pinned across the publication library's initial and refreshed pre-mutation plans. A mode change fails closed.
-- The manual workflow fresh-reads current `main` before checkout and immediately before operation. These are observational distributed-race guards, not an atomic Git/Ghost transaction.
-- Live evidence for this personal blog uses temporary **draft-only** Article projections on the configured Ghost instance. Evidence-only verification must never publish a temporary post.
+- Use dry-run/read-only planning before first mutation when the publication workflow supports it.
+- Ghost projection state is per locale variant. Never claim whole-Article publication success after a partial multi-locale mutation; fresh-read and recover the actual state of every targeted projection.
+- If a Ghost post write may have succeeded but final publisher revision/sync evidence is missing or invalid, recover it as reconciliation-required rather than silently treating it as not projected.
+- A currently published managed projection is not a routine draft-staging surface; preserve published visibility unless an explicitly designed/authorized production-impacting operation says otherwise.
 
-## Article contract
+## Transitional implementation warning
 
-Use the source and operation contracts documented by:
+The current authoring work may contain one-file `:::lang ko/en` and self-contained data-URI body-image mechanisms. They are **transitional implementation**, not the long-term content-model contract.
 
-- `docs/article-manifest-v1.md`
-- `docs/translation-fingerprint-v1.md`
-- `docs/article-readiness-v1.md`
-- `docs/article-review-operations.md`
-- `docs/article-operations.md`
-- `docs/asset-publisher.md`
-- `docs/remote-resource-policy.md`
-- `docs/article-publication.md`
-- `docs/live-draft-verification.md`
+Target architecture is tracked by:
 
-`npm run validate` validates the Article repository. `npm run dry-run` is the Article planner. `.github/workflows/article-ghost.yml` is the manual Article control surface.
+- #3 — Article + LocaleVariant + reviewed translation checkpoints
+- #4 — compiler boundary and staged Marked -> Arkst migration
+- #5 — agent-operated authoring/Git/publication workflow
+- #6 — independent Conversation <-> Blog <-> RTA edge contracts
+- #7 — orthogonal workflow state machines, events, and guards
+- #8 — durable bootstrap/state-machine governance
 
-The workflow is `workflow_dispatch` only, operates only on an exact current `main` SHA supplied by the control surface, validates before operation, and requires exact publication confirmation `publish:<manifest_path>@<source_sha>` for production mutation. This confirmation binds the requested target/source; it does not infer publication authorization from repository state.
-
-GitHub only dispatches a new `workflow_dispatch` workflow after that workflow exists on the default branch. Before then, exact-candidate live evidence may use `npm run verify:article-live-draft` on the configured Ghost instance because the verifier is hard-coded to create temporary drafts only and clean them up. Do not misrepresent a draft-verifier PASS as proof of production publication or GitHub workflow platform wiring.
+Do not extend transitional bilingual/image mechanisms as new long-term invariants without reconciling those target issues and workflow docs first.
 
 ## Fail closed
 
