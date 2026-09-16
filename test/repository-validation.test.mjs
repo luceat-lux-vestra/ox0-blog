@@ -5,10 +5,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { validateMigrationRepository } from '../src/repository-validation.mjs';
 
-function legacyPost({ title = 'Legacy', slug = 'legacy' } = {}) {
-  return `---\ntitle: ${title}\nslug: ${slug}\nstatus: draft\n---\n# Legacy\n`;
-}
-
 function publication() {
   return {
     tags: [],
@@ -20,7 +16,7 @@ function publication() {
   };
 }
 
-function article(slug) {
+function article(slug = 'article') {
   return {
     version: 1,
     articleId: 'article-one',
@@ -39,31 +35,30 @@ function article(slug) {
   };
 }
 
-async function fixture({ legacySlug = 'legacy', articleSlug = 'article' } = {}) {
+async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'ox0-repository-validation-'));
   await mkdir(path.join(root, 'posts', 'article'), { recursive: true });
   await mkdir(path.join(root, 'assets'));
-  await writeFile(path.join(root, 'posts', 'legacy.md'), legacyPost({ slug: legacySlug }), 'utf8');
   await writeFile(path.join(root, 'posts', 'article', 'en.md'), '# Article\n', 'utf8');
   await writeFile(
     path.join(root, 'posts', 'article', 'article.json'),
-    `${JSON.stringify(article(articleSlug), null, 2)}\n`,
+    `${JSON.stringify(article(), null, 2)}\n`,
     'utf8'
   );
   return root;
 }
 
-test('combined migration validation accepts distinct legacy and Article slugs', async () => {
+test('repository validation accepts Article-owned Markdown only', async () => {
   const root = await fixture();
   const result = await validateMigrationRepository(root);
-  assert.equal(result.legacyPosts.length, 1);
   assert.equal(result.articles.length, 1);
 });
 
-test('combined migration validation rejects a public slug shared across legacy and Article models', async () => {
-  const root = await fixture({ legacySlug: 'same', articleSlug: 'same' });
+test('repository validation rejects one-file Markdown outside an Article manifest', async () => {
+  const root = await fixture();
+  await writeFile(path.join(root, 'posts', 'legacy.md'), '# Legacy\n', 'utf8');
   await assert.rejects(
     validateMigrationRepository(root),
-    /duplicate public slug across legacy\/Article sources same/
+    /posts\/ Markdown must belong to an Article manifest: posts\/legacy\.md/
   );
 });
