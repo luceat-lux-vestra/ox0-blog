@@ -24,7 +24,7 @@ async function collectMarkdownFiles(dir, repoRoot) {
   return files;
 }
 
-export async function validateMigrationRepository(repoRoot = process.cwd()) {
+export async function validateRepository(repoRoot = process.cwd()) {
   const root = path.resolve(repoRoot);
   const articles = await validateArticleRepository(root);
   const claimed = new Set(
