@@ -22,7 +22,7 @@ on:
           - plan-publish
           - publish
       publish_confirmation:
-        description: For publish only: publish:<manifest_path>@<source_sha>; leave empty otherwise
+        description: 'For publish only: publish:<manifest_path>@<source_sha>; leave empty otherwise'
         required: false
         default: ''
         type: string
