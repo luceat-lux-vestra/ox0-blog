@@ -2,7 +2,6 @@ import path from 'node:path';
 import { requireCompiledDocument } from './compiler/document-compiler.mjs';
 import { readRepositoryAssetSnapshot } from './file-confinement.mjs';
 import { createHtmlCardLexical } from './lexical.mjs';
-import { sourceTagForPath } from './post.mjs';
 import { projectionSourceFingerprintV1 } from './projection-fingerprint.mjs';
 import {
   REVISION_TAG_PREFIX,
@@ -389,46 +388,4 @@ export async function synchronizeProjection(args) {
   await assertDesiredSlugAvailable(client, inspected.projection.slug, final);
   await assertExclusiveProjectionIdentity(client, inspected.lookupTag, inspected.projection, final.id);
   return final;
-}
-
-async function legacyProjectionArgs({ source, action, client, repoRoot, renderMarkdown }) {
-  const desiredStatus = desiredStatusForAction(action);
-  if (typeof renderMarkdown !== 'function') throw new Error('renderMarkdown function is required');
-  if (source.metadata.status !== desiredStatus) {
-    throw new Error(`frontmatter status=${source.metadata.status} does not match requested action=${action}`);
-  }
-
-  const html = await renderMarkdown(source.markdown, { postPath: source.postPath, repoRoot });
-  const sourceTag = sourceTagForPath(source.postPath, repoRoot);
-  return {
-    projection: {
-      identityTags: [sourceTag],
-      title: source.metadata.title,
-      slug: source.metadata.slug,
-      excerpt: source.metadata.excerpt,
-      tags: [...source.metadata.tags],
-      featureImage: source.metadata.featureImage,
-      featureImageAlt: source.metadata.featureImageAlt,
-      featured: source.metadata.featured,
-      visibility: source.metadata.visibility,
-      canonicalUrl: source.metadata.canonicalUrl
-    },
-    compiledDocument: {
-      htmlFragment: html,
-      locale: 'legacy',
-      referencedAssets: [],
-      diagnostics: []
-    },
-    action,
-    client,
-    repoRoot
-  };
-}
-
-export async function planPostSynchronization(args) {
-  return planProjectionSynchronization(await legacyProjectionArgs(args));
-}
-
-export async function synchronizePost(args) {
-  return synchronizeProjection(await legacyProjectionArgs(args));
 }
