@@ -389,3 +389,13 @@ export async function synchronizeProjection(args) {
   await assertExclusiveProjectionIdentity(client, inspected.lookupTag, inspected.projection, final.id);
   return final;
 }
+
+export async function planPostSynchronization(args) {
+  const legacy = await import('./legacy-publisher.mjs');
+  return legacy.planPostSynchronization(args);
+}
+
+export async function synchronizePost(args) {
+  const legacy = await import('./legacy-publisher.mjs');
+  return legacy.synchronizePost(args);
+}
