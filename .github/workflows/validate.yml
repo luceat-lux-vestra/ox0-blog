@@ -2,14 +2,20 @@ name: Validate blog source
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
 
 permissions:
   contents: read
 
+concurrency:
+  group: validate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -30,5 +36,5 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Test
         run: npm test
-      - name: Validate legacy + Article sources
+      - name: Validate Article sources
         run: npm run validate
