@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { validateMigrationRepository } from '../src/repository-validation.mjs';
+import { validateRepository } from '../src/repository-validation.mjs';
 
 function publication() {
   return {
@@ -50,7 +50,7 @@ async function fixture() {
 
 test('repository validation accepts Article-owned Markdown only', async () => {
   const root = await fixture();
-  const result = await validateMigrationRepository(root);
+  const result = await validateRepository(root);
   assert.equal(result.articles.length, 1);
 });
 
@@ -58,7 +58,7 @@ test('repository validation rejects one-file Markdown outside an Article manifes
   const root = await fixture();
   await writeFile(path.join(root, 'posts', 'legacy.md'), '# Legacy\n', 'utf8');
   await assert.rejects(
-    validateMigrationRepository(root),
+    validateRepository(root),
     /posts\/ Markdown must belong to an Article manifest: posts\/legacy\.md/
   );
 });
