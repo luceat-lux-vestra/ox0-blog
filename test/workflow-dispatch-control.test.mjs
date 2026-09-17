@@ -215,7 +215,7 @@ test('draft-promotion rejects first-create, stale published sibling, rewrite, un
   const cases = [
     [draftVariant('en', '2', { ghost: { ...base.ghost, existingPostId: null, observed: null, operation: 'create' } }), /existing managed Ghost post/],
     [publishedVariant('en', '2', { projectedDigit: '3', featureImage: { action: 'none' } }), /draft-promotion retry requires exact-current published no-op/],
-    [draftVariant('en', '2', { ghost: { ...base.ghost, projectedSourceFingerprint: fingerprint('3'), operation: 'update' } }), /draft is not exact-current/],
+    [draftVariant('en', '2', { ghost: { ...base.ghost, projectedSourceFingerprint: fingerprint('3'), operation: 'update', observed: { ...base.ghost.observed, projectedSourceFingerprint: fingerprint('3'), syncHash: '3'.repeat(64) } } }), /draft is not exact-current/],
     [draftVariant('en', '2', { ghost: { ...base.ghost, operation: 'update' } }), /may only promote an exact-current draft/],
     [draftVariant('en', '2', { ghost: { ...base.ghost, observed: null } }), /exact bound managed-post observation/],
     [draftVariant('en', '2', { ghost: { ...base.ghost, observed: { ...base.ghost.observed, syncHash: '' } } }), /exact bound managed-post observation/],
