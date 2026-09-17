@@ -162,4 +162,4 @@ If a Ghost mutation succeeds but final managed stamping fails, the projection re
 
 ## Verification status
 
-Tests and workflows existing in the tree are not proof by themselves. Merge review, when explicitly started, is exact-HEAD proof work. This is a private repository and the current GitHub Actions allocation is exhausted, so development is intentionally proceeding without hosted CI for now. Exact-head Node 24 test/validation evidence is deferred until Actions capacity is available again or strict merge judgment is explicitly started.
+Tests and workflows existing in the tree are not proof by themselves. Merge review, when explicitly started, is exact-HEAD proof work. Hosted GitHub Actions execution is currently blocked before runner allocation: repeated observed failures assigned no runner and executed no workflow steps. The exact account/platform cause remains unverified, so development is intentionally proceeding without relying on hosted CI for now. Exact-head Node 24 test/validation evidence is deferred until hosted Actions execution is available again or strict merge judgment is explicitly started.
