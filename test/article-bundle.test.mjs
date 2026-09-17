@@ -326,7 +326,7 @@ test('invalidation resolution refuses non-SYNCED translation state', () => {
       currentTranslationFingerprints: changed,
       review: readinessPass(changedSource, [ID1])
     }),
-    /cannot resolve while translation state is not SYNCED/
+    /cannot be accepted while translation state is not SYNCED/
   );
 });
 

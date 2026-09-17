@@ -100,10 +100,12 @@ test('non-HTTPS, protocol-relative, query/fragment local and malformed percent U
     '../../assets/article/%zz.png'
   ]) {
     const input = variant(value.sourcePath, `![bad](${href})\n`);
-    const compiledDocument = await compile(input);
     await assert.rejects(
-      collectMaterialAssetEvidence({ variant: input, compiledDocument, repoRoot: value.repoRoot }),
-      /https|protocol-relative|query strings|fragments|percent encoding/
+      async () => {
+        const compiledDocument = await compile(input);
+        return collectMaterialAssetEvidence({ variant: input, compiledDocument, repoRoot: value.repoRoot });
+      },
+      /unsafe Markdown image URL protocol|protocol-relative|query strings|fragments|percent encoding/
     );
   }
 });

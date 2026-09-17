@@ -196,7 +196,7 @@ test('stable Article projection without source revision evidence is rejected bef
       client,
       repoRoot: '/repo'
     }),
-    /requires projection.sourceFingerprint/
+    /projection\.sourceFingerprint must be sha256/
   );
   assert.deepEqual(client.calls, []);
 });

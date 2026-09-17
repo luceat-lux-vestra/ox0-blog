@@ -172,11 +172,15 @@ async function makeReady(value) {
   });
   await writeFile(value.manifestPath, translated.manifestText, 'utf8');
 
-  const requested = await requestArticleSemanticReview({ ...value });
-  const invalidationId = requested.bundle.readinessInvalidations.at(-1).id;
-  await writeFile(value.manifestPath, requested.manifestText, 'utf8');
+  let beforeReadiness = await currentEvaluation(value);
+  if (beforeReadiness.readiness.state === 'DRAFT') {
+    const requested = await requestArticleSemanticReview({ ...value });
+    await writeFile(value.manifestPath, requested.manifestText, 'utf8');
+    beforeReadiness = await currentEvaluation(value);
+  }
+  assert.equal(beforeReadiness.readiness.state, 'REVIEW_REQUIRED');
+  const reviewedInvalidationIds = beforeReadiness.bundle.readinessInvalidations.map((entry) => entry.id);
 
-  const beforeReadiness = await currentEvaluation(value);
   const accepted = await acceptArticleSemanticReview({
     ...value,
     review: {
@@ -184,7 +188,7 @@ async function makeReady(value) {
       kind: 'agent',
       contractVersion: ARTICLE_READINESS_REVIEW_CONTRACT_VERSION,
       reviewedSourceFingerprint: beforeReadiness.articleSourceFingerprint,
-      reviewedInvalidationIds: [invalidationId]
+      reviewedInvalidationIds
     }
   });
   await writeFile(value.manifestPath, accepted.manifestText, 'utf8');
