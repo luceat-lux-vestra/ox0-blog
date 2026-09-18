@@ -89,6 +89,9 @@ test('Article preview resolves local images to exact host URLs after repository 
     article.variants[0].htmlFragment,
     /https:\/\/raw\.githubusercontent\.com\/example\/blog\/deadbeef\/assets\/example\/diagram\.png/
   );
+  const html = renderArticlePreviewHtml(bundle);
+  assert.match(html, /img-src https:\/\/raw\.githubusercontent\.com/);
+  assert.doesNotMatch(html, /img-src https:;/);
 });
 
 test('Article preview fails closed when local assets have no review resource host', async () => {
