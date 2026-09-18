@@ -97,20 +97,26 @@ Acceptance requires:
 
 - current translation state is `SYNCED`;
 - current Article state is `REVIEW_REQUIRED`;
+- current `claim-proof.json` evaluates to `PASS`;
+- the proof covers the exact current required-locale translation fingerprints;
 - review covers the exact current Article semantic-source fingerprint;
+- review covers the exact current claim-proof fingerprint;
 - if active readiness invalidations exist, review explicitly covers the exact active event-ID set;
 - invalidation evidence covers every unreviewed readiness epoch contiguously.
 
-The resulting readiness checkpoint records:
+The resulting readiness checkpoint v2 records:
 
 ```text
 priorReviewedEpoch
 reviewedEpoch
 resolvedInvalidationIds[]
 exact reviewed Article semantic-source fingerprint
+exact reviewed claim-proof fingerprint
 review kind
 review-contract version
 ```
+
+Legacy checkpoint v1 remains readable for recovery, but actual Article evaluation cannot recover it as READY under the claim-proof-required workflow.
 
 Deleting invalidation records cannot manufacture READY because the monotonic epoch remains ahead of the last reviewed epoch.
 

@@ -69,6 +69,25 @@ Synthesize one or more RTA items into a public Article. A Blog mutation sourced 
 7. re-run the gate after material content changes; and
 8. fail closed when public safety is `UNKNOWN`, `UNVERIFIED`, or supported by `INSUFFICIENT EVIDENCE`.
 
+### CLAIM_PROOF gate for public technical content
+
+Public synthesis also requires claim-level proof under `docs/article-claim-proof.md`.
+
+For material technical claims, the Blog agent must:
+
+1. classify factual, responsibility/classification, recommendation, and example-interpretation claims;
+2. record the role of each supporting source rather than treating all citations as equal;
+3. prevent examples/tutorials/issues from being silently promoted into best-practice guidance;
+4. apply stronger recommendation proof to default/preference/avoidance wording;
+5. check counter-evidence/alternatives;
+6. run cross-claim consistency against the final Article;
+7. run an independent adversarial technical-review pass; and
+8. bind the resulting proof fingerprint to Article readiness.
+
+This proof obligation is owned by the workflow. The user is not expected to catch domain errors in material the workflow researched for them.
+
+`UNKNOWN`, `UNVERIFIED`, or `INSUFFICIENT_EVIDENCE` on a material claim prevents READY.
+
 ### PUBLIC_EXAMPLE_RESEARCH gate
 
 When a Blog mutation sourced from private/non-public Conversation or RTA material needs a concrete example, `PUBLIC_EXAMPLE_RESEARCH` is mandatory before drafting that example and before the first durable public write containing it.

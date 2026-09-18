@@ -11,6 +11,7 @@ One logical Article owns one directory under `posts/`:
 ```text
 posts/<article>/
   article.json
+  claim-proof.json
   ko-KR.md
   en.md
 
@@ -210,6 +211,25 @@ The accepted map must contain exactly the required locales under the checkpoint 
 
 Translation generation and translation acceptance remain separate operations even when the same agent performs both.
 
+## Claim proof sidecar
+
+`claim-proof.json` is a separate durable evidence contract defined in `docs/article-claim-proof.md`.
+
+It may be absent while an Article is still an unrevised `DRAFT`. It is mandatory before semantic readiness can be accepted.
+
+The sidecar stores:
+
+- exact covered translation fingerprints;
+- material claim classification and source-role evidence;
+- counter-evidence status;
+- stronger recommendation proof metadata;
+- cross-claim consistency PASS;
+- independent adversarial-review PASS.
+
+The sidecar receives its own versioned fingerprint. Readiness checkpoint v2 binds that fingerprint in addition to the Article semantic-source fingerprint.
+
+This avoids putting a large evidence graph inside `article.json` while still making proof changes invalidate READY deterministically.
+
 ## Article readiness evidence
 
 A readiness invalidation v1 is:
@@ -240,13 +260,17 @@ Supported origins are currently:
 
 Chat/session/model identifiers are not durable references.
 
-A readiness checkpoint v1 records:
+Legacy readiness checkpoint v1 records only Article source review. It remains readable for migration but cannot recover READY once claim proof is required.
+
+Readiness checkpoint v2 additionally records the exact claim-proof fingerprint:
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "sourceFingerprintVersion": 1,
   "sourceFingerprint": "sha256:...",
+  "claimProofFingerprintVersion": 1,
+  "claimProofFingerprint": "sha256:...",
   "priorReviewedEpoch": 0,
   "reviewedEpoch": 2,
   "resolvedInvalidationIds": [

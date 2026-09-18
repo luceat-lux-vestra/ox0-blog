@@ -175,6 +175,7 @@ If a Ghost mutation succeeds but final managed stamping fails, the projection re
 ## Documentation
 
 - `docs/article-manifest-v1.md` — canonical source representation
+- `docs/article-claim-proof.md` — material-claim/source-role/recommendation proof contract
 - `docs/translation-fingerprint-v1.md` — translation-equivalence evidence
 - `docs/article-readiness-v1.md` — semantic readiness
 - `docs/article-review-operations.md` — review/checkpoint operations

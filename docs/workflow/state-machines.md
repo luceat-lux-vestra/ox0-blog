@@ -55,7 +55,7 @@ READY
 | From | Event | Guard / preconditions | Deterministic side effects | Semantic / agent review | To | User authorization required? |
 |---|---|---|---|---|---|---|
 | DRAFT | content reaches reviewable shape | required Article source exists | run validation inputs; preserve unresolved items | perform content/factual/privacy/provenance review as applicable | REVIEW_REQUIRED | no |
-| REVIEW_REQUIRED | readiness review PASS | required locales exist; translation `SYNCED`; compiler/source/assets validation PASS; no unresolved material question | atomically record/refresh versioned readiness evidence for the exact reviewed source | confirm material claims, intent, privacy, provenance and public treatment | READY | normally no |
+| REVIEW_REQUIRED | readiness review PASS | required locales exist; translation `SYNCED`; compiler/source/assets validation PASS; claim proof PASS for exact current source; recommendation/source-role, cross-claim, adversarial checks PASS; no unresolved material question | atomically record/refresh versioned readiness evidence for the exact reviewed source + claim-proof fingerprint | confirm material claims, intent, privacy, provenance and public treatment | READY | normally no |
 | REVIEW_REQUIRED | material ambiguity remains | agent cannot safely infer intended meaning/public treatment | preserve unresolved item; do not claim readiness | ask only for unresolved material decision | REVIEW_REQUIRED | yes, only for that decision |
 | READY | readiness-relevant source changes | current readiness fingerprint differs from reviewed evidence | invalidate prior readiness evidence | rerun affected semantic/factual review | REVIEW_REQUIRED | no |
 | READY | relied-on provenance/evidence materially weakens or reverses | source may still be byte-identical | durably invalidate readiness when this Blog edge is authorized; do not mutate Ghost | audit affected claim against current evidence | REVIEW_REQUIRED | no for authorized audit/update work; otherwise emit a signal only |
@@ -68,7 +68,9 @@ A naked persisted `READY` enum is not sufficient evidence. Recovery must establi
 
 ```text
 current readiness-relevant fingerprint == reviewed readiness fingerprint
-AND readiness review-contract version is supported
+AND current claim-proof fingerprint == reviewed claim-proof fingerprint
+AND current claim proof covers exact required-locale source fingerprints
+AND claim proof + readiness review-contract versions are supported
 AND no unresolved durable review-needed invalidation exists
 ```
 
@@ -430,9 +432,14 @@ AND reviewed translation fingerprints == exact current translation fingerprints
 ```text
 translation state == SYNCED
 AND compiler/source/assets validation PASS
+AND claim-proof PASS for exact current source
+AND material claims have source-role-appropriate evidence
+AND recommendation proof PASS where recommendation language exists
+AND cross-claim consistency PASS
+AND independent adversarial technical review PASS
 AND material factual/provenance/privacy review PASS
 AND no unresolved semantic/publication-content question
-AND readiness evidence can be atomically recorded for exact reviewed source
+AND readiness evidence can be atomically recorded for exact reviewed source + exact claim proof
 ```
 
 ### `may_prepare_merge_candidate`

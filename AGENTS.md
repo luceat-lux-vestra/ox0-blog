@@ -39,6 +39,9 @@ A prior PublicationPlan or prior host external-resource approval is not durable 
 ## Authoring safety
 
 - Technical claims must be traceable to evidence. Distinguish measurement, observation, inference, and opinion.
+- Material factual/classification/recommendation/example-interpretation claims must pass the durable claim-proof contract in `docs/article-claim-proof.md` before Article READY is accepted.
+- Recommendation language has a stronger proof obligation than descriptive facts. A tutorial, OSS issue, or public example cannot by itself establish best-practice/default wording.
+- Final technical review must include cross-claim consistency and an independent adversarial pass. The user is not the default domain fact checker.
 - Any Blog mutation derived from private/non-public Conversation or RTA material must pass the `PUBLIC_SANITIZATION` gate in `docs/workflow/integrations.md` before the first durable public write and again after material content changes.
 - Any concrete example used in such work must also pass `PUBLIC_EXAMPLE_RESEARCH`: perform fresh public-web research, independently construct the example from public evidence where available, and never reuse a private scenario through superficial renaming or structural paraphrase.
 - Do not publish credentials, personal secrets, private/customer/company details, raw chat transcripts, private provenance, or organization-specific implementation identifiers merely because they appeared in source Conversation/RTA context.
