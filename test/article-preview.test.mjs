@@ -90,7 +90,7 @@ test('Article preview resolves local images to exact host URLs after repository 
     /https:\/\/raw\.githubusercontent\.com\/example\/blog\/deadbeef\/assets\/example\/diagram\.png/
   );
   const html = renderArticlePreviewHtml(bundle);
-  assert.match(html, /img-src https:\/\/raw\.githubusercontent\.com/);
+  assert.match(html, /img-src https:\/\/raw\.githubusercontent\.com\/example\/blog\/deadbeef\//);
   assert.doesNotMatch(html, /img-src https:;/);
 });
 
