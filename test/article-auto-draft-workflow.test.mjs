@@ -46,11 +46,17 @@ test('new Article auto-draft workflow preflights every selected Article before a
   assert.match(source, /npm run validate/);
   assert.match(source, /^      - name: Prove every selected Article is READY\/SYNCED$/m);
   assert.match(source, /npm run validate:articles -- --ready "\$manifest"/);
+  assert.match(source, /^      - name: Preflight every selected Ghost draft plan$/m);
+  assert.match(source, /npm run dry-run -- "\$manifest" draft > \/dev\/null/);
   assert.match(source, /^      - name: Synchronize READY\/SYNCED Articles as drafts$/m);
   assert.match(source, /npm run sync:article -- "\$manifest" draft/);
 
   assert.ok(
     source.indexOf('Prove every selected Article is READY/SYNCED')
+      < source.indexOf('Preflight every selected Ghost draft plan')
+  );
+  assert.ok(
+    source.indexOf('Preflight every selected Ghost draft plan')
       < source.indexOf('Synchronize READY/SYNCED Articles as drafts')
   );
   assert.doesNotMatch(source, /sync:article -- "\$manifest" publish/);
