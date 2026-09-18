@@ -61,7 +61,7 @@ For GitHub PR previews, repository-local body images are resolved to immutable H
 head repository + exact PR HEAD SHA + repository asset path
 ```
 
-The builder snapshots each local asset through the existing repository-confinement rules before emitting its URL. External HTTPS images remain authored external resources, but the review artifact CSP does not fetch arbitrary external image origins. Only the exact preview resource origin is allowed.
+The builder snapshots each local asset through the existing repository-confinement rules before emitting its URL. External HTTPS images remain authored external resources, but the review artifact CSP does not fetch arbitrary external image origins. Only the exact preview resource URL prefix (`head repository + exact SHA + /`) is allowed. CSP host-source path matching keeps repository-owned preview images inside that prefix.
 
 This keeps the HTML artifact single-file while binding repository-owned images to the exact reviewed source revision and avoids turning PR review into an arbitrary outbound-image request surface.
 
