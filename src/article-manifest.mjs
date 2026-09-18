@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { TextDecoder } from 'node:util';
 import { ARTICLE_BUNDLE_CONTRACT_VERSION, normalizeArticleBundle } from './article-bundle.mjs';
+import { loadArticleClaimProof } from './article-claim-proof.mjs';
 import { requireConfinedRegularFile, requireRepositoryAssetFile } from './file-confinement.mjs';
 import { normalizeProjectionMetadata } from './projection-metadata.mjs';
 import { parseStrictJson } from './strict-json.mjs';
@@ -106,16 +107,31 @@ function assertTranslationCheckpointShape(checkpoint) {
 function assertReadinessCheckpointShape(checkpoint) {
   if (checkpoint == null) return;
   const value = requireObject(checkpoint, 'readiness.checkpoint');
-  if (value.version !== 1) return;
-  requireExactKeys(value, 'readiness.checkpoint', [
-    'version',
-    'sourceFingerprintVersion',
-    'sourceFingerprint',
-    'priorReviewedEpoch',
-    'reviewedEpoch',
-    'resolvedInvalidationIds',
-    'review'
-  ]);
+  if (value.version === 1) {
+    requireExactKeys(value, 'readiness.checkpoint', [
+      'version',
+      'sourceFingerprintVersion',
+      'sourceFingerprint',
+      'priorReviewedEpoch',
+      'reviewedEpoch',
+      'resolvedInvalidationIds',
+      'review'
+    ]);
+  } else if (value.version === 2) {
+    requireExactKeys(value, 'readiness.checkpoint', [
+      'version',
+      'sourceFingerprintVersion',
+      'sourceFingerprint',
+      'claimProofFingerprintVersion',
+      'claimProofFingerprint',
+      'priorReviewedEpoch',
+      'reviewedEpoch',
+      'resolvedInvalidationIds',
+      'review'
+    ]);
+  } else {
+    return;
+  }
   requireExactKeys(value.review, 'readiness.checkpoint.review', ['kind', 'contractVersion']);
 }
 
@@ -304,11 +320,14 @@ export async function loadArticleManifest({ manifestPath, repoRoot }) {
     readinessInvalidations: readiness.invalidations
   });
 
+  const claimProofLoaded = await loadArticleClaimProof(articleDir);
   return {
     manifestPath: manifest.absolutePath,
     articleDir,
     bundle,
-    publicationByLocale
+    publicationByLocale,
+    claimProof: claimProofLoaded.proof,
+    claimProofPath: claimProofLoaded.path
   };
 }
 

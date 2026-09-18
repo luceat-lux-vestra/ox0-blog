@@ -1,10 +1,12 @@
+import { ARTICLE_CLAIM_PROOF_FINGERPRINT_VERSION } from './article-claim-proof.mjs';
 import {
   isArticleReadinessInvalidationId,
   validateArticleReadinessInvalidation
 } from './article-readiness-invalidation.mjs';
 import { ARTICLE_SOURCE_FINGERPRINT_VERSION } from './article-readiness-source.mjs';
 
-export const ARTICLE_READINESS_CHECKPOINT_VERSION = 1;
+export const ARTICLE_READINESS_CHECKPOINT_VERSION = 2;
+export const LEGACY_ARTICLE_READINESS_CHECKPOINT_VERSION = 1;
 export const ARTICLE_READINESS_REVIEW_CONTRACT_VERSION = 1;
 
 const REVIEW_KINDS = new Set(['agent', 'human']);
@@ -75,6 +77,7 @@ function requireEpochSpan(priorReviewedEpoch, reviewedEpoch, resolvedInvalidatio
 
 export function createArticleReadinessCheckpoint({
   sourceFingerprint,
+  claimProofFingerprint = null,
   review,
   priorReviewedEpoch = 0,
   reviewedEpoch = 0,
@@ -97,10 +100,33 @@ export function createArticleReadinessCheckpoint({
     throw new Error('Article readiness review does not cover the exact resolved invalidation id set');
   }
 
+  if (claimProofFingerprint == null) {
+    return {
+      version: LEGACY_ARTICLE_READINESS_CHECKPOINT_VERSION,
+      sourceFingerprintVersion: ARTICLE_SOURCE_FINGERPRINT_VERSION,
+      sourceFingerprint: source,
+      priorReviewedEpoch: span.prior,
+      reviewedEpoch: span.reviewed,
+      resolvedInvalidationIds: resolvedIds,
+      review: normalizedReview
+    };
+  }
+
+  const proof = requireFingerprint(claimProofFingerprint, 'claimProofFingerprint');
+  const reviewedProof = requireFingerprint(
+    review.reviewedClaimProofFingerprint,
+    'review.reviewedClaimProofFingerprint'
+  );
+  if (reviewedProof !== proof) {
+    throw new Error('Article readiness review does not cover the exact current claim proof fingerprint');
+  }
+
   return {
     version: ARTICLE_READINESS_CHECKPOINT_VERSION,
     sourceFingerprintVersion: ARTICLE_SOURCE_FINGERPRINT_VERSION,
     sourceFingerprint: source,
+    claimProofFingerprintVersion: ARTICLE_CLAIM_PROOF_FINGERPRINT_VERSION,
+    claimProofFingerprint: proof,
     priorReviewedEpoch: span.prior,
     reviewedEpoch: span.reviewed,
     resolvedInvalidationIds: resolvedIds,
@@ -112,13 +138,22 @@ export function validateArticleReadinessCheckpoint(checkpoint) {
   if (!checkpoint || typeof checkpoint !== 'object' || Array.isArray(checkpoint)) {
     throw new Error('Article readiness checkpoint must be an object');
   }
-  if (checkpoint.version !== ARTICLE_READINESS_CHECKPOINT_VERSION) {
+  if (![LEGACY_ARTICLE_READINESS_CHECKPOINT_VERSION, ARTICLE_READINESS_CHECKPOINT_VERSION].includes(checkpoint.version)) {
     throw new Error(`unsupported Article readiness checkpoint version: ${checkpoint.version}`);
   }
   if (checkpoint.sourceFingerprintVersion !== ARTICLE_SOURCE_FINGERPRINT_VERSION) {
     throw new Error(`unsupported Article source fingerprint version: ${checkpoint.sourceFingerprintVersion}`);
   }
   const sourceFingerprint = requireFingerprint(checkpoint.sourceFingerprint, 'Article readiness checkpoint sourceFingerprint');
+  const claimProofFingerprint = checkpoint.version === ARTICLE_READINESS_CHECKPOINT_VERSION
+    ? requireFingerprint(checkpoint.claimProofFingerprint, 'Article readiness checkpoint claimProofFingerprint')
+    : null;
+  if (
+    checkpoint.version === ARTICLE_READINESS_CHECKPOINT_VERSION
+    && checkpoint.claimProofFingerprintVersion !== ARTICLE_CLAIM_PROOF_FINGERPRINT_VERSION
+  ) {
+    throw new Error(`unsupported Article claim proof fingerprint version: ${checkpoint.claimProofFingerprintVersion}`);
+  }
   const resolvedInvalidationIds = normalizeInvalidationIds(
     checkpoint.resolvedInvalidationIds,
     'Article readiness checkpoint resolvedInvalidationIds'
@@ -133,6 +168,9 @@ export function validateArticleReadinessCheckpoint(checkpoint) {
     version: checkpoint.version,
     sourceFingerprintVersion: checkpoint.sourceFingerprintVersion,
     sourceFingerprint,
+    ...(checkpoint.version === ARTICLE_READINESS_CHECKPOINT_VERSION
+      ? { claimProofFingerprintVersion: ARTICLE_CLAIM_PROOF_FINGERPRINT_VERSION, claimProofFingerprint }
+      : {}),
     priorReviewedEpoch: span.prior,
     reviewedEpoch: span.reviewed,
     resolvedInvalidationIds,
@@ -142,6 +180,7 @@ export function validateArticleReadinessCheckpoint(checkpoint) {
 
 export function resolveArticleReadinessInvalidations({
   currentSourceFingerprint,
+  currentClaimProofFingerprint = null,
   priorReviewedEpoch = 0,
   currentEpoch,
   invalidations,
@@ -171,6 +210,7 @@ export function resolveArticleReadinessInvalidations({
 
   const checkpoint = createArticleReadinessCheckpoint({
     sourceFingerprint: currentSourceFingerprint,
+    claimProofFingerprint: currentClaimProofFingerprint,
     review,
     priorReviewedEpoch: priorEpoch,
     reviewedEpoch: epoch,
@@ -185,6 +225,8 @@ export function resolveArticleReadinessInvalidations({
 
 export function deriveReviewedArticleReadiness({
   currentSourceFingerprint,
+  currentClaimProofFingerprint = null,
+  claimProofRequired = false,
   currentEpoch = 0,
   checkpoint = null,
   invalidations = []
@@ -206,6 +248,18 @@ export function deriveReviewedArticleReadiness({
   const accepted = validateArticleReadinessCheckpoint(checkpoint);
   if (accepted.sourceFingerprint !== source) {
     return { state: 'REVIEW_REQUIRED', reason: 'SOURCE_CHANGED' };
+  }
+  if (claimProofRequired) {
+    if (accepted.version !== ARTICLE_READINESS_CHECKPOINT_VERSION) {
+      return { state: 'REVIEW_REQUIRED', reason: 'CLAIM_PROOF_REQUIRED' };
+    }
+    if (currentClaimProofFingerprint == null) {
+      return { state: 'REVIEW_REQUIRED', reason: 'CLAIM_PROOF_REQUIRED' };
+    }
+    const currentProof = requireFingerprint(currentClaimProofFingerprint, 'currentClaimProofFingerprint');
+    if (accepted.claimProofFingerprint !== currentProof) {
+      return { state: 'REVIEW_REQUIRED', reason: 'CLAIM_PROOF_CHANGED' };
+    }
   }
   if (active.length > 0) {
     return {

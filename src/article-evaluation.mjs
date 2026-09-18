@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { evaluateArticleClaimProof } from './article-claim-proof.mjs';
 import { recoverArticleBundleReviewState, normalizeArticleBundle } from './article-bundle.mjs';
 import { requireCompiledDocument, requireDocumentCompiler } from './compiler/document-compiler.mjs';
 import { readRepositoryAssetSnapshot } from './file-confinement.mjs';
@@ -91,7 +92,8 @@ export async function evaluateArticleBundle({
   compiler,
   repoRoot,
   projectContext = {},
-  publicationByLocale = null
+  publicationByLocale = null,
+  claimProof = undefined
 }) {
   const bundle = normalizeArticleBundle(rawBundle);
   requireDocumentCompiler(compiler);
@@ -134,12 +136,42 @@ export async function evaluateArticleBundle({
     });
   }
 
+  const claimProofRequired = claimProof !== undefined;
+  const claimProofEvaluation = claimProofRequired
+    ? evaluateArticleClaimProof({
+        proof: claimProof,
+        requiredLocales: bundle.article.requiredLocales,
+        currentTranslationFingerprints
+      })
+    : { state: 'NOT_EVALUATED', fingerprint: null };
+  const currentClaimProofFingerprint = claimProofEvaluation.state === 'PASS'
+    ? claimProofEvaluation.fingerprint
+    : null;
+
   const recovered = recoverArticleBundleReviewState(bundle, {
-    currentTranslationFingerprints
+    currentTranslationFingerprints,
+    currentClaimProofFingerprint,
+    claimProofRequired
   });
+  let readiness = recovered.readiness;
+  if (
+    claimProofRequired
+    && recovered.translation.state !== 'INCOMPLETE'
+    && recovered.readiness.state !== 'DRAFT'
+    && claimProofEvaluation.state !== 'PASS'
+  ) {
+    readiness = {
+      state: 'REVIEW_REQUIRED',
+      reason: `CLAIM_PROOF_${claimProofEvaluation.state}`,
+      ...(claimProofEvaluation.reason ? { claimProofReason: claimProofEvaluation.reason } : {})
+    };
+  }
   return {
     ...recovered,
+    readiness,
     currentTranslationFingerprints,
+    claimProof: claimProofEvaluation,
+    currentClaimProofFingerprint,
     variantEvidence
   };
 }

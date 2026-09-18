@@ -147,7 +147,8 @@ export async function validateArticleRepository(
       compiler,
       repoRoot: root,
       projectContext,
-      publicationByLocale: loaded.publicationByLocale
+      publicationByLocale: loaded.publicationByLocale,
+      claimProof: loaded.claimProof
     });
     articles.push({ ...loaded, evaluation, repositoryPath: manifestPath });
   }
@@ -168,7 +169,12 @@ export async function validateArticleRepository(
         throw new Error(`Article translation is not SYNCED: ${article.repositoryPath} (${article.evaluation.translation.state})`);
       }
       if (article.evaluation.readiness.state !== 'READY') {
-        throw new Error(`Article readiness is not READY: ${article.repositoryPath} (${article.evaluation.readiness.state})`);
+        const reason = article.evaluation.readiness.reason
+          ? `:${article.evaluation.readiness.reason}`
+          : '';
+        throw new Error(
+          `Article readiness is not READY: ${article.repositoryPath} (${article.evaluation.readiness.state}${reason})`
+        );
       }
     }
   }

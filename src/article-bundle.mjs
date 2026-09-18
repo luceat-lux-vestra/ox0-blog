@@ -108,7 +108,11 @@ function draftReadiness(bundle) {
     && bundle.readinessInvalidations.length === 0;
 }
 
-export function recoverArticleBundleReviewState(rawBundle, { currentTranslationFingerprints }) {
+export function recoverArticleBundleReviewState(rawBundle, {
+  currentTranslationFingerprints,
+  currentClaimProofFingerprint = null,
+  claimProofRequired = false
+}) {
   const bundle = normalizeArticleBundle(rawBundle);
   const acceptedFingerprints = bundle.translationCheckpoint == null
     ? null
@@ -138,6 +142,8 @@ export function recoverArticleBundleReviewState(rawBundle, { currentTranslationF
   });
   const readiness = deriveReviewedArticleReadiness({
     currentSourceFingerprint: articleSourceFingerprint,
+    currentClaimProofFingerprint,
+    claimProofRequired,
     currentEpoch: bundle.readinessEpoch,
     checkpoint: bundle.readinessCheckpoint,
     invalidations: bundle.readinessInvalidations
@@ -200,10 +206,19 @@ export function acceptArticleBundleReadinessReview(
   rawBundle,
   {
     currentTranslationFingerprints,
+    currentClaimProofFingerprint = null,
+    claimProofRequired = false,
     review
   }
 ) {
-  const recovered = recoverArticleBundleReviewState(rawBundle, { currentTranslationFingerprints });
+  if (claimProofRequired && currentClaimProofFingerprint == null) {
+    throw new Error('Article readiness review requires a current PASS claim proof');
+  }
+  const recovered = recoverArticleBundleReviewState(rawBundle, {
+    currentTranslationFingerprints,
+    currentClaimProofFingerprint,
+    claimProofRequired
+  });
   if (recovered.translation.state !== 'SYNCED') {
     throw new Error('Article readiness review cannot be accepted while translation state is not SYNCED');
   }
@@ -218,6 +233,7 @@ export function acceptArticleBundleReadinessReview(
   if (activeInvalidations.length > 0) {
     readinessCheckpoint = resolveArticleReadinessInvalidations({
       currentSourceFingerprint: recovered.articleSourceFingerprint,
+      currentClaimProofFingerprint,
       priorReviewedEpoch,
       currentEpoch: recovered.bundle.readinessEpoch,
       invalidations: activeInvalidations,
@@ -229,6 +245,7 @@ export function acceptArticleBundleReadinessReview(
     }
     readinessCheckpoint = createArticleReadinessCheckpoint({
       sourceFingerprint: recovered.articleSourceFingerprint,
+      claimProofFingerprint: currentClaimProofFingerprint,
       priorReviewedEpoch,
       reviewedEpoch: recovered.bundle.readinessEpoch,
       resolvedInvalidationIds: [],
