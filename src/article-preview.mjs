@@ -141,7 +141,7 @@ export async function buildArticlePreviewBundle({
   return {
     version: ARTICLE_PREVIEW_BUNDLE_VERSION,
     sourceRevision: sourceRevision == null ? null : requireString(sourceRevision, 'sourceRevision'),
-    resourceOrigin: resourceBase?.origin ?? null,
+    resourceCspSource: resourceBase?.href ?? null,
     articles
   };
 }
@@ -212,8 +212,8 @@ export function renderArticlePreviewHtml(bundle) {
   const revision = bundle.sourceRevision
     ? `<p>Exact source: <code>${escapeHtml(bundle.sourceRevision)}</code></p>`
     : '';
-  const imageSource = bundle.resourceOrigin
-    ? ` ${escapeHtml(bundle.resourceOrigin)}`
+  const imageSource = bundle.resourceCspSource
+    ? ` ${escapeHtml(bundle.resourceCspSource)}`
     : " 'none'";
 
   return `<!doctype html>
