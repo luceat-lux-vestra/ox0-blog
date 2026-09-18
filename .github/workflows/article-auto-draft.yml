@@ -100,6 +100,19 @@ jobs:
             exit 1
           }
 
+      - name: Preflight every selected Ghost draft plan
+        if: steps.discover.outputs.has_articles == 'true'
+        env:
+          GHOST_ADMIN_URL: ${{ vars.GHOST_ADMIN_URL || secrets.GHOST_ADMIN_URL }}
+          GHOST_ADMIN_API_KEY: ${{ secrets.GHOST_ADMIN_API_KEY }}
+          OX0_HOST_RUNTIME_MODULE: ${{ vars.OX0_HOST_RUNTIME_MODULE }}
+        run: |
+          set -eu
+          while IFS= read -r manifest; do
+            [ -n "$manifest" ] || continue
+            npm run dry-run -- "$manifest" draft > /dev/null
+          done < "$RUNNER_TEMP/new-article-manifests.txt"
+
       - name: Synchronize READY/SYNCED Articles as drafts
         if: steps.discover.outputs.has_articles == 'true'
         env:
