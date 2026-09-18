@@ -207,6 +207,14 @@ Each locale still gets low-level safeguards such as:
 
 Sequential mutation does not imply transactionality across Ghost posts. The orchestration therefore treats partial failure as a first-class state rather than pretending distributed rollback exists.
 
+## Automatic first-draft control surface
+
+`.github/workflows/article-auto-draft.yml` is a separate non-production control surface. It runs only for `main` pushes that add a new canonical Article manifest, validates every selected exact pushed source as `SYNCED + READY`, confirms that pushed SHA is still current `main`, read-only plans every selected Ghost draft before any write, and only then invokes the normal guarded Article synchronization library with `action=draft` under the shared Ghost mutation lock.
+
+This automation deliberately stops at managed draft projection. It does not construct a production authorization envelope, does not call the `publish` action, and does not change the first-publication `draft-promotion` requirement. Consequently, the later explicit production publish still observes exact-current managed drafts and promotes them by status change only.
+
+Existing Article revisions are excluded from this automatic first-draft path. Already-published Articles therefore remain on the published-revision workflow and are never pushed back to draft by a routine merge.
+
 ## Manual production control surface
 
 `.github/workflows/article-ghost.yml` is the target manual GitHub Actions control surface. It is `workflow_dispatch` only and operates only on the exact current `main` SHA supplied as `source_sha`.

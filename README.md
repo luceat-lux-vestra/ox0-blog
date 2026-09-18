@@ -27,7 +27,7 @@ Every Markdown file under `posts/` must be owned by an Article manifest. The for
 - Translation generation alone never produces `SYNCED`; an exact-current review checkpoint is required.
 - Article `READY` never implies merge or production-publication authorization.
 - Production publication authorization is explicit, task-scoped, and bound to the exact Article plus every required locale projection fingerprint.
-- Normal push/PR validation never mutates Ghost.
+- Pull-request validation never mutates Ghost. A newly added canonical `READY + SYNCED` Article merged to `main` is automatically synchronized to managed Ghost drafts; this automation never publishes.
 - Planning is read-only with respect to Ghost and publication resource storage.
 - Draft preparation is a real mutation and may prepare body assets or upload a local feature image.
 - Published Articles are updated in place; they are never temporarily unpublished merely to stage a revision.
@@ -74,6 +74,12 @@ npm run sync:article -- posts/example/article.json publish
 ```
 
 Planning may read Ghost ownership/collision/projection state but never writes Ghost or publication storage. Low-level production publish requires an externally supplied exact-source authorization envelope; repository mechanics never manufacture publication intent.
+
+## Automatic post-merge draft projection
+
+`.github/workflows/article-auto-draft.yml` runs on `main` pushes that touch `posts/**`. It identifies only Article manifests newly added by that exact push, reruns tests and repository validation, requires each selected Article to recover as `translation=SYNCED` and `readiness=READY`, then executes `sync:article ... draft` under the shared Ghost mutation lock.
+
+This is an approved non-production automation policy. It never constructs production publication authorization, never requests `published` status, and does not auto-stage already-published Article revisions.
 
 ## Manual GitHub Actions control surface
 
