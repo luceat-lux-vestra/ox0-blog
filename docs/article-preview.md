@@ -61,9 +61,9 @@ For GitHub PR previews, repository-local body images are resolved to immutable H
 head repository + exact PR HEAD SHA + repository asset path
 ```
 
-The builder snapshots each local asset through the existing repository-confinement rules before emitting its URL. External HTTPS images remain authored external resources.
+The builder snapshots each local asset through the existing repository-confinement rules before emitting its URL. External HTTPS images remain authored external resources, but the review artifact CSP does not fetch arbitrary external image origins. Only the exact preview resource origin is allowed.
 
-This keeps the HTML artifact single-file while binding repository-owned images to the exact reviewed source revision.
+This keeps the HTML artifact single-file while binding repository-owned images to the exact reviewed source revision and avoids turning PR review into an arbitrary outbound-image request surface.
 
 ## GitHub Actions behavior
 
