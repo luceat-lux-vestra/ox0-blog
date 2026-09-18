@@ -106,9 +106,15 @@ function normalizeEvidence(value, name) {
   });
 }
 
-function nonEmptyStrings(value, name) {
-  if (!Array.isArray(value) || value.length === 0) throw new Error(`${name} must be a non-empty array`);
+function strings(value, name) {
+  if (!Array.isArray(value)) throw new Error(`${name} must be an array`);
   return value.map((item, index) => requireString(item, `${name}[${index}]`));
+}
+
+function nonEmptyStrings(value, name) {
+  const normalized = strings(value, name);
+  if (normalized.length === 0) throw new Error(`${name} must be a non-empty array`);
+  return normalized;
 }
 
 function normalizeRecommendationBasis(value, claim, name) {
@@ -120,8 +126,12 @@ function normalizeRecommendationBasis(value, claim, name) {
   if (!['direct_guidance', 'bounded_judgment'].includes(basis.kind)) {
     throw new Error(`${name}.kind must be direct_guidance or bounded_judgment`);
   }
-  const conditions = nonEmptyStrings(basis.conditions, `${name}.conditions`);
-  const alternatives = nonEmptyStrings(basis.alternatives, `${name}.alternatives`);
+  const conditions = basis.kind === 'bounded_judgment'
+    ? nonEmptyStrings(basis.conditions, `${name}.conditions`)
+    : strings(basis.conditions, `${name}.conditions`);
+  const alternatives = basis.kind === 'bounded_judgment'
+    ? nonEmptyStrings(basis.alternatives, `${name}.alternatives`)
+    : strings(basis.alternatives, `${name}.alternatives`);
   const supportive = claim.evidence.filter((entry) => entry.role !== 'practitioner_commentary');
   const hasSubstantiveEvidence = claim.evidence.some((entry) =>
     ['specification', 'official_reference', 'architecture_guidance', 'repository_evidence', 'experiment', 'incident'].includes(entry.role)

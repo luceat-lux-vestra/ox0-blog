@@ -130,6 +130,36 @@ test('recommendation cannot claim direct guidance from a public example alone', 
   assert.throws(() => normalizeArticleClaimProof(value), /direct_guidance requires architecture_guidance or specification/);
 });
 
+test('direct guidance does not require bounded-judgment conditions or alternatives', () => {
+  const value = proof({ en: 'sha256:' + '1'.repeat(64), 'ko-KR': 'sha256:' + '2'.repeat(64) });
+  value.claims[0] = {
+    id: 'direct-guidance',
+    kind: 'recommendation',
+    statement: 'Follow the protocol requirement.',
+    evidence: [{
+      role: 'specification',
+      url: 'https://example.com/specification',
+      relevance: 'Directly specifies the required behavior.'
+    }],
+    counterEvidence: [],
+    counterEvidenceStatus: 'REVIEWED_NONE_FOUND',
+    counterEvidenceReview: 'Reviewed the bounded normative source scope; no conflicting specification applies.',
+    recommendationBasis: {
+      kind: 'direct_guidance',
+      conditions: [],
+      alternatives: []
+    },
+    verdict: 'PASS'
+  };
+
+  const normalized = normalizeArticleClaimProof(value);
+  assert.deepEqual(normalized.claims[0].recommendationBasis, {
+    kind: 'direct_guidance',
+    conditions: [],
+    alternatives: []
+  });
+});
+
 test('bounded judgment cannot be justified only by multiple public examples', () => {
   const value = proof({ en: 'sha256:' + '1'.repeat(64), 'ko-KR': 'sha256:' + '2'.repeat(64) });
   value.claims[0] = {
