@@ -1,0 +1,357 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { articleSemanticSourceFingerprintV1 } from '../src/article-readiness-source.mjs';
+import {
+  ARTICLE_READINESS_REVIEW_CONTRACT_VERSION,
+  createArticleReadinessCheckpoint
+} from '../src/article-readiness.mjs';
+import {
+  ARTICLE_BUNDLE_CONTRACT_VERSION,
+  invalidateArticleBundleReadiness,
+  normalizeArticleBundle,
+  recoverArticleBundleReviewState,
+  requestArticleBundleReadinessReview,
+  resolveArticleBundleReadinessInvalidations
+} from '../src/article-bundle.mjs';
+import {
+  TRANSLATION_REVIEW_CONTRACT_VERSION,
+  createTranslationCheckpoint
+} from '../src/translation-checkpoint.mjs';
+
+const KO = `sha256:${'a'.repeat(64)}`;
+const EN = `sha256:${'b'.repeat(64)}`;
+const ID1 = '11111111-1111-4111-8111-111111111111';
+const ID2 = '22222222-2222-4222-8222-222222222222';
+
+function article() {
+  return {
+    articleId: 'article-1',
+    requiredLocales: ['ko-KR', 'en'],
+    variants: [
+      {
+        variantId: 'variant-ko', locale: 'ko-KR', title: '제목', excerpt: '요약',
+        slug: 'article-ko', body: '# 본문\n', sourcePath: '/repo/posts/article/ko-KR.md'
+      },
+      {
+        variantId: 'variant-en', locale: 'en', title: 'Title', excerpt: 'Summary',
+        slug: 'article-en', body: '# Body\n', sourcePath: '/repo/posts/article/en.md'
+      }
+    ]
+  };
+}
+
+function fingerprints() {
+  return { 'ko-KR': KO, en: EN };
+}
+
+function readinessPass(sourceFingerprint, reviewedInvalidationIds = []) {
+  return {
+    result: 'PASS',
+    kind: 'agent',
+    contractVersion: ARTICLE_READINESS_REVIEW_CONTRACT_VERSION,
+    reviewedSourceFingerprint: sourceFingerprint,
+    reviewedInvalidationIds
+  };
+}
+
+function translationCheckpoint() {
+  const current = fingerprints();
+  return createTranslationCheckpoint({
+    requiredLocales: ['ko-KR', 'en'],
+    currentFingerprints: current,
+    review: {
+      result: 'PASS',
+      kind: 'agent',
+      contractVersion: TRANSLATION_REVIEW_CONTRACT_VERSION,
+      reviewedFingerprints: current
+    }
+  });
+}
+
+function translationReviewedDraftBundle(overrides = {}) {
+  return {
+    version: ARTICLE_BUNDLE_CONTRACT_VERSION,
+    article: article(),
+    translationCheckpoint: translationCheckpoint(),
+    readinessEpoch: 0,
+    readinessCheckpoint: null,
+    readinessInvalidations: [],
+    ...overrides
+  };
+}
+
+function reviewedBundle(overrides = {}) {
+  const current = fingerprints();
+  const sourceFingerprint = articleSemanticSourceFingerprintV1({
+    requiredLocales: ['ko-KR', 'en'],
+    translationFingerprints: current
+  });
+  const readinessCheckpoint = createArticleReadinessCheckpoint({
+    sourceFingerprint,
+    reviewedEpoch: 0,
+    review: readinessPass(sourceFingerprint)
+  });
+
+  return {
+    ...translationReviewedDraftBundle(),
+    readinessCheckpoint,
+    ...overrides
+  };
+}
+
+test('fresh session recovers SYNCED + READY from durable facts only', () => {
+  const recovered = recoverArticleBundleReviewState(reviewedBundle(), {
+    currentTranslationFingerprints: fingerprints()
+  });
+  assert.deepEqual(recovered.translation, { state: 'SYNCED' });
+  assert.deepEqual(recovered.readiness, { state: 'READY' });
+  assert.match(recovered.articleSourceFingerprint, /^sha256:[a-f0-9]{64}$/);
+});
+
+test('new translation-reviewed Article remains DRAFT until reviewable-shape event is recorded', () => {
+  const recovered = recoverArticleBundleReviewState(translationReviewedDraftBundle(), {
+    currentTranslationFingerprints: fingerprints()
+  });
+  assert.deepEqual(recovered.translation, { state: 'SYNCED' });
+  assert.deepEqual(recovered.readiness, { state: 'DRAFT' });
+});
+
+test('content reaches reviewable shape records SEMANTIC_REVIEW_REQUESTED and transitions DRAFT -> REVIEW_REQUIRED', () => {
+  const requested = requestArticleBundleReadinessReview(translationReviewedDraftBundle(), {
+    currentTranslationFingerprints: fingerprints(),
+    id: ID1,
+    origin: 'blog-audit',
+    reference: 'article-review:initial'
+  });
+  assert.equal(requested.readinessEpoch, 1);
+  assert.equal(requested.readinessInvalidations.length, 1);
+  assert.equal(requested.readinessInvalidations[0].reason, 'SEMANTIC_REVIEW_REQUESTED');
+  assert.deepEqual(
+    recoverArticleBundleReviewState(requested, {
+      currentTranslationFingerprints: fingerprints()
+    }).readiness,
+    {
+      state: 'REVIEW_REQUIRED',
+      reason: 'NO_READINESS_CHECKPOINT',
+      invalidations: requested.readinessInvalidations,
+      currentEpoch: 1
+    }
+  );
+});
+
+test('initial readiness review resolves review request and creates first READY checkpoint', () => {
+  const requested = requestArticleBundleReadinessReview(translationReviewedDraftBundle(), {
+    currentTranslationFingerprints: fingerprints(),
+    id: ID1
+  });
+  const before = recoverArticleBundleReviewState(requested, {
+    currentTranslationFingerprints: fingerprints()
+  });
+  const ready = resolveArticleBundleReadinessInvalidations(requested, {
+    currentTranslationFingerprints: fingerprints(),
+    review: readinessPass(before.articleSourceFingerprint, [ID1])
+  });
+  assert.equal(ready.readinessCheckpoint.reviewedEpoch, 1);
+  assert.deepEqual(ready.readinessCheckpoint.resolvedInvalidationIds, [ID1]);
+  assert.deepEqual(ready.readinessInvalidations, []);
+  assert.deepEqual(
+    recoverArticleBundleReviewState(ready, {
+      currentTranslationFingerprints: fingerprints()
+    }).readiness,
+    { state: 'READY' }
+  );
+});
+
+test('DRAFT with incomplete locale source stays DRAFT and cannot request readiness review yet', () => {
+  const draft = { ...translationReviewedDraftBundle({ translationCheckpoint: null }) };
+  const current = { 'ko-KR': KO };
+  assert.deepEqual(
+    recoverArticleBundleReviewState(draft, { currentTranslationFingerprints: current }).readiness,
+    { state: 'DRAFT' }
+  );
+  assert.throws(
+    () => requestArticleBundleReadinessReview(draft, {
+      currentTranslationFingerprints: current,
+      id: ID1
+    }),
+    /cannot be requested while required locale source is incomplete/
+  );
+});
+
+test('bundle refuses persisted derived workflow state and publication authorization', () => {
+  for (const field of ['translationState', 'readinessState', 'ghostProjectionState', 'gitState', 'publicationAuthorization']) {
+    assert.throws(
+      () => normalizeArticleBundle({ ...reviewedBundle(), [field]: 'SHOULD_NOT_PERSIST' }),
+      new RegExp(`must not persist derived/ephemeral field: ${field}`)
+    );
+  }
+});
+
+test('ambiguous LocaleVariant.status is rejected instead of becoming publish authorization', () => {
+  const value = reviewedBundle();
+  value.article.variants[0].status = 'published';
+  assert.throws(() => normalizeArticleBundle(value), /LocaleVariant.status is not v1 source state/);
+});
+
+test('losing a required locale after readiness derives INCOMPLETE and REVIEW_REQUIRED', () => {
+  const recovered = recoverArticleBundleReviewState(reviewedBundle(), {
+    currentTranslationFingerprints: { 'ko-KR': KO }
+  });
+  assert.deepEqual(recovered.translation, { state: 'INCOMPLETE', missingLocales: ['en'] });
+  assert.equal(recovered.articleSourceFingerprint, null);
+  assert.deepEqual(recovered.readiness, { state: 'REVIEW_REQUIRED', reason: 'SOURCE_INCOMPLETE' });
+});
+
+test('one locale semantic change makes translation STALE and invalidates readiness independently', () => {
+  const recovered = recoverArticleBundleReviewState(reviewedBundle(), {
+    currentTranslationFingerprints: { 'ko-KR': `sha256:${'d'.repeat(64)}`, en: EN }
+  });
+  assert.deepEqual(recovered.translation, {
+    state: 'STALE',
+    changedLocales: ['ko-KR'],
+    staleLocales: ['en']
+  });
+  assert.deepEqual(recovered.readiness, { state: 'REVIEW_REQUIRED', reason: 'SOURCE_CHANGED' });
+});
+
+test('multiple RTA/user/audit signals increment readiness epoch and survive fresh-session recovery', () => {
+  const first = invalidateArticleBundleReadiness(reviewedBundle(), {
+    id: ID1,
+    reason: 'EXTERNAL_EVIDENCE_CHANGED',
+    origin: 'rta',
+    reference: 'rta:luceat-lux-vestra/research-to-action#22'
+  });
+  const second = invalidateArticleBundleReadiness(first, {
+    id: ID2,
+    reason: 'SEMANTIC_REVIEW_REQUESTED',
+    origin: 'user'
+  });
+
+  assert.equal(second.readinessEpoch, 2);
+  assert.deepEqual(second.readinessInvalidations.map((entry) => entry.epoch), [1, 2]);
+  const recovered = recoverArticleBundleReviewState(second, {
+    currentTranslationFingerprints: fingerprints()
+  });
+  assert.deepEqual(recovered.translation, { state: 'SYNCED' });
+  assert.equal(recovered.readiness.state, 'REVIEW_REQUIRED');
+  assert.equal(recovered.readiness.reason, 'DURABLE_INVALIDATION');
+  assert.deepEqual(recovered.readiness.invalidations.map((entry) => entry.id), [ID1, ID2]);
+});
+
+test('manually clearing invalidation records cannot restore READY while epoch is unreviewed', () => {
+  const invalidated = invalidateArticleBundleReadiness(reviewedBundle(), {
+    id: ID1,
+    reason: 'PROVENANCE_WEAKENED',
+    origin: 'blog-audit'
+  });
+  const manuallyCleared = normalizeArticleBundle({
+    ...invalidated,
+    readinessInvalidations: []
+  });
+  assert.deepEqual(
+    recoverArticleBundleReviewState(manuallyCleared, {
+      currentTranslationFingerprints: fingerprints()
+    }).readiness,
+    {
+      state: 'REVIEW_REQUIRED',
+      reason: 'UNREVIEWED_INVALIDATION_EPOCH',
+      reviewedEpoch: 0,
+      currentEpoch: 1
+    }
+  );
+});
+
+test('atomic invalidation resolution reviews exact source and all event ids', () => {
+  let bundle = invalidateArticleBundleReadiness(reviewedBundle(), {
+    id: ID1,
+    reason: 'EXTERNAL_EVIDENCE_CHANGED',
+    origin: 'rta'
+  });
+  bundle = invalidateArticleBundleReadiness(bundle, {
+    id: ID2,
+    reason: 'PROVENANCE_WEAKENED',
+    origin: 'blog-audit'
+  });
+  const before = recoverArticleBundleReviewState(bundle, {
+    currentTranslationFingerprints: fingerprints()
+  });
+  const resolved = resolveArticleBundleReadinessInvalidations(bundle, {
+    currentTranslationFingerprints: fingerprints(),
+    review: readinessPass(before.articleSourceFingerprint, [ID1, ID2])
+  });
+
+  assert.equal(resolved.readinessEpoch, 2);
+  assert.deepEqual(resolved.readinessInvalidations, []);
+  assert.equal(resolved.readinessCheckpoint.reviewedEpoch, 2);
+  assert.deepEqual(resolved.readinessCheckpoint.resolvedInvalidationIds, [ID1, ID2]);
+  assert.deepEqual(
+    recoverArticleBundleReviewState(resolved, {
+      currentTranslationFingerprints: fingerprints()
+    }).readiness,
+    { state: 'READY' }
+  );
+});
+
+test('bundle review cannot resolve active invalidations it did not explicitly cover', () => {
+  const bundle = invalidateArticleBundleReadiness(reviewedBundle(), {
+    id: ID1,
+    reason: 'EXTERNAL_EVIDENCE_CHANGED',
+    origin: 'rta'
+  });
+  const before = recoverArticleBundleReviewState(bundle, {
+    currentTranslationFingerprints: fingerprints()
+  });
+  assert.throws(
+    () => resolveArticleBundleReadinessInvalidations(bundle, {
+      currentTranslationFingerprints: fingerprints(),
+      review: readinessPass(before.articleSourceFingerprint)
+    }),
+    /does not cover the exact resolved invalidation id set/
+  );
+});
+
+test('invalidation resolution refuses non-SYNCED translation state', () => {
+  const bundle = invalidateArticleBundleReadiness(reviewedBundle(), {
+    id: ID1,
+    reason: 'EXTERNAL_EVIDENCE_CHANGED',
+    origin: 'rta'
+  });
+  const changed = { 'ko-KR': `sha256:${'f'.repeat(64)}`, en: EN };
+  const changedSource = articleSemanticSourceFingerprintV1({
+    requiredLocales: ['ko-KR', 'en'],
+    translationFingerprints: changed
+  });
+  assert.throws(
+    () => resolveArticleBundleReadinessInvalidations(bundle, {
+      currentTranslationFingerprints: changed,
+      review: readinessPass(changedSource, [ID1])
+    }),
+    /cannot be accepted while translation state is not SYNCED/
+  );
+});
+
+test('bundle fails closed on invalid readiness epoch relationships', () => {
+  const invalidation = {
+    version: 1,
+    id: ID1,
+    epoch: 2,
+    reason: 'EXTERNAL_EVIDENCE_CHANGED',
+    origin: 'rta',
+    reference: null
+  };
+  assert.throws(
+    () => normalizeArticleBundle({
+      ...reviewedBundle(),
+      readinessEpoch: 1,
+      readinessInvalidations: [invalidation]
+    }),
+    /cannot exceed bundle readinessEpoch/
+  );
+});
+
+test('unsupported future bundle version fails closed', () => {
+  assert.throws(
+    () => normalizeArticleBundle({ ...reviewedBundle(), version: 999 }),
+    /unsupported Article bundle contract version/
+  );
+});

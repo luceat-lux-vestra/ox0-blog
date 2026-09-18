@@ -1,0 +1,21 @@
+{
+  "name": "ox0-blog",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "test": "node --test",
+    "validate": "node scripts/validate-repository.mjs",
+    "validate:articles": "node scripts/validate-articles.mjs",
+    "dry-run": "node scripts/plan-article.mjs",
+    "dry-run:article": "node scripts/plan-article.mjs",
+    "sync:article": "node scripts/sync-article.mjs",
+    "verify:article-live-draft": "node scripts/verify-article-live-draft.mjs"
+  },
+  "dependencies": {
+    "marked": "18.0.11"
+  }
+}

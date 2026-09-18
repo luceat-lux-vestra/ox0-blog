@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "articleId": "technical-post",
+  "requiredLocales": ["ko-KR", "en"],
+  "variants": [
+    {
+      "variantId": "technical-post-ko",
+      "locale": "ko-KR",
+      "source": "ko-KR.md",
+      "title": "기술 글 제목",
+      "excerpt": "Ghost 카드와 메타데이터에 사용할 짧은 요약입니다.",
+      "slug": "technical-post-ko",
+      "publication": {
+        "tags": ["Engineering"],
+        "featureImage": null,
+        "featureImageAlt": null,
+        "featured": false,
+        "visibility": "public",
+        "canonicalUrl": null
+      }
+    },
+    {
+      "variantId": "technical-post-en",
+      "locale": "en",
+      "source": "en.md",
+      "title": "Technical post title",
+      "excerpt": "Short canonical summary for Ghost cards and metadata.",
+      "slug": "technical-post-en",
+      "publication": {
+        "tags": ["Engineering"],
+        "featureImage": null,
+        "featureImageAlt": null,
+        "featured": false,
+        "visibility": "public",
+        "canonicalUrl": null
+      }
+    }
+  ],
+  "translationCheckpoint": null,
+  "readiness": {
+    "epoch": 0,
+    "checkpoint": null,
+    "invalidations": []
+  }
+}

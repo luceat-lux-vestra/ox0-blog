@@ -177,9 +177,9 @@ For multiple locale projections, success is established per variant and then agg
 
 Authorization is not a substitute for validation. A stale plan, changed canonical source, changed resource target/host policy evidence, changed Ghost state, or unresolved reconciliation condition requires re-planning/re-validation before the write.
 
-## Current implementation vs target architecture
+## Active implementation
 
-Current authoring work may still contain transitional one-file `:::lang` and body-image behavior. Issues #3, #4, #5, #6, #7, and #8 define the target Article/LocaleVariant, compiler, integration, state-machine, and bootstrap architecture. Do not extend transitional mechanisms into new long-term contracts without reconciling those issues first.
+The active implementation is the Article + LocaleVariant architecture. The earlier one-file frontmatter/`:::lang`/path-derived-identity/data-URI publication path is retired. Issues #3, #4, #5, #6, #7, and #8 remain the architecture/history references for the Article model, compiler, integration, state machines, and bootstrap contract. Do not reintroduce retired compatibility mechanisms without an explicit new design decision.
 
 ## Fail-closed bootstrap
 

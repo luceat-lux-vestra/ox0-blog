@@ -1,0 +1,172 @@
+import { createHash } from 'node:crypto';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { projectionSourceFingerprintV1 } from '../src/projection-fingerprint.mjs';
+import { projectionIdentityTags } from '../src/projection-identity.mjs';
+import { planProjectionSynchronization } from '../src/publisher.mjs';
+
+const IDENTITY = projectionIdentityTags({
+  articleId: 'article-1',
+  variantId: 'variant-ko-1',
+  locale: 'ko-KR'
+});
+const ANY_IMAGE_FP = `sha256:${'b'.repeat(64)}`;
+
+function fingerprint(bytes) {
+  return `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+}
+
+const compiledDocument = {
+  htmlFragment: '<h1>본문</h1>',
+  locale: 'ko-KR',
+  referencedAssets: [],
+  diagnostics: []
+};
+
+function projection(overrides = {}) {
+  const value = {
+    identityTags: IDENTITY,
+    locale: 'ko-KR',
+    title: '제목',
+    slug: 'article-ko',
+    excerpt: '요약',
+    tags: ['Rust'],
+    featureImage: null,
+    featureImageAlt: null,
+    featured: false,
+    visibility: 'public',
+    canonicalUrl: null,
+    materialAssets: [],
+    ...overrides
+  };
+  if (!Object.hasOwn(overrides, 'sourceFingerprint')) {
+    value.sourceFingerprint = projectionSourceFingerprintV1(value, compiledDocument, {
+      materialAssets: value.materialAssets,
+      featureImageFingerprint: value.featureImageFingerprint ?? null
+    });
+  }
+  return value;
+}
+
+class ProbeClient {
+  constructor() { this.calls = []; }
+  async getPostsBySourceTag() { this.calls.push('identity'); return []; }
+  async getPostBySlug() { this.calls.push('slug'); return null; }
+  async getPageBySlug() { this.calls.push('page'); return null; }
+}
+
+async function repoFixture() {
+  const repoRoot = await mkdtemp(path.join(os.tmpdir(), 'ox0-projection-'));
+  await mkdir(path.join(repoRoot, 'assets'));
+  return repoRoot;
+}
+
+test('malformed slug fails before Ghost access', async () => {
+  const client = new ProbeClient();
+  await assert.rejects(
+    planProjectionSynchronization({
+      projection: projection({ slug: 'Bad Slug' }),
+      compiledDocument,
+      action: 'draft',
+      client,
+      repoRoot: '/repo'
+    }),
+    /slug must be lowercase ASCII kebab-case/
+  );
+  assert.deepEqual(client.calls, []);
+});
+
+test('reserved public tag casing fails before Ghost access', async () => {
+  const client = new ProbeClient();
+  await assert.rejects(
+    planProjectionSynchronization({
+      projection: projection({ tags: ['#OX0-source-user'] }),
+      compiledDocument,
+      action: 'draft',
+      client,
+      repoRoot: '/repo'
+    }),
+    /reserved for publisher state/
+  );
+  assert.deepEqual(client.calls, []);
+});
+
+test('missing local feature image fails before Ghost access', async () => {
+  const repoRoot = await repoFixture();
+  const client = new ProbeClient();
+  await assert.rejects(
+    planProjectionSynchronization({
+      projection: projection({
+        featureImage: path.join(repoRoot, 'assets', 'missing.png'),
+        featureImageFingerprint: ANY_IMAGE_FP
+      }),
+      compiledDocument,
+      action: 'draft',
+      client,
+      repoRoot
+    }),
+    /does not exist/
+  );
+  assert.deepEqual(client.calls, []);
+});
+
+test('local feature image outside assets fails before Ghost access', async () => {
+  const repoRoot = await repoFixture();
+  const outside = path.join(repoRoot, 'outside.png');
+  await writeFile(outside, 'x');
+  const client = new ProbeClient();
+  await assert.rejects(
+    planProjectionSynchronization({
+      projection: projection({ featureImage: outside, featureImageFingerprint: ANY_IMAGE_FP }),
+      compiledDocument,
+      action: 'draft',
+      client,
+      repoRoot
+    }),
+    /must resolve inside/
+  );
+  assert.deepEqual(client.calls, []);
+});
+
+test('local feature image digest mismatch fails before Ghost access', async () => {
+  const repoRoot = await repoFixture();
+  const cover = path.join(repoRoot, 'assets', 'cover.png');
+  await writeFile(cover, 'png');
+  const client = new ProbeClient();
+  await assert.rejects(
+    planProjectionSynchronization({
+      projection: projection({ featureImage: cover, featureImageFingerprint: ANY_IMAGE_FP }),
+      compiledDocument,
+      action: 'draft',
+      client,
+      repoRoot
+    }),
+    /changed since projection compilation/
+  );
+  assert.deepEqual(client.calls, []);
+});
+
+test('valid confined local feature image permits GET-only dry-run planning with exact digest', async () => {
+  const repoRoot = await repoFixture();
+  const cover = path.join(repoRoot, 'assets', 'cover.png');
+  const bytes = Buffer.from('png');
+  await writeFile(cover, bytes);
+  const imageFingerprint = fingerprint(bytes);
+  const client = new ProbeClient();
+  const plan = await planProjectionSynchronization({
+    projection: projection({ featureImage: cover, featureImageFingerprint: imageFingerprint }),
+    compiledDocument,
+    action: 'draft',
+    client,
+    repoRoot
+  });
+  assert.deepEqual(client.calls, ['identity', 'slug', 'page']);
+  assert.deepEqual(plan.featureImage, {
+    action: 'upload',
+    ref: 'assets/cover.png',
+    fingerprint: imageFingerprint
+  });
+});
