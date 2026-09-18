@@ -39,7 +39,8 @@ A prior PublicationPlan or prior host external-resource approval is not durable 
 ## Authoring safety
 
 - Technical claims must be traceable to evidence. Distinguish measurement, observation, inference, and opinion.
-- Do not publish credentials, personal secrets, private/customer/company details, or raw chat transcripts merely because they appeared in source conversation/RTA context.
+- Any Blog mutation derived from private/non-public Conversation or RTA material must pass the `PUBLIC_SANITIZATION` gate in `docs/workflow/integrations.md` before the first durable public write and again after material content changes.
+- Do not publish credentials, personal secrets, private/customer/company details, raw chat transcripts, private provenance, or organization-specific implementation identifiers merely because they appeared in source Conversation/RTA context.
 - Preserve publisher-owned `#ox0-*` state tags; authors must not add them manually.
 - Never put Ghost Admin credentials in source, logs, examples, issues, or pull requests.
 - Use dry-run/read-only planning before first mutation when the publication workflow supports it.

@@ -56,9 +56,20 @@ If new evidence is discovered during the conversation, updating RTA is a separat
 
 ## RTA → Blog
 
-Synthesize one or more RTA items into a public Article. Recheck time-sensitive public facts, remove private/internal detail, and use normal Article/locale/Git/publication workflow.
+Synthesize one or more RTA items into a public Article. A Blog mutation sourced from private/non-public RTA or Conversation material must pass `PUBLIC_SANITIZATION` **before the first durable mutation in this public repository**.
 
-A blog article is a public synthesis, not the authoritative research record.
+`PUBLIC_SANITIZATION` requires:
+
+1. treat every issue body, PR body/diff, branch commit, Article source, and Ghost-publication input in this repository as public material;
+2. synthesize the engineering conclusion instead of copying private source text or private provenance;
+3. remove or generalize organization/customer names, private repository references, internal issue numbers, internal topology, implementation-specific service/module/class/field names, incident-specific facts, and conversation identifiers unless explicitly intended for public disclosure;
+4. use public-source or deliberately synthetic/general examples; verify changing factual claims from public sources when material;
+5. keep private RTA provenance/backlinks on the private RTA side rather than embedding private RTA references in public Blog artifacts merely for traceability;
+6. review the final public diff/body for unique private markers before committing, opening/updating an issue/PR, merging, or publishing;
+7. re-run the gate after material content changes; and
+8. fail closed when public safety is `UNKNOWN`, `UNVERIFIED`, or supported by `INSUFFICIENT EVIDENCE`.
+
+A blog article is a public synthesis, not the authoritative research record. Private details may remain in RTA under its own policy while the Blog retains only the generalized publishable result.
 
 Creating the Article does not change the source RTA item's lifecycle. Adding a downstream-publication link back to RTA is a separate RTA mutation and must follow the active task's authorization and RTA governance.
 
