@@ -141,6 +141,7 @@ export async function buildArticlePreviewBundle({
   return {
     version: ARTICLE_PREVIEW_BUNDLE_VERSION,
     sourceRevision: sourceRevision == null ? null : requireString(sourceRevision, 'sourceRevision'),
+    resourceOrigin: resourceBase?.origin ?? null,
     articles
   };
 }
@@ -211,6 +212,9 @@ export function renderArticlePreviewHtml(bundle) {
   const revision = bundle.sourceRevision
     ? `<p>Exact source: <code>${escapeHtml(bundle.sourceRevision)}</code></p>`
     : '';
+  const imageSource = bundle.resourceOrigin
+    ? ` ${escapeHtml(bundle.resourceOrigin)}`
+    : " 'none'";
 
   return `<!doctype html>
 <html lang="en">
@@ -218,7 +222,7 @@ export function renderArticlePreviewHtml(bundle) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https:; style-src 'unsafe-inline'; script-src 'none'; object-src 'none'; frame-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src${imageSource}; style-src 'unsafe-inline'; script-src 'none'; object-src 'none'; frame-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'">
 <title>ox0-blog PR Article Preview</title>
 <style>
 :root { color-scheme: light dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.65; }
