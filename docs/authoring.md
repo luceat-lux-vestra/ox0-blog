@@ -40,6 +40,23 @@ DocumentCompiler.compile(LocaleVariant, ProjectContext)
 
 The current backend is `MarkedCompiler`. Raw HTML and unsafe/ambiguous active URLs are rejected. Compiler output is derived state and is not stored as canonical Article source.
 
+## PR review preview
+
+A pull-request preview is a derived review projection, not canonical source and not Ghost state.
+
+```text
+Article source
+→ source loader/compiler boundary
+→ ArticlePreviewBundle
+→ standalone HTML review artifact
+```
+
+The current source is Markdown and the current compiler is `MarkedCompiler`, but the preview workflow itself does not parse Markdown. This keeps the review operation reusable if a later versioned source contract adds Arkst/Quarkdown/Typst adapters.
+
+Repository-local body images in CI preview are bound to immutable raw URLs for the exact PR head repository and SHA after the normal repository asset-confinement checks.
+
+See `docs/article-preview.md`.
+
 ## Body assets
 
 Repository-owned body images are referenced from locale Markdown and must resolve inside repository `assets/`. Source evaluation fingerprints their exact bytes.

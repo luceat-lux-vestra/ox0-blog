@@ -75,6 +75,26 @@ npm run sync:article -- posts/example/article.json publish
 
 Planning may read Ghost ownership/collision/projection state but never writes Ghost or publication storage. Low-level production publish requires an externally supplied exact-source authorization envelope; repository mechanics never manufacture publication intent.
 
+## Pull-request Article preview
+
+Non-draft pull requests produce an exact-HEAD browser-review artifact through the `PR Article Preview` job in `.github/workflows/validate.yml` after normal validation succeeds.
+
+The workflow compiles the affected Article set through the repository compiler boundary and uploads one unarchived `article-preview.html` file. The Actions job summary links to that artifact; the file can be opened from the artifact UI for full-document review without mutating Ghost.
+
+Local/manual generation uses the same operation:
+
+```bash
+npm run preview:articles -- \
+  --output /tmp/article-preview.html \
+  --resource-base-url https://raw.githubusercontent.com/OWNER/REPO/SHA/ \
+  --source-revision SHA \
+  posts/example/article.json
+```
+
+The preview operation is source/compiler-neutral above the `DocumentCompiler` boundary. Manifest v1 remains Markdown-only; future Quarkdown/Typst source support requires an explicit versioned authoring contract but should not require redesigning the PR-preview workflow.
+
+See `docs/article-preview.md`.
+
 ## Automatic post-merge draft projection
 
 `.github/workflows/article-auto-draft.yml` runs on `main` pushes that touch `posts/**`. It identifies only Article manifests newly added by that exact push, reruns tests and repository validation, requires each selected Article to recover as `translation=SYNCED` and `readiness=READY`, then executes `sync:article ... draft` under the shared Ghost mutation lock.

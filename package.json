@@ -13,7 +13,8 @@
     "dry-run": "node scripts/plan-article.mjs",
     "dry-run:article": "node scripts/plan-article.mjs",
     "sync:article": "node scripts/sync-article.mjs",
-    "verify:article-live-draft": "node scripts/verify-article-live-draft.mjs"
+    "verify:article-live-draft": "node scripts/verify-article-live-draft.mjs",
+    "preview:articles": "node scripts/build-article-preview.mjs"
   },
   "dependencies": {
     "marked": "18.0.11"
