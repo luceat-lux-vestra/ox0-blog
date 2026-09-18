@@ -18,6 +18,7 @@ import {
 } from '../src/article-review-operations.mjs';
 import { ARTICLE_READINESS_REVIEW_CONTRACT_VERSION } from '../src/article-readiness.mjs';
 import { MarkedCompiler } from '../src/compiler/marked-compiler.mjs';
+import { writePassingClaimProof } from './helpers/claim-proof-fixture.mjs';
 import { TRANSLATION_REVIEW_CONTRACT_VERSION } from '../src/translation-checkpoint.mjs';
 
 class ReadOnlyGhostClient {
@@ -96,6 +97,7 @@ async function makeReady(value) {
   await writeFile(value.manifestPath, requested.manifestText, 'utf8');
 
   const before = await evaluation(value);
+  const claimProof = await writePassingClaimProof(value);
   const ready = await acceptArticleSemanticReview({
     ...value,
     review: {
@@ -103,6 +105,7 @@ async function makeReady(value) {
       kind: 'agent',
       contractVersion: ARTICLE_READINESS_REVIEW_CONTRACT_VERSION,
       reviewedSourceFingerprint: before.articleSourceFingerprint,
+      reviewedClaimProofFingerprint: claimProof.fingerprint,
       reviewedInvalidationIds: [invalidationId]
     }
   });

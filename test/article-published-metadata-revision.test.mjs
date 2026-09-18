@@ -17,6 +17,7 @@ import { evaluateArticleBundle } from '../src/article-evaluation.mjs';
 import { loadArticleManifest } from '../src/article-manifest.mjs';
 import { ARTICLE_READINESS_REVIEW_CONTRACT_VERSION } from '../src/article-readiness.mjs';
 import { MarkedCompiler } from '../src/compiler/marked-compiler.mjs';
+import { writePassingClaimProof } from './helpers/claim-proof-fixture.mjs';
 import { TRANSLATION_REVIEW_CONTRACT_VERSION } from '../src/translation-checkpoint.mjs';
 import {
   PRODUCTION_PUBLISH_MODE,
@@ -160,6 +161,7 @@ async function makeReady(value) {
   await writeFile(value.manifestPath, requested.manifestText, 'utf8');
 
   const beforeReadiness = await evaluation(value);
+  const claimProof = await writePassingClaimProof(value);
   const accepted = await acceptArticleSemanticReview({
     ...value,
     review: {
@@ -167,6 +169,7 @@ async function makeReady(value) {
       kind: 'agent',
       contractVersion: ARTICLE_READINESS_REVIEW_CONTRACT_VERSION,
       reviewedSourceFingerprint: beforeReadiness.articleSourceFingerprint,
+      reviewedClaimProofFingerprint: claimProof.fingerprint,
       reviewedInvalidationIds: [invalidationId]
     }
   });

@@ -12,6 +12,7 @@ import {
 import { evaluateArticleBundle } from '../src/article-evaluation.mjs';
 import { loadArticleManifest } from '../src/article-manifest.mjs';
 import { MarkedCompiler } from '../src/compiler/marked-compiler.mjs';
+import { writePassingClaimProof } from './helpers/claim-proof-fixture.mjs';
 import { ARTICLE_READINESS_REVIEW_CONTRACT_VERSION } from '../src/article-readiness.mjs';
 import { TRANSLATION_REVIEW_CONTRACT_VERSION } from '../src/translation-checkpoint.mjs';
 
@@ -69,12 +70,13 @@ function translationPass(fingerprints) {
   };
 }
 
-function readinessPass(sourceFingerprint, reviewedInvalidationIds) {
+function readinessPass(sourceFingerprint, reviewedInvalidationIds, claimProofFingerprint) {
   return {
     result: 'PASS',
     kind: 'agent',
     contractVersion: ARTICLE_READINESS_REVIEW_CONTRACT_VERSION,
     reviewedSourceFingerprint: sourceFingerprint,
+    reviewedClaimProofFingerprint: claimProofFingerprint,
     reviewedInvalidationIds
   };
 }
@@ -90,9 +92,10 @@ async function makeReady(value) {
   const invalidationId = requested.bundle.readinessInvalidations[0].id;
   await writeFile(value.manifestPath, requested.manifestText, 'utf8');
   const before = await currentEvaluation(value);
+  const claimProof = await writePassingClaimProof(value);
   const accepted = await acceptArticleSemanticReview({
     ...value,
-    review: readinessPass(before.articleSourceFingerprint, [invalidationId])
+    review: readinessPass(before.articleSourceFingerprint, [invalidationId], claimProof.fingerprint)
   });
   await writeFile(value.manifestPath, accepted.manifestText, 'utf8');
   return accepted;
@@ -149,9 +152,10 @@ test('readiness request and acceptance remain separate durable operations', asyn
   await writeFile(value.manifestPath, requested.manifestText, 'utf8');
 
   const before = await currentEvaluation(value);
+  const claimProof = await writePassingClaimProof(value);
   const accepted = await acceptArticleSemanticReview({
     ...value,
-    review: readinessPass(before.articleSourceFingerprint, [invalidationId])
+    review: readinessPass(before.articleSourceFingerprint, [invalidationId], claimProof.fingerprint)
   });
   assert.deepEqual(accepted.translation, { state: 'SYNCED' });
   assert.deepEqual(accepted.readiness, { state: 'READY' });
@@ -183,10 +187,11 @@ test('durable RTA/external signal invalidates READY without rewriting Article co
 test('Article semantic review cannot be accepted before translation is SYNCED', async () => {
   const value = await fixture();
   const current = await currentEvaluation(value);
+  const claimProof = await writePassingClaimProof(value);
   await assert.rejects(
     acceptArticleSemanticReview({
       ...value,
-      review: readinessPass(current.articleSourceFingerprint, [])
+      review: readinessPass(current.articleSourceFingerprint, [], claimProof.fingerprint)
     }),
     /translation state is not SYNCED|can be accepted only from REVIEW_REQUIRED/
   );
