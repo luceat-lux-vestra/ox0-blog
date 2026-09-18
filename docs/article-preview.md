@@ -67,14 +67,14 @@ This keeps the HTML artifact single-file while binding repository-owned images t
 
 ## GitHub Actions behavior
 
-`.github/workflows/article-preview.yml` runs for Article/asset/compiler/preview-path changes on pull requests.
+The `PR Article Preview` job in `.github/workflows/validate.yml` runs after exact-HEAD validation succeeds on non-draft pull requests.
 
 It:
 
 1. checks out the exact PR HEAD SHA;
 2. verifies the checkout;
 3. installs locked Node.js dependencies without lifecycle scripts;
-4. validates repository source;
+4. relies on the preceding exact-HEAD validation job as its source-validation gate;
 5. selects changed Articles, or all Articles when shared compiler/assets/preview infrastructure changed;
 6. builds one exact-HEAD HTML preview;
 7. uploads the HTML as an unarchived GitHub Actions artifact;
