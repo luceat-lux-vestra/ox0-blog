@@ -1,0 +1,638 @@
+{
+  "version": 1,
+  "coveredTranslationFingerprints": {
+    "ko-KR": "sha256:39da9a368cc6732770cd52c4db959a75ef93a15bee85aebda769f326da9ff9d4",
+    "en": "sha256:1c3aa6cdc78966bfe57175cdcfba62156869915e727e38727b7e591385ee297d"
+  },
+  "claims": [
+    {
+      "id": "request-scope-lifecycle",
+      "kind": "fact",
+      "statement": "Spring request scope creates a distinct bean instance for each HTTP request and discards it when that request completes.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-framework/reference/core/beans/factory-scopes.html",
+          "relevance": "Spring Framework documents request scope as one bean instance per HTTP request and disposal when request processing completes."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/web/context/annotation/RequestScope.html",
+          "relevance": "The @RequestScope API binds component lifecycle to the current web request."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Checked current Spring Framework reference and @RequestScope API; no contradictory lifecycle semantics were found.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "request-scope-proxy",
+      "kind": "fact",
+      "statement": "@RequestScope is a shortcut for request scope whose default proxy mode is class-based TARGET_CLASS, enabling scoped proxy resolution from longer-lived beans.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/web/context/annotation/RequestScope.html",
+          "relevance": "The current API explicitly states the default proxyMode is TARGET_CLASS."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-framework/reference/core/beans/factory-scopes.html",
+          "relevance": "Spring's scoped-proxy documentation describes injecting shorter-lived scoped beans into longer-lived beans."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Checked the current API and reference; the claim is limited to Spring's default @RequestScope proxy behavior.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "dedicated-context-responsibilities",
+      "kind": "classification",
+      "statement": "Log-only diagnostic key-value context, distributed trace propagation, and current Spring Security authentication state each have dedicated abstractions distinct from a generic RequestScopeBean.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://www.slf4j.org/manual.html",
+          "relevance": "SLF4J documents MDC as a map of application-provided key-value pairs for logging."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://opentelemetry.io/docs/concepts/context-propagation/",
+          "relevance": "OpenTelemetry documents context propagation across services and processes for correlated telemetry."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-security/reference/servlet/authentication/architecture.html",
+          "relevance": "Spring Security documents SecurityContext as containing the current Authentication, principal, and authorities."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed the dedicated mechanisms separately; the claim does not say every correlation value must use exactly one implementation.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "application-command-terminology",
+      "kind": "classification",
+      "statement": "The article's 'Application Command' means an explicit use-case input model; this is distinct from claiming that DDD requires a Command class, from adopting CQRS, or from the GoF Command pattern.",
+      "evidence": [
+        {
+          "role": "architecture_guidance",
+          "url": "https://learn.microsoft.com/en-us/dotnet/architecture/microservices/microservice-ddd-cqrs-patterns/ddd-oriented-microservice",
+          "relevance": "Microsoft's DDD guidance describes the application layer as coordinating tasks and delegating domain rules, without imposing a universal Command-class requirement."
+        },
+        {
+          "role": "architecture_guidance",
+          "url": "https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs",
+          "relevance": "Microsoft's CQRS guidance defines commands as write-side business tasks and separates them from queries."
+        },
+        {
+          "role": "practitioner_commentary",
+          "url": "https://sourcemaking.com/design_patterns/command",
+          "relevance": "The Command pattern reference describes encapsulating an operation/request for execution decoupling, which is a different concern from a plain use-case input record."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed DDD, CQRS, and Command-pattern meanings; the article explicitly scopes its local terminology rather than asserting a universal definition.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "cqrs-command-intent",
+      "kind": "fact",
+      "statement": "Microsoft's CQRS guidance recommends representing commands as specific business tasks or user intent rather than low-level field updates.",
+      "evidence": [
+        {
+          "role": "architecture_guidance",
+          "url": "https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs",
+          "relevance": "The CQRS pattern page explicitly recommends task-oriented command names such as 'Book hotel room' instead of low-level state updates."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Checked the current Microsoft Learn CQRS page; no conflicting guidance was found for this bounded statement.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "parameter-object-refactoring",
+      "kind": "fact",
+      "statement": "Introduce Parameter Object groups parameters that repeatedly travel together into one object as a structural refactoring.",
+      "evidence": [
+        {
+          "role": "architecture_guidance",
+          "url": "https://refactoring.com/catalog/introduceParameterObject.html",
+          "relevance": "Martin Fowler's refactoring catalog demonstrates replacing repeated parameter groups with a parameter object."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed the cited refactoring catalog; the article does not equate Parameter Object with Application Command.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "payload-envelope-separation",
+      "kind": "example_interpretation",
+      "statement": "Envelope Wrapper and Correlation Identifier provide a messaging analogy for separating application payload from transport/correlation metadata; the article uses it as an analogy, not as a claim that HTTP requests are EIP envelopes.",
+      "evidence": [
+        {
+          "role": "architecture_guidance",
+          "url": "https://www.enterpriseintegrationpatterns.com/patterns/messaging/EnvelopeWrapper.html",
+          "relevance": "Enterprise Integration Patterns describes wrapping application data with messaging infrastructure information."
+        },
+        {
+          "role": "architecture_guidance",
+          "url": "https://www.enterpriseintegrationpatterns.com/patterns/messaging/CorrelationIdentifier.html",
+          "relevance": "Enterprise Integration Patterns describes correlation identifiers for associating related messages."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed the analogy boundary and retained the article's explicit statement that an HTTP request object is not literally the same as a messaging envelope.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "keep-dto-boundary",
+      "kind": "recommendation",
+      "statement": "For client-facing request DTOs, avoid mixing server-generated infrastructure or execution metadata into the same object unless that metadata is intentionally part of the external contract; keep external input and internal execution context separate.",
+      "evidence": [
+        {
+          "role": "architecture_guidance",
+          "url": "https://www.enterpriseintegrationpatterns.com/patterns/messaging/EnvelopeWrapper.html",
+          "relevance": "Envelope Wrapper separates application data from messaging infrastructure information, providing a useful separation analogy."
+        },
+        {
+          "role": "architecture_guidance",
+          "url": "https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs",
+          "relevance": "CQRS guidance models commands around explicit business tasks and user intent rather than transport metadata."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-security/reference/servlet/authentication/architecture.html",
+          "relevance": "Spring Security provides a dedicated SecurityContext for current authentication state instead of requiring it in ordinary request DTOs."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Bounded review across messaging separation, application-command guidance, and a dedicated security context found no reason to make internally generated metadata part of a client DTO by default; the article frames this as engineering judgment, not a universal DTO law.",
+      "recommendationBasis": {
+        "kind": "bounded_judgment",
+        "conditions": [
+          "The DTO represents a client/external request contract or explicit use-case input.",
+          "The added value is created by server infrastructure and is not intended as client-supplied contract data."
+        ],
+        "alternatives": [
+          "Keep logging, tracing, and authentication metadata in their dedicated mechanisms.",
+          "Map the transport DTO to an explicit Application Command/use-case input.",
+          "Use a separate explicit internal context object when several layers genuinely understand the same processing context."
+        ]
+      },
+      "verdict": "PASS"
+    },
+    {
+      "id": "springdoc-customizer-example",
+      "kind": "example_interpretation",
+      "statement": "springdoc-openapi issue #2571 contains a public MVC example of a request-scoped ServerBaseUrlCustomizer that reads X-Forwarded-Prefix for request-dependent server URL customization.",
+      "evidence": [
+        {
+          "role": "public_example",
+          "url": "https://github.com/springdoc/springdoc-openapi/issues/2571",
+          "relevance": "The public issue contains an @RequestScope @Bean ServerBaseUrlCustomizer taking HttpServletRequest and reading X-Forwarded-Prefix."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-framework/reference/core/beans/factory-scopes.html",
+          "relevance": "Spring's request-scope semantics establish why an instance can be isolated to one HTTP request."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "The issue is treated only as evidence that this implementation exists; it is not upgraded into authoritative springdoc or Spring architectural guidance.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "request-dependent-collaborator",
+      "kind": "recommendation",
+      "statement": "A framework collaborator whose own state or behavior is genuinely request-dependent can reasonably use request scope when no more specific abstraction owns the responsibility.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-framework/reference/core/beans/factory-scopes.html",
+          "relevance": "Spring request scope provides exactly one bean instance per HTTP request."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/web/context/annotation/RequestScope.html",
+          "relevance": "@RequestScope binds component lifecycle to the current web request."
+        },
+        {
+          "role": "public_example",
+          "url": "https://github.com/springdoc/springdoc-openapi/issues/2571",
+          "relevance": "The springdoc issue demonstrates one concrete request-dependent framework customizer."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed both the public example and Spring lifecycle semantics; this remains bounded engineering judgment, not a best-practice claim derived from the issue.",
+      "recommendationBasis": {
+        "kind": "bounded_judgment",
+        "conditions": [
+          "The collaborator itself—not merely one input value—has request-specific state or behavior.",
+          "The state must not be shared across requests.",
+          "No dedicated framework/context abstraction already owns the concern."
+        ],
+        "alternatives": [
+          "Keep the collaborator singleton and inject a request-aware proxy/context abstraction.",
+          "Pass explicit input into the collaborator.",
+          "Use a framework-provided request context when available."
+        ]
+      },
+      "verdict": "PASS"
+    },
+    {
+      "id": "graphql-dataloader-per-request",
+      "kind": "fact",
+      "statement": "Spring GraphQL documents DataLoader caching loaded entities per request and BatchLoaderRegistry ensuring DataLoader registrations per request.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-graphql/reference/request-execution.html",
+          "relevance": "Spring GraphQL's request-execution reference explicitly documents per-request DataLoader cache and per-request registrations."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Checked the current Spring GraphQL reference; the article explicitly notes that DataLoader is not literally an @RequestScope bean.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "request-local-memoizer",
+      "kind": "recommendation",
+      "statement": "A small request-scoped memoizer can be reasonable for deduplicating repeated loads of already-explicit keys within one request when no dedicated abstraction such as DataLoader exists.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-graphql/reference/request-execution.html",
+          "relevance": "Spring GraphQL demonstrates the utility of per-request caching for duplicate or batched loads and provides a dedicated abstraction."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-framework/reference/core/beans/factory-scopes.html",
+          "relevance": "Spring request scope models state that is isolated to one HTTP request."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed the dedicated GraphQL abstraction and Spring scope mechanics; the claim is deliberately limited to memoization and excludes hidden business-input lookup.",
+      "recommendationBasis": {
+        "kind": "bounded_judgment",
+        "conditions": [
+          "The same explicit key may be loaded repeatedly during one request.",
+          "Sharing the cached result across requests would be incorrect or unnecessary.",
+          "No dedicated batching/cache abstraction already solves the problem."
+        ],
+        "alternatives": [
+          "Use DataLoader or another framework-provided per-request cache.",
+          "Pass a normal explicit collaborator with operation-local caching.",
+          "Use a broader cache only when cross-request reuse is valid and separately designed."
+        ]
+      },
+      "verdict": "PASS"
+    },
+    {
+      "id": "login-example-boundary",
+      "kind": "example_interpretation",
+      "statement": "Spring Framework's request-scoped LoginAction is a scope/testing example, while Spring Security's form-login architecture handles username/password at the authentication filter and AuthenticationManager boundary; the former is not treated as architectural guidance for modern authentication design.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-framework/reference/testing/testcontext-framework/web-scoped-beans.html",
+          "relevance": "Spring's test reference uses a request-scoped LoginAction populated from request username/password parameters as a scope-testing example."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-security/reference/servlet/authentication/passwords/form.html",
+          "relevance": "Spring Security form login extracts username/password from HttpServletRequest into UsernamePasswordAuthenticationToken."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-security/reference/servlet/authentication/architecture.html",
+          "relevance": "Spring Security passes Authentication to AuthenticationManager and stores authenticated state in SecurityContext."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed both framework documents. The article now separates demonstrated scope mechanics from authentication-boundary architecture and does not claim that credentials must always bypass custom API input models.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "request-scope-testing",
+      "kind": "fact",
+      "statement": "Tests that exercise actual request-scope wiring and lifecycle use web test infrastructure such as WebApplicationContext and a mock request; this does not imply that the bean's pure logic cannot also be unit-tested as an ordinary object.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-framework/reference/testing/testcontext-framework/web-scoped-beans.html",
+          "relevance": "Spring's testing reference instructs loading a WebApplicationContext and injecting a mock request/session for scoped-bean tests."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Narrowed the prose after adversarial review so the official integration-test recipe is not generalized into a claim about every possible test of the underlying class.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "ambient-context-risk",
+      "kind": "classification",
+      "statement": "A constructor-injected request-scoped bean is not automatically a Service Locator or Ambient Context, but widespread dependence on hidden 'current request' values and current-context access can create ambient-like data dependencies.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/web/context/request/RequestContextHolder.html",
+          "relevance": "RequestContextHolder exposes thread-bound RequestAttributes through current-context access."
+        },
+        {
+          "role": "practitioner_commentary",
+          "url": "https://blog.ploeh.dk/2019/01/21/some-thoughts-on-anti-patterns/",
+          "relevance": "Mark Seemann discusses Ambient Context as an anti-pattern and cites thread-local/current-context forms."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-framework/reference/core/beans/factory-scopes.html",
+          "relevance": "Spring request scope itself is only a lifecycle mechanism and does not define a service-locator architecture."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Adversarial review found and removed the earlier Service Locator overclassification. The remaining claim distinguishes constructor injection from implicit current-context access.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "prefer-dedicated-contexts",
+      "kind": "recommendation",
+      "statement": "Prefer a dedicated mechanism for logging, tracing, authentication, or explicit use-case input before introducing a generic RequestScopeBean for the same responsibility.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://www.slf4j.org/manual.html",
+          "relevance": "MDC is a dedicated logging key-value context mechanism."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://opentelemetry.io/docs/concepts/context-propagation/",
+          "relevance": "OpenTelemetry Context Propagation is dedicated to propagating telemetry context across execution or service boundaries."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-security/reference/servlet/authentication/architecture.html",
+          "relevance": "Spring Security owns current authentication state through SecurityContext."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-framework/reference/core/beans/factory-scopes.html",
+          "relevance": "Request scope defines bean lifecycle per HTTP request."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Searched current official mechanism docs and alternatives. This is a bounded design recommendation based on responsibility fit, not a claim that Spring mandates this ordering.",
+      "recommendationBasis": {
+        "kind": "bounded_judgment",
+        "conditions": [
+          "The concern is already directly represented by a dedicated mechanism.",
+          "The RequestScopeBean would otherwise duplicate that responsibility."
+        ],
+        "alternatives": [
+          "Use explicit parameters or an Application Command for use-case inputs.",
+          "Use a project-defined explicit context object when several layers genuinely understand the same processing context.",
+          "Use RequestScopeBean when the bean itself truly requires request-local lifecycle."
+        ]
+      },
+      "verdict": "PASS"
+    },
+    {
+      "id": "explicit-business-inputs",
+      "kind": "recommendation",
+      "statement": "Keep values that materially determine a use-case result explicit in method parameters or a cohesive use-case input model instead of hiding them in shared request context.",
+      "evidence": [
+        {
+          "role": "architecture_guidance",
+          "url": "https://learn.microsoft.com/en-us/dotnet/architecture/microservices/microservice-ddd-cqrs-patterns/ddd-oriented-microservice",
+          "relevance": "DDD-oriented application-layer guidance keeps use-case coordination explicit and delegates domain rules to domain objects."
+        },
+        {
+          "role": "architecture_guidance",
+          "url": "https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs",
+          "relevance": "CQRS guidance models commands around concrete business tasks and intent."
+        },
+        {
+          "role": "architecture_guidance",
+          "url": "https://refactoring.com/catalog/introduceParameterObject.html",
+          "relevance": "Parameter Object provides an explicit structural alternative when parameters naturally travel together."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed alternatives and avoided claiming that every application must introduce a Command class.",
+      "recommendationBasis": {
+        "kind": "bounded_judgment",
+        "conditions": [
+          "The value is an actual input to the use case or business decision.",
+          "The callee must understand the value's business meaning."
+        ],
+        "alternatives": [
+          "Use individual explicit parameters.",
+          "Use a cohesive Application Command/use-case input object.",
+          "Use an explicit context record only when multiple layers genuinely share processing context."
+        ]
+      },
+      "verdict": "PASS"
+    },
+    {
+      "id": "avoid-generic-request-bag",
+      "kind": "recommendation",
+      "statement": "Avoid growing a generic mutable RequestScopeBean into a cross-layer bag of current-request data, especially when Application or Domain Services, Mappers, Validators, Repositories, or most outbound clients begin depending on it.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-framework/reference/core/beans/factory-scopes.html",
+          "relevance": "Spring request scope supplies lifecycle isolation but does not provide architectural ownership rules for arbitrary request data."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/web/context/request/RequestContextHolder.html",
+          "relevance": "Spring also exposes current request attributes through a thread-bound holder, illustrating how current-context state can sit outside method signatures."
+        },
+        {
+          "role": "practitioner_commentary",
+          "url": "https://blog.ploeh.dk/2019/01/21/some-thoughts-on-anti-patterns/",
+          "relevance": "Ambient Context commentary identifies hidden current-context dependencies as a design risk."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "The prior Service Locator label was removed because injection of a context bean alone does not meet the Service Locator definition; the remaining recommendation targets hidden data-dependency sprawl.",
+      "recommendationBasis": {
+        "kind": "bounded_judgment",
+        "conditions": [
+          "The bean accumulates unrelated request data.",
+          "Method behavior depends on values not represented in the call signature.",
+          "Consumers spread beyond a narrow boundary or framework responsibility."
+        ],
+        "alternatives": [
+          "Split data into dedicated contexts such as MDC, trace context, or SecurityContext.",
+          "Pass business inputs explicitly.",
+          "Use a small responsibility-specific request-scoped collaborator instead of a general bag."
+        ]
+      },
+      "verdict": "PASS"
+    },
+    {
+      "id": "async-boundary",
+      "kind": "recommendation",
+      "statement": "Do not assume request-scoped state automatically follows work submitted to another executor or scheduler; explicitly transfer required application data, and use standard context propagation for observability state that must cross execution or service boundaries.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/web/context/request/RequestContextHolder.html",
+          "relevance": "RequestContextHolder is thread-bound by default and only optionally inheritable for child threads."
+        },
+        {
+          "role": "specification",
+          "url": "https://opentelemetry.io/docs/specs/otel/context/api-propagators/",
+          "relevance": "OpenTelemetry Propagators define explicit context injection/extraction across process and transport boundaries."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://opentelemetry.io/docs/concepts/context-propagation/",
+          "relevance": "OpenTelemetry explains propagation across services and processes."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Checked Spring's thread-binding semantics including optional inheritance; the prose says 'do not assume automatic propagation' rather than claiming propagation is impossible.",
+      "recommendationBasis": {
+        "kind": "bounded_judgment",
+        "conditions": [
+          "Execution leaves the original request-processing thread or process.",
+          "The downstream work genuinely needs a subset of request-related state."
+        ],
+        "alternatives": [
+          "Pass explicit immutable data to the asynchronous task.",
+          "Use framework-supported task or context propagation where its semantics are understood.",
+          "Use OpenTelemetry propagation for telemetry context crossing service or process boundaries."
+        ]
+      },
+      "verdict": "PASS"
+    },
+    {
+      "id": "baggage-security",
+      "kind": "fact",
+      "statement": "OpenTelemetry Baggage can propagate arbitrary key-value data across services and may reach unintended or external downstreams, so sensitive data requires separate control.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://opentelemetry.io/docs/concepts/signals/baggage/",
+          "relevance": "OpenTelemetry documents Baggage as propagated key-value data and warns that sensitive items may be exposed to third parties."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://opentelemetry.io/docs/concepts/context-propagation/",
+          "relevance": "OpenTelemetry's context-propagation security guidance warns about outgoing context and sensitive baggage."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed current OpenTelemetry security guidance; the claim is limited to propagation exposure risk and does not prohibit all business identifiers categorically.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    }
+  ],
+  "claimCoverage": {
+    "verdict": "PASS",
+    "summary": "Scanned both final locale sources end-to-end for material framework facts, responsibility classifications, recommendation/default wording, and public-example implications. The extracted set covers Spring scope/proxy semantics, dedicated context ownership, command terminology, DTO/payload boundaries, request-local examples, authentication boundary, testing, ambient-context risk, async propagation, and the final decision rules.",
+    "checks": [
+      {
+        "id": "material_claims_extracted",
+        "result": "PASS"
+      },
+      {
+        "id": "recommendation_language_scanned",
+        "result": "PASS"
+      },
+      {
+        "id": "responsibility_classifications_scanned",
+        "result": "PASS"
+      },
+      {
+        "id": "examples_and_tutorials_scanned",
+        "result": "PASS"
+      }
+    ]
+  },
+  "crossClaimConsistency": {
+    "verdict": "PASS",
+    "summary": "Cross-checked the final article so examples do not outrank their sources: the springdoc issue remains a public example, DataLoader remains a dedicated non-@RequestScope abstraction, LoginAction remains a scope/testing example rather than authentication guidance, and constructor injection is no longer mislabeled as Service Locator. Korean and English preserve the same decision boundaries.",
+    "checks": [
+      {
+        "id": "examples_follow_rules",
+        "result": "PASS"
+      },
+      {
+        "id": "descriptive_normative_separation",
+        "result": "PASS"
+      },
+      {
+        "id": "responsibility_consistency",
+        "result": "PASS"
+      },
+      {
+        "id": "dedicated_abstraction_boundary",
+        "result": "PASS"
+      },
+      {
+        "id": "exceptions_not_defaults",
+        "result": "PASS"
+      }
+    ]
+  },
+  "adversarialReview": {
+    "verdict": "PASS",
+    "summary": "Fresh adversarial review challenged the strongest 'prefer dedicated abstractions' recommendation, the request-scoped customizer and memoizer examples, authentication credentials, testing claims, DTO boundaries, and Ambient Context classification. It found and corrected the Service Locator overclassification and narrowed the testing statement to wiring/lifecycle tests; no remaining recommendation depends on a public example alone.",
+    "checks": [
+      {
+        "id": "strongest_claim_challenged",
+        "result": "PASS"
+      },
+      {
+        "id": "recommendation_source_role_checked",
+        "result": "PASS"
+      },
+      {
+        "id": "source_overreach_checked",
+        "result": "PASS"
+      },
+      {
+        "id": "alternatives_checked",
+        "result": "PASS"
+      },
+      {
+        "id": "expert_challenge_checked",
+        "result": "PASS"
+      }
+    ]
+  }
+}

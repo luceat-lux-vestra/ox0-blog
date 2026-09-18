@@ -1,35 +1,84 @@
-> In this article, "RequestScopeBean" means a request-scoped context bean implemented with Spring's `@RequestScope`.
+> In this article, "RequestScopeBean" is shorthand for a Spring bean annotated with [`@RequestScope`](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/web/context/annotation/RequestScope.html).
 
-Spring's request scope ties a bean instance to the lifetime of the current HTTP request. `@RequestScope` is the convenience annotation for declaring that scope, and it uses a scoped proxy by default. That lets a longer-lived singleton depend on a request-scoped bean while the actual target instance is resolved for the current request.
+Spring's request scope ties a bean instance to the lifetime of the current HTTP request. `@RequestScope` is the convenience annotation for declaring that scope, and it uses a [scoped proxy](https://docs.spring.io/spring-framework/reference/core/beans/factory-scopes.html#beans-factory-scopes-other-injection) by default. That lets a longer-lived singleton depend on a request-scoped bean while the actual target instance is resolved for the current request.
 
 The mechanism itself is straightforward. The harder design question is what belongs in that scope.
 
-During one HTTP request, several components may want to share values such as:
+During one HTTP request, many kinds of "current request information" may be needed. They are not all candidates for a RequestScopeBean.
 
-- a correlation ID;
-- the request start time;
-- diagnostic metadata;
-- a calculation or lookup result that should be reused only within the current request.
+- correlation IDs or diagnostic fields used only in logs → [MDC](https://www.slf4j.org/manual.html#mdc)
+- trace state that crosses service boundaries → [Trace Context / Context Propagation](https://opentelemetry.io/docs/concepts/context-propagation/)
+- the current authenticated principal and authorities → Spring Security's [SecurityContext](https://docs.spring.io/spring-security/reference/servlet/authentication/architecture.html#servlet-authentication-securitycontext)
+- inputs that determine a use-case result → an Application Command or explicit parameters
+- a stateful helper or memoizer that reuses a result for the same input only within one request → sometimes a RequestScopeBean
 
-Those values look like natural candidates because their lifetime is request-bound. But if every value that varies per request goes into the same bean, it quickly turns into request-local global state.
+Request scope is therefore **not a general context store for anything that varies per request. It is a bean-lifecycle mechanism that ties one bean instance to one HTTP request.**
 
-The practical conclusion is:
+A more conservative conclusion is:
 
-> A RequestScopeBean is useful for infrastructure state that naturally belongs to one request and is shared by a small number of boundary components. It should be avoided once it starts hiding business inputs or becoming a general-purpose storage object.
+> Do not start with a RequestScopeBean as the default request-context store. Prefer more specific mechanisms such as MDC, Trace Context, SecurityContext, and explicit inputs. Consider a RequestScopeBean only when the bean itself needs independent per-request state or behavior and its natural lifetime is exactly one HTTP request.
 
 ## First distinguish business input from request context
 
 The first question is not where a value came from, but what the value means.
 
-Values such as `productId`, `quantity`, or `searchCondition` can change a use-case result. Whether they came from a path variable, query parameter, or request body, they are business inputs and should usually remain visible in a method signature or an explicit command or context object.
+Values such as `productId`, `quantity`, or `searchCondition` can change a use-case result. Whether they came from a path variable, query parameter, or request body, they are business inputs and should usually remain visible in a method signature or an explicit application command/use-case input object.
 
-Values such as `correlationId` or `requestStartedAt` are different when they are used only for logging, tracing, or diagnostics and intermediate business layers do not interpret them. Those values are much closer to request-scoped infrastructure context.
+A value such as `correlationId` used only for log correlation is a better fit for MDC. Trace/span state that must cross service boundaries belongs in a standard propagation mechanism such as OpenTelemetry Context. Authentication state already has Spring Security's SecurityContext.
 
-Request-local memoization is another useful example. If the same deterministic calculation or lookup is repeated during one request but has no reason to survive into the next request, a small request-scoped cache can express that lifetime more accurately than an application-wide cache.
+That means the useful split is not "business data vs RequestScopeBean." **If a dedicated context mechanism already exists, there is less reason to invent another request-scoped context bean.**
 
-That still does not mean the lookup result should become a hidden business dependency. "Cache this only for one request" and "hide this dependency from the use case" are separate decisions.
+One remaining candidate is request-local memoization. If several components repeat the same expensive lookup during one request but the result must not be shared across requests, a small per-request memoizer can model that lifetime. But if the framework already offers a dedicated abstraction—Spring GraphQL's [DataLoader](https://docs.spring.io/spring-graphql/reference/request-execution.html#request-execution-dataloader) is one example—use that abstraction first.
 
-The useful question is not "did this value come from HTTP?" but "which layer needs to understand what this value means?"
+The useful question becomes: **"Is there already a more precise mechanism for this responsibility, and does the object itself really need request-local state?"**
+
+## What does Command mean here?
+
+The word `Command` in this article does not mean the full [GoF Command Pattern](https://sourcemaking.com/design_patterns/command). Here it means an **application command or use-case input object that explicitly groups the intent and business inputs required by one application use case**.
+
+That distinction matters because `Command` is used in several different contexts.
+
+- **[DDD (Domain-Driven Design)](https://learn.microsoft.com/en-us/dotnet/architecture/microservices/microservice-ddd-cqrs-patterns/ddd-oriented-microservice)** is an approach for tackling complex business domains through explicit domain models. In a layered DDD description, the application layer coordinates use cases and delegates business-rule execution to the domain layer. DDD itself does not require every use case to be represented by a class named `Command`.
+- **[CQRS (Command Query Responsibility Segregation)](https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs)** separates the model used for state-changing commands from the model used for queries. Microsoft's CQRS guidance recommends expressing commands as concrete business tasks or user intent rather than low-level field updates.
+- The **GoF Command Pattern** encapsulates a request or operation as an object so invocation can be decoupled from the receiver, enabling execution concerns such as deferral, queuing, logging, or undo.
+
+An Application Command is not mandatory either. If a use case has only a few inputs and a separate object adds no meaning, explicit method parameters may be enough. A command/use-case input object becomes useful when several business inputs form one cohesive use-case intent.
+
+So an object like the following does not by itself mean that the application implements CQRS or the GoF Command Pattern.
+
+~~~java
+public record PlaceOrderCommand(
+        CustomerId customerId,
+        List<OrderLineInput> lines,
+        DeliveryAddress deliveryAddress
+) {
+}
+~~~
+
+The important part is not the class name but its **responsibility**. Inputs that determine the outcome of the ordering use case remain explicit in the command. If a `correlationId` exists only for logging or tracing, putting it into `PlaceOrderCommand` merely to avoid relaying another value blurs that responsibility.
+
+Conceptually, the split can look like this.
+
+~~~text
+HTTP DTO
+    -> mapping
+Application Command
+    -> Application Service / Use Case
+
+Log-only diagnostic data
+    -> MDC
+
+Distributed tracing context
+    -> Trace Context / Propagator
+
+Current authenticated principal and authorities
+    -> SecurityContext
+
+Small collaborator that truly needs independent per-request state
+    -> RequestScopeBean only when needed
+~~~
+
+An application command and a RequestScopeBean are therefore not alternatives to each other. The more important rule is to **prefer the dedicated abstraction for each responsibility and keep RequestScopeBean close to the end of the decision process**.
 
 ## Parameter relay is not automatically bad
 
@@ -42,22 +91,18 @@ Controller
           -> Diagnostics Adapter
 ~~~
 
-Suppose only the final Diagnostics Adapter needs a `correlationId` and request start time, while the intermediate layers do not use either value.
+Suppose only the final Diagnostics Adapter needs a `correlationId`, while intermediate layers do not use it.
 
-Adding those diagnostic values to every method can create signature noise whose only purpose is transportation. A RequestScopeBean can be one way to eliminate that relay.
+Relaying a diagnostic value through every method is awkward, but creating a RequestScopeBean is not the default solution. If the value exists only for log correlation, MDC is the more precise abstraction. If it belongs to distributed tracing, use Trace Context.
 
-But inconvenient parameters do not automatically belong in request scope.
-
-Explicit parameters have important properties.
+If the use case itself needs a value, hiding it because transportation is inconvenient is still the wrong trade. Explicit parameters and Application Commands have important properties.
 
 - The caller's obligations are visible.
 - Tests depend less on hidden request state.
 - Business inputs remain visible in the static structure of the code.
 - Crossing an asynchronous or execution-context boundary makes required state transfer explicit.
 
-And if a correlation ID exists only for logging or tracing, MDC or an observability framework's trace context may be a better fit than a custom RequestScopeBean.
-
-So RequestScopeBean is not primarily a technique for "getting rid of parameters." It is a choice about where request-lifetime state belongs.
+So **"intermediate layers do not use this value" is not enough to justify RequestScopeBean.** First check whether a dedicated mechanism already owns that responsibility.
 
 ## Why putting request context into DTOs causes trouble
 
@@ -81,32 +126,60 @@ That makes provenance harder to see. Validation timing becomes less obvious, and
 
 A DTO is easier to reason about when it keeps its original role: representing an external contract or an explicit use-case input.
 
-## When RequestScopeBean fits well
+### Thinking in terms of payload and envelope
 
-A RequestScopeBean is worth considering when most of these conditions are true.
+Messaging patterns have long separated application payload from infrastructure metadata used for delivery, routing, or correlation. Enterprise Integration Patterns' [Envelope Wrapper](https://www.enterpriseintegrationpatterns.com/patterns/messaging/EnvelopeWrapper.html) and [Correlation Identifier](https://www.enterpriseintegrationpatterns.com/patterns/messaging/CorrelationIdentifier.html) are representative examples.
+
+An HTTP request object is not literally the same thing as a messaging envelope, but the design question still helps: **is this value payload that the use case interprets, or metadata that the transport/infrastructure manages?**
+
+An order quantity is close to payload. Pure tracing or correlation information is closer to infrastructure metadata. If both are indiscriminately pushed into one request DTO, the boundary between the transport contract and internal execution context becomes blurred again.
+
+## So when is RequestScopeBean actually useful?
+
+Once the alternatives are separated, the useful range is narrower than it first appears. It is worth considering when most of these conditions hold.
 
 ~~~text
-1. The value or state belongs to exactly one HTTP request.
-2. Intermediate business layers do not use it; they would only relay it.
-3. Only a small number of boundary or infrastructure components consume it.
-4. It is not a core business input.
-5. Discarding it when the request ends is the natural lifecycle.
+1. The bean itself has state or behavior that should live for exactly one request.
+2. Sharing that state with another request would be incorrect.
+3. No more specific mechanism such as MDC, Trace Context, or SecurityContext owns the responsibility.
+4. Consumers are limited to the web boundary or framework-integration layer.
+5. The state does not need to survive asynchronous work or the end of the request.
 ~~~
 
-Relatively general examples include:
+### Real case 1: a request-dependent framework customizer
 
-- request diagnostic context initialized by a Filter or Interceptor;
-- correlation metadata used for error responses or audit records;
-- a small memoization/cache that exists only for one request;
-- request-derived rendering metadata used only at the web boundary.
+A [public springdoc-openapi issue](https://github.com/springdoc/springdoc-openapi/issues/2571) shows an MVC configuration that creates a request-scoped `ServerBaseUrlCustomizer` so the OpenAPI server base URL can depend on the reverse proxy's `X-Forwarded-Prefix` header for the current request.
 
-The common property is that the state is created with the request and can disappear with the request.
+This is a strong fit for request scope because:
 
-Request-local caching is a particularly clear example. If one expensive operation is repeated several times during a request but there is no reason to retain its result for later requests, request scope can model the intended lifetime directly.
+- the value is not a business-use-case input;
+- the **framework extension object itself** depends on the current HTTP request;
+- request scope can make the collaborator's creation and disposal explicitly follow the current request;
+- Application and Domain Services do not need to know about the customizer.
+
+A singleton customizer is not automatically wrong; it can still be safe if it obtains the current request through a proper proxy or another context abstraction. The point of the example is narrower: **when a framework collaborator itself has request-dependent behavior, tying that collaborator's lifecycle to the request can be a natural design.**
+
+### Real case 2: request-local memoization
+
+Spring GraphQL DataLoader keeps loaded entities in a **per-request cache** and registers DataLoaders per request. The goal is to eliminate duplicate I/O inside one request without sharing cached data across requests or users.
+
+That is not literally an `@RequestScope` bean, but it demonstrates a real lifecycle where request-scoped state is useful. In GraphQL, DataLoader is the dedicated abstraction and should be preferred. In ordinary Spring MVC code with the same deduplication need and no dedicated abstraction, a small request-scoped memoizer helper can be a reasonable implementation.
+
+The limit matters: the memoizer should deduplicate repeated loads for keys that are already explicit. It should not become a hidden provider of business inputs.
+
+### What about Spring's official LoginAction example?
+
+[Spring Framework documentation](https://docs.spring.io/spring-framework/reference/testing/testcontext-framework/web-scoped-beans.html) uses a request-scoped `LoginAction` with request parameters to demonstrate request-scope semantics. That example is valid for showing that each HTTP request gets an isolated bean instance.
+
+It does **not** need to be treated as a recommendation for modern authentication design. Username and password are not automatically ordinary business-use-case inputs. In Spring Security form login, [`UsernamePasswordAuthenticationFilter`](https://docs.spring.io/spring-security/reference/servlet/authentication/passwords/form.html) extracts them from the `HttpServletRequest`, creates a `UsernamePasswordAuthenticationToken`, and passes it to the [`AuthenticationManager`](https://docs.spring.io/spring-security/reference/servlet/authentication/architecture.html#servlet-authentication-authenticationmanager). In that architecture, credentials belong to the **authentication boundary**, not to an ordinary Controller/Application Command by default.
+
+If an application owns a custom login API or authentication use case, it may still model credentials as an explicit request/authentication input object. The important distinction remains: **explicitly modeling authentication input is different from hiding credentials inside a mutable request-scoped bean.**
+
+An official example that demonstrates scope mechanics and an architectural recommendation for the authentication boundary are two different things.
 
 ## When RequestScopeBean becomes dangerous
 
-The design is drifting toward a request-local Service Locator or global state when patterns like these appear.
+The design is drifting toward request-local ambient/global state when patterns like these appear. Constructor injection alone does not make the bean a Service Locator; the problem is a generic "current request" object that hides data dependencies behind shared execution context.
 
 - General-purpose Services inject it directly.
 - Mappers read from it.
@@ -125,9 +198,19 @@ public Result execute(Command command) {
 }
 ~~~
 
-Tests also need request-scope infrastructure. Spring supports testing request-scoped beans, but those tests require web context such as a `WebApplicationContext` and mock request rather than being plain-object tests.
+Tests that exercise the actual request-scope wiring and lifecycle need request-scope infrastructure. Spring's [request-scoped bean testing](https://docs.spring.io/spring-framework/reference/testing/testcontext-framework/web-scoped-beans.html) uses a `WebApplicationContext` and mock request. That is a different test boundary from testing the bean's pure logic as an ordinary object.
 
-The design gained convenience by losing dependency visibility and test simplicity.
+As hidden request-state dependencies spread, more tests need that integration boundary, so the convenience should be weighed against dependency visibility and test setup cost.
+
+## The Ambient Context perspective
+
+The term **[Ambient Context](https://blog.ploeh.dk/2019/01/21/some-thoughts-on-anti-patterns/)** is useful for describing this risk. An ambient context is context that code can obtain from the current execution environment without the caller explicitly passing it. Static "current" contexts and thread-local state are common forms.
+
+Mark Seemann classifies Ambient Context as an anti-pattern from a dependency-injection perspective. The central problem is that dependencies move outside the visible call structure, making the real inputs and dependencies harder to discover from the code.
+
+That does not mean every RequestScopeBean is automatically an Ambient Context. If it is constructor-injected into a small set of boundary components, the object dependency itself is visible. However, when method results broadly depend on "current request" values inside that bean, the data dependency can disappear from the call signature. If current-context access through APIs such as [`RequestContextHolder`](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/web/context/request/RequestContextHolder.html) also spreads through the application, the design takes on the more typical properties of Ambient Context.
+
+The more precise warning sign is therefore not "does this application use request scope?" but **"did data or dependencies that should be explicit move behind shared current-execution context?"**
 
 ## Understand Spring's scoped proxy
 
@@ -154,12 +237,11 @@ If a RequestScopeBean is used, the most important design rule is deciding which 
 A reasonable policy can look like this.
 
 ~~~text
-Direct injection allowed
-- Filter / Interceptor responsible for initialization
-- boundary components that build error, audit, or diagnostic output
+Possible direct consumers
+- framework adapters / customizers whose behavior depends on the current request
 - a small helper that actually owns request-local memoization
 
-Direct injection disallowed
+Normally not direct consumers
 - general Application / Domain Services
 - Mappers
 - Validators
@@ -167,23 +249,54 @@ Direct injection disallowed
 - most outbound Clients
 ~~~
 
-With this boundary, the bean remains a short bridge around the request edge instead of becoming a general storage mechanism.
+If a Filter or Interceptor starts filling a generic "RequestContext bag," stop and classify the data again. Logging data may belong in MDC, tracing data in Trace Context, and authentication in SecurityContext.
+
+This keeps RequestScopeBean as a **genuinely request-lifetime stateful collaborator** rather than a general storage mechanism.
 
 If the context object keeps accumulating unrelated fields, that is a useful signal that the boundary is eroding.
 
-## When an explicit context record is better
+## When an Application Command or explicit context record is better
 
-Parameter explosion can also be reduced without RequestScopeBean.
+Parameter explosion can also be reduced without RequestScopeBean. Start by classifying what the values mean.
 
-When related values move together through one processing pipeline and that flow should remain visible in code, an explicit context record is often a better fit.
+~~~text
+Business intent and inputs that determine the use-case result
+→ Application Command
 
-~~~java
-public record RequestExecutionContext(
-        String correlationId,
-        Instant startedAt
-) {
-}
+Diagnostic key-value data used only in logs
+→ MDC
+
+Trace context that crosses service/process boundaries
+→ Trace Context / Context Propagation
+
+Current authenticated principal and authorities
+→ SecurityContext
+
+Processing context that several layers actually understand and pass together
+→ explicit Context record (a project-defined context object passed explicitly as a method argument)
+
+A bean that itself needs independent per-request state and has no better dedicated abstraction
+→ consider RequestScopeBean
 ~~~
+
+It is also useful to distinguish **[Introduce Parameter Object](https://refactoring.com/catalog/introduceParameterObject.html)**. Martin Fowler's refactoring groups parameters that repeatedly travel together into one object. If `startDate` and `endDate` repeatedly appear as a pair, for example, they can become a `DateRange`.
+
+The resulting code may look similar—a single record or value object—but the motivation differs.
+
+~~~text
+Parameter Object
+→ structurally groups parameters that repeatedly travel together
+
+Application Command
+→ models the intent and business inputs of one use case
+
+Context Object
+→ explicitly carries processing context that several layers actually understand
+~~~
+
+An Application Command can group related business inputs around one use case. When related values instead move together through one processing pipeline and several layers should see that processing context explicitly, a context record is often a better fit.
+
+For example, if several layers genuinely understand and use one cohesive execution concern such as a **deadline or execution policy**, the project can define an `ExecutionContext` and pass it explicitly as a method argument. Values that already belong to a dedicated mechanism, such as a log-only correlation ID, do not need to be collected into that object again.
 
 This has useful properties.
 
@@ -192,11 +305,11 @@ This has useful properties.
 - Values that must cross an asynchronous boundary can be chosen explicitly.
 - The code records which values belong to one processing context.
 
-If intermediate layers receive the record only to pass it through unchanged and only one or two request-edge components actually consume it, RequestScopeBean may again be worth considering.
+If intermediate layers receive the record only to pass it through unchanged, first ask whether the data actually belongs in MDC, Trace Context, SecurityContext, or another dedicated context. Only after those options are ruled out—and the **object itself needs to be a request-local stateful collaborator**—should RequestScopeBean come back into consideration.
 
-The two approaches are not direct competitors. They trade dependency visibility against transport overhead.
+So this is not merely a trade between dependency visibility and transport overhead. The first question is whether a more specific abstraction already exists.
 
-## Treat asynchronous boundaries separately
+## Treat asynchronous boundaries and Context Propagation separately
 
 In Servlet-based applications, current request information is commonly associated with the request-processing thread. Spring's `RequestContextHolder` also exposes `RequestAttributes` associated with the current thread.
 
@@ -204,50 +317,84 @@ That means code running in another executor, an asynchronous event, or a schedul
 
 If an asynchronous task genuinely needs a value, copy that value into explicit data and pass it across the boundary.
 
-This limitation is also a useful design signal: if the value still matters outside the request, it may not belong in hidden request-scoped state in the first place.
+A related but distinct concern is **Context Propagation**. OpenTelemetry defines Context as a mechanism for carrying execution-scoped values across logically associated execution units, and propagation as the mechanism that moves that context across service or process boundaries. Trace IDs and span IDs are typical examples in distributed tracing.
+
+So if a value such as a correlation identifier must continue across service boundaries for observability, a standard trace context and [Propagator](https://opentelemetry.io/docs/specs/otel/context/api-propagators/) should usually be considered before inventing propagation around a RequestScopeBean. RequestScopeBean models **request lifetime inside the current process**; Context Propagation addresses **how context crosses execution boundaries**.
+
+Facilities such as OpenTelemetry [Baggage](https://opentelemetry.io/docs/concepts/signals/baggage/) can propagate arbitrary key-value data as well, but convenience is not a reason to place business data or sensitive information there indiscriminately. Baggage can travel to downstream or external services, so propagation scope and data sensitivity require separate control.
+
+This limitation is also a useful design signal: if the value still matters outside the request, ask whether it is explicit application input, request-local state, or a standard propagation concern rather than automatically hiding it in request scope.
 
 ## A practical decision rule
 
-The choice can be reduced to a few questions.
+Use this order to avoid selecting RequestScopeBean too early.
 
 ~~~text
-Does the value change the business result?
-→ Keep it as an explicit input.
+Does the value change an application business-use-case result?
+→ Application Command or explicit parameter.
 
-Does the value still matter after the request ends?
-→ Consider a model outside request scope.
+Is it diagnostic data used only in logs?
+→ MDC.
 
-Do intermediate layers actually use the value?
-→ Prefer an explicit parameter or context object.
+Is it observability context that must cross service boundaries?
+→ Trace Context / Context Propagation.
 
-Do intermediate layers not care about it, while only a few request-edge components consume it?
-→ Consider RequestScopeBean.
+Is it the current authenticated principal or authorities?
+→ SecurityContext.
 
-Do you only need to reuse the same calculation or lookup within one request?
-→ Small request-local memoization can be a good candidate.
+Does the framework already provide a request-specific context abstraction?
+→ Prefer that abstraction.
 
-Is "passing another parameter is annoying" the main reason?
+Are you deduplicating repeated loads only within one request?
+→ Use a dedicated tool such as DataLoader when available.
+→ Otherwise consider a small request-scoped memoizer.
+
+Does the bean itself need mutable state or behavior isolated per request?
+→ RequestScopeBean can be a candidate.
+
+Is the main reason simply that passing values through methods is annoying?
 → Do not use RequestScopeBean.
 
-Are direct injection sites steadily increasing?
-→ The design is probably crossing the intended boundary.
+Is the bean turning into a Map/DTO-like bag of "current request information"?
+→ Split the responsibilities again.
 ~~~
 
 ## Conclusion
 
-RequestScopeBean is not inherently a bad design. It is a first-class Spring scope and is useful when state should genuinely have the same lifetime as one HTTP request.
+Once the responsibilities are separated, RequestScopeBean has a fairly narrow practical range. That is not a defect. Spring request scope is **a bean-lifecycle feature, not a pattern telling applications to store all request information in one place.**
 
-Those benefits survive only while the scope of use remains narrow.
+Most common needs already have more specific tools.
 
-The key rule is:
+- business input → Application Command / explicit parameter
+- log correlation → MDC
+- distributed tracing → Trace Context / Context Propagation
+- current authenticated principal/authorities → SecurityContext
+- framework-specific per-request cache/context → the framework's own abstraction
 
-> Request-scoped infrastructure state may be hidden, but business input dependencies should not be.
+If the remaining requirement is genuinely **"this Spring bean itself must exist as an independent stateful collaborator for exactly one HTTP request,"** then RequestScopeBean is meaningful. A request-dependent framework customizer and a small request-local memoizer without a better dedicated abstraction are representative cases.
 
-When introducing RequestScopeBean, the important architectural decision is not simply whether to use it. Decide which kinds of state are allowed in it and where direct injection must stop.
+The final rule is therefore:
+
+> Do not start with RequestScopeBean as a request-context store. First look for the dedicated abstraction for the responsibility, and choose request scope only when the bean's own lifetime should match the HTTP request.
 
 ## References
 
-- Spring Framework Reference: Bean Scopes — <https://docs.spring.io/spring-framework/reference/core/beans/factory-scopes.html>
-- Spring Framework API: RequestScope — <https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/web/context/annotation/RequestScope.html>
-- Spring Framework Reference: Testing Request- and Session-scoped Beans — <https://docs.spring.io/spring-framework/reference/testing/testcontext-framework/web-scoped-beans.html>
-- Spring Framework API: RequestContextHolder — <https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/web/context/request/RequestContextHolder.html>
+- [Spring Framework Reference: Bean Scopes](https://docs.spring.io/spring-framework/reference/core/beans/factory-scopes.html)
+- [Spring Framework API: RequestScope](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/web/context/annotation/RequestScope.html)
+- [Spring Framework Reference: Testing Request- and Session-scoped Beans](https://docs.spring.io/spring-framework/reference/testing/testcontext-framework/web-scoped-beans.html)
+- [Spring Framework API: RequestContextHolder](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/web/context/request/RequestContextHolder.html)
+- [Microsoft Learn: DDD-oriented microservice design](https://learn.microsoft.com/en-us/dotnet/architecture/microservices/microservice-ddd-cqrs-patterns/ddd-oriented-microservice)
+- [Microsoft Learn: CQRS pattern](https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs)
+- [SourceMaking: Command Design Pattern](https://sourcemaking.com/design_patterns/command)
+- [Martin Fowler: Introduce Parameter Object](https://refactoring.com/catalog/introduceParameterObject.html)
+- [Mark Seemann: Some thoughts on anti-patterns](https://blog.ploeh.dk/2019/01/21/some-thoughts-on-anti-patterns/)
+- [OpenTelemetry: Context propagation](https://opentelemetry.io/docs/concepts/context-propagation/)
+- [OpenTelemetry: Baggage](https://opentelemetry.io/docs/concepts/signals/baggage/)
+- [Enterprise Integration Patterns: Envelope Wrapper](https://www.enterpriseintegrationpatterns.com/patterns/messaging/EnvelopeWrapper.html)
+- [Enterprise Integration Patterns: Correlation Identifier](https://www.enterpriseintegrationpatterns.com/patterns/messaging/CorrelationIdentifier.html)
+- [SLF4J Manual: Mapped Diagnostic Context (MDC)](https://www.slf4j.org/manual.html)
+- [Spring Security: Servlet Authentication Architecture](https://docs.spring.io/spring-security/reference/servlet/authentication/architecture.html)
+- [Spring Security: Form Login](https://docs.spring.io/spring-security/reference/servlet/authentication/passwords/form.html)
+- [Spring for GraphQL: Request Execution / DataLoader](https://docs.spring.io/spring-graphql/reference/request-execution.html)
+- [springdoc-openapi issue #2571: request-scoped ServerBaseUrlCustomizer example](https://github.com/springdoc/springdoc-openapi/issues/2571)
+- [OpenTelemetry: Propagators API](https://opentelemetry.io/docs/specs/otel/context/api-propagators/)
