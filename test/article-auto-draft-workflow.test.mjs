@@ -39,15 +39,34 @@ test('new Article auto-draft workflow selects only newly added canonical Article
   assert.doesNotMatch(source, /--no-renames/);
 });
 
-test('new Article auto-draft workflow proves READY\/SYNCED before draft mutation and never publishes', async () => {
+test('new Article auto-draft workflow preflights every selected Article before any draft mutation', async () => {
   const source = await readFile(WORKFLOW, 'utf8');
 
   assert.match(source, /npm test/);
   assert.match(source, /npm run validate/);
+  assert.match(source, /^      - name: Prove every selected Article is READY\/SYNCED$/m);
   assert.match(source, /npm run validate:articles -- --ready "\$manifest"/);
+  assert.match(source, /^      - name: Synchronize READY\/SYNCED Articles as drafts$/m);
   assert.match(source, /npm run sync:article -- "\$manifest" draft/);
 
+  assert.ok(
+    source.indexOf('Prove every selected Article is READY/SYNCED')
+      < source.indexOf('Synchronize READY/SYNCED Articles as drafts')
+  );
   assert.doesNotMatch(source, /sync:article -- "\$manifest" publish/);
   assert.doesNotMatch(source, /publish_confirmation/);
   assert.doesNotMatch(source, /OX0_ARTICLE_PUBLICATION_AUTHORIZATION_JSON/);
+});
+
+test('new Article auto-draft workflow refuses stale pushed source before Ghost mutation', async () => {
+  const source = await readFile(WORKFLOW, 'utf8');
+
+  assert.match(source, /^      - name: Reverify pushed source is still current main$/m);
+  assert.match(source, /\/git\/ref\/heads\/main/);
+  assert.match(source, /test "\$CURRENT_MAIN_SHA" = "\$SOURCE_SHA"/);
+  assert.match(source, /refusing stale automatic draft projection/);
+  assert.ok(
+    source.indexOf('Reverify pushed source is still current main')
+      < source.indexOf('Synchronize READY/SYNCED Articles as drafts')
+  );
 });
