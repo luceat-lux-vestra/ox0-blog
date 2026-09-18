@@ -116,8 +116,10 @@ On an exact `main` push it:
 2. verifies the push is a normal descendant of the prior `main` SHA;
 3. selects only exact-lowercase `posts/<article>/article.json` files whose Git status is `A` in that push (renames/copies are not treated as new Articles);
 4. runs the test suite and repository validation;
-5. requires every selected Article to pass `validate:articles -- --ready` (`SYNCED + READY`);
-6. runs `sync:article ... draft` under the same Ghost concurrency lock as manual operations.
+5. requires every selected Article to pass `validate:articles -- --ready` (`SYNCED + READY`) before any Ghost write;
+6. fresh-checks that the pushed SHA is still current `main`;
+7. read-only plans every selected Article as a Ghost draft before any Ghost write;
+8. only after all preflights pass, runs `sync:article ... draft` under the same Ghost concurrency lock as manual operations.
 
 The automation may create/update managed drafts and required draft resources, but it never creates production-publication authorization and never requests `published` status. Existing Article edits, renamed bundles, and published revisions are not automatically staged by this workflow.
 
