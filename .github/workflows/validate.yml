@@ -47,9 +47,12 @@ jobs:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
       BASE_SHA: ${{ github.event.pull_request.base.sha }}
       HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-      PREVIEW_FILE: ${{ runner.temp }}/article-preview.html
-      MANIFEST_LIST: ${{ runner.temp }}/article-preview-manifests.txt
     steps:
+      - name: Initialize preview paths
+        run: |
+          echo "PREVIEW_FILE=$RUNNER_TEMP/article-preview.html" >> "$GITHUB_ENV"
+          echo "MANIFEST_LIST=$RUNNER_TEMP/article-preview-manifests.txt" >> "$GITHUB_ENV"
+
       - name: Check out exact pull request head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
