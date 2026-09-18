@@ -89,7 +89,8 @@ async function loadPlanningContext({
     compiler,
     repoRoot,
     projectContext,
-    publicationByLocale: loaded.publicationByLocale
+    publicationByLocale: loaded.publicationByLocale,
+    claimProof: loaded.claimProof
   });
   let remoteApprovalsByLocale = new Map(
     loaded.bundle.article.requiredLocales.map((locale) => [locale, []])

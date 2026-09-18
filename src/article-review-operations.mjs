@@ -16,7 +16,8 @@ async function loadEvaluatedArticle({ manifestPath, repoRoot, compiler, projectC
     compiler,
     repoRoot,
     projectContext,
-    publicationByLocale: loaded.publicationByLocale
+    publicationByLocale: loaded.publicationByLocale,
+    claimProof: loaded.claimProof
   });
   return { loaded, evaluation };
 }
@@ -30,9 +31,19 @@ async function serializeBundle({ loaded, bundle, repoRoot }) {
   });
 }
 
-async function serializedResult({ loaded, bundle, repoRoot, currentTranslationFingerprints }) {
+async function serializedResult({
+  loaded,
+  bundle,
+  repoRoot,
+  currentTranslationFingerprints,
+  currentClaimProofFingerprint = null
+}) {
   const manifestText = await serializeBundle({ loaded, bundle, repoRoot });
-  const recovered = recoverArticleBundleReviewState(bundle, { currentTranslationFingerprints });
+  const recovered = recoverArticleBundleReviewState(bundle, {
+    currentTranslationFingerprints,
+    currentClaimProofFingerprint,
+    claimProofRequired: true
+  });
   return {
     manifestPath: loaded.manifestPath,
     manifestText,
@@ -69,7 +80,8 @@ export async function acceptArticleTranslationReview({
     loaded,
     bundle,
     repoRoot,
-    currentTranslationFingerprints: evaluation.currentTranslationFingerprints
+    currentTranslationFingerprints: evaluation.currentTranslationFingerprints,
+    currentClaimProofFingerprint: evaluation.currentClaimProofFingerprint
   });
 }
 
@@ -98,7 +110,8 @@ export async function requestArticleSemanticReview({
     loaded,
     bundle,
     repoRoot,
-    currentTranslationFingerprints: evaluation.currentTranslationFingerprints
+    currentTranslationFingerprints: evaluation.currentTranslationFingerprints,
+    currentClaimProofFingerprint: evaluation.currentClaimProofFingerprint
   });
 }
 
@@ -139,14 +152,20 @@ export async function acceptArticleSemanticReview({
     compiler,
     projectContext
   });
+  if (evaluation.claimProof.state !== 'PASS') {
+    throw new Error(`Article semantic review requires PASS claim proof: ${evaluation.claimProof.state}`);
+  }
   const bundle = acceptArticleBundleReadinessReview(loaded.bundle, {
     currentTranslationFingerprints: evaluation.currentTranslationFingerprints,
+    currentClaimProofFingerprint: evaluation.currentClaimProofFingerprint,
+    claimProofRequired: true,
     review
   });
   return serializedResult({
     loaded,
     bundle,
     repoRoot,
-    currentTranslationFingerprints: evaluation.currentTranslationFingerprints
+    currentTranslationFingerprints: evaluation.currentTranslationFingerprints,
+    currentClaimProofFingerprint: evaluation.currentClaimProofFingerprint
   });
 }

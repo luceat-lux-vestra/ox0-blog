@@ -23,7 +23,9 @@ try {
     manifest: article.repositoryPath,
     articleId: article.bundle.article.articleId,
     translation: article.evaluation.translation.state,
-    readiness: article.evaluation.readiness.state
+    claimProof: article.evaluation.claimProof.state,
+    readiness: article.evaluation.readiness.state,
+    ...(article.evaluation.readiness.reason ? { readinessReason: article.evaluation.readiness.reason } : {})
   }));
   process.stdout.write(`${JSON.stringify({ count: summary.length, articles: summary }, null, 2)}\n`);
 } catch (error) {

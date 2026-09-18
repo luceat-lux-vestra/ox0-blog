@@ -9,6 +9,7 @@ Each logical Article is stored as one directory:
 ```text
 posts/<article>/
   article.json
+  claim-proof.json   # required for READY, may be absent while still DRAFT
   ko-KR.md
   en.md
 ```
@@ -25,9 +26,15 @@ Translation synchronization is evidence-driven. Generating two locale files does
 
 ## Semantic readiness
 
-Article readiness is independent from translation state. Semantic review records an exact Article semantic-source fingerprint plus reviewed invalidations. A source/evidence change may recover as `REVIEW_REQUIRED` until reviewed again.
+Article readiness is independent from translation state. A reviewed Article requires both exact source evidence and durable claim proof.
+
+`claim-proof.json` classifies material claims, records source roles/counter-evidence, applies stronger recommendation proof, and records cross-claim/adversarial review PASS. Its covered translation fingerprints must match the exact current source.
+
+Readiness checkpoint v2 binds both the Article semantic-source fingerprint and claim-proof fingerprint. Source or proof changes recover as `REVIEW_REQUIRED` until reviewed again. A new Article may remain `DRAFT` before claim proof exists; claim proof becomes mandatory for READY.
 
 `SYNCED + READY` means the current Article is eligible for production planning. It does not authorize merge or publication.
+
+See `docs/article-claim-proof.md`.
 
 ## Markdown and compiler boundary
 

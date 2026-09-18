@@ -9,6 +9,10 @@ test('live Article verifier is draft-only and uses durable review contracts', ()
   assert.match(source, /origin: 'blog-audit'/);
   assert.match(source, /action: 'draft'/);
   assert.match(source, /DRAFT_CURRENT/);
+  assert.match(source, /claimProof: loaded[.]claimProof/);
+  assert.match(source, /claim-proof[.]json/);
+  assert.match(source, /beforeAcceptance[.]claimProof[.]state, 'PASS'/);
+  assert.match(source, /reviewedClaimProofFingerprint: beforeAcceptance[.]currentClaimProofFingerprint/);
 
   const synchronizationCalls = [...source.matchAll(/synchronizeArticlePublication\s*\(\s*\{/g)];
   assert.equal(synchronizationCalls.length, 1, 'live verifier must have exactly one Article synchronization call');

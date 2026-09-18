@@ -12,6 +12,7 @@ import {
   createArticleReadinessCheckpoint
 } from '../src/article-readiness.mjs';
 import { MarkedCompiler } from '../src/compiler/marked-compiler.mjs';
+import { writePassingClaimProof } from './helpers/claim-proof-fixture.mjs';
 import {
   TRANSLATION_REVIEW_CONTRACT_VERSION,
   createTranslationCheckpoint
@@ -115,14 +116,17 @@ async function makeReady(value) {
       reviewedFingerprints: evaluation.currentTranslationFingerprints
     }
   });
+  const claimProof = await writePassingClaimProof(value);
   const readinessCheckpoint = createArticleReadinessCheckpoint({
     sourceFingerprint: evaluation.articleSourceFingerprint,
+    claimProofFingerprint: claimProof.fingerprint,
     reviewedEpoch: 0,
     review: {
       result: 'PASS',
       kind: 'agent',
       contractVersion: ARTICLE_READINESS_REVIEW_CONTRACT_VERSION,
       reviewedSourceFingerprint: evaluation.articleSourceFingerprint,
+      reviewedClaimProofFingerprint: claimProof.fingerprint,
       reviewedInvalidationIds: []
     }
   });

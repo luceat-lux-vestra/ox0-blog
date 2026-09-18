@@ -9,6 +9,7 @@ import {
 } from '../src/article-readiness.mjs';
 import { serializeArticleManifest } from '../src/article-manifest.mjs';
 import { normalizeArticleBundle } from '../src/article-bundle.mjs';
+import { writePassingClaimProof } from './helpers/claim-proof-fixture.mjs';
 import { collectArticleManifestPaths, validateArticleRepository } from '../src/article-validation.mjs';
 import {
   TRANSLATION_REVIEW_CONTRACT_VERSION,
@@ -134,14 +135,20 @@ test('requireReady is a separate guard and does not redefine ordinary source val
       reviewedFingerprints: fingerprints
     }
   });
+  const claimProof = await writePassingClaimProof({
+    repoRoot,
+    manifestPath: loaded.manifestPath
+  });
   const readinessCheckpoint = createArticleReadinessCheckpoint({
     sourceFingerprint: loaded.evaluation.articleSourceFingerprint,
+    claimProofFingerprint: claimProof.fingerprint,
     reviewedEpoch: 0,
     review: {
       result: 'PASS',
       kind: 'agent',
       contractVersion: ARTICLE_READINESS_REVIEW_CONTRACT_VERSION,
       reviewedSourceFingerprint: loaded.evaluation.articleSourceFingerprint,
+      reviewedClaimProofFingerprint: claimProof.fingerprint,
       reviewedInvalidationIds: []
     }
   });

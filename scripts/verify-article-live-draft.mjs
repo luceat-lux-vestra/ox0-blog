@@ -102,8 +102,63 @@ async function currentEvaluation() {
     bundle: loaded.bundle,
     compiler: new MarkedCompiler(),
     repoRoot,
-    publicationByLocale: loaded.publicationByLocale
+    publicationByLocale: loaded.publicationByLocale,
+    claimProof: loaded.claimProof
   });
+}
+
+function verificationClaimProof(fingerprints) {
+  return {
+    version: 1,
+    coveredTranslationFingerprints: fingerprints,
+    claims: [{
+      id: 'live-draft-verifier-fixture',
+      kind: 'fact',
+      statement: 'This temporary Article is generated only to verify the live managed-draft workflow.',
+      evidence: [{
+        role: 'repository_evidence',
+        url: 'https://github.com/luceat-lux-vestra/ox0-blog',
+        relevance: 'The verifier and temporary Article fixture are defined by this repository.'
+      }],
+      counterEvidence: [],
+      counterEvidenceStatus: 'REVIEWED_NONE_FOUND',
+      counterEvidenceReview: 'Reviewed the bounded verifier fixture and its repository-owned purpose; no conflicting fixture evidence applies.',
+      recommendationBasis: null,
+      verdict: 'PASS'
+    }],
+    claimCoverage: {
+      verdict: 'PASS',
+      summary: 'Scanned the complete generated verifier source; it contains no architectural recommendation or external technical claim.',
+      checks: [
+        { id: 'material_claims_extracted', result: 'PASS' },
+        { id: 'recommendation_language_scanned', result: 'PASS' },
+        { id: 'responsibility_classifications_scanned', result: 'PASS' },
+        { id: 'examples_and_tutorials_scanned', result: 'PASS' }
+      ]
+    },
+    crossClaimConsistency: {
+      verdict: 'PASS',
+      summary: 'Checked the generated verifier fixture for internal claim consistency.',
+      checks: [
+        { id: 'examples_follow_rules', result: 'PASS' },
+        { id: 'descriptive_normative_separation', result: 'PASS' },
+        { id: 'responsibility_consistency', result: 'PASS' },
+        { id: 'dedicated_abstraction_boundary', result: 'PASS' },
+        { id: 'exceptions_not_defaults', result: 'PASS' }
+      ]
+    },
+    adversarialReview: {
+      verdict: 'PASS',
+      summary: 'Fresh pass challenged the verifier fixture claim, source role, alternatives, and possible overreach.',
+      checks: [
+        { id: 'strongest_claim_challenged', result: 'PASS' },
+        { id: 'recommendation_source_role_checked', result: 'PASS' },
+        { id: 'source_overreach_checked', result: 'PASS' },
+        { id: 'alternatives_checked', result: 'PASS' },
+        { id: 'expert_challenge_checked', result: 'PASS' }
+      ]
+    }
+  };
 }
 
 async function makeFixtureReady() {
@@ -129,7 +184,17 @@ async function makeFixtureReady() {
   });
   await writeFile(manifestPath, requested.manifestText, 'utf8');
 
+  const beforeProof = await currentEvaluation();
+  await writeFile(
+    path.join(articleDir, 'claim-proof.json'),
+    `${JSON.stringify(verificationClaimProof(beforeProof.currentTranslationFingerprints), null, 2)}\n`,
+    'utf8'
+  );
+
   const beforeAcceptance = await currentEvaluation();
+  assert.equal(beforeAcceptance.claimProof.state, 'PASS');
+  assert.ok(beforeAcceptance.currentClaimProofFingerprint);
+
   const accepted = await acceptArticleSemanticReview({
     manifestPath,
     repoRoot,
@@ -138,6 +203,7 @@ async function makeFixtureReady() {
       kind: 'agent',
       contractVersion: ARTICLE_READINESS_REVIEW_CONTRACT_VERSION,
       reviewedSourceFingerprint: beforeAcceptance.articleSourceFingerprint,
+      reviewedClaimProofFingerprint: beforeAcceptance.currentClaimProofFingerprint,
       reviewedInvalidationIds: [reviewId]
     }
   });
@@ -403,7 +469,7 @@ try {
       'explicit live-draft mutation opt-in',
       'clean exact-candidate git HEAD binding',
       'exact Ghost origin double-entry binding',
-      'temporary Article translation checkpoint and readiness review to SYNCED + READY',
+      'temporary Article translation checkpoint + exact claim-proof-bound readiness review to SYNCED + READY',
       'two-locale managed Ghost draft creation with fresh DRAFT_CURRENT recovery',
       'no publish operation executed',
       'ID/recovered-identity-bound temporary post cleanup',
