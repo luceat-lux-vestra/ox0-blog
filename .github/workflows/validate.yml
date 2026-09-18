@@ -77,7 +77,8 @@ jobs:
         run: |
           set -eu
           changed="$RUNNER_TEMP/article-preview-changed.txt"
-          git diff --name-only --find-renames "$BASE_SHA" "$EXPECTED_SHA" > "$changed"
+          merge_base="$(git merge-base "$BASE_SHA" "$EXPECTED_SHA")"
+          git diff --name-only --find-renames "$merge_base" "$EXPECTED_SHA" > "$changed"
 
           if grep -Eq '^(assets/|src/|scripts/build-article-preview[.]mjs$|package(-lock)?[.]json$|[.]github/workflows/validate[.]yml$)' "$changed"; then
             find posts -mindepth 2 -maxdepth 2 -type f -name article.json -print | sort -u > "$MANIFEST_LIST"
