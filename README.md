@@ -77,7 +77,7 @@ Planning may read Ghost ownership/collision/projection state but never writes Gh
 
 ## Pull-request Article preview
 
-Pull requests that change Article source, assets, or compiler/preview infrastructure can produce an exact-HEAD browser-review artifact through `.github/workflows/article-preview.yml`.
+Non-draft pull requests produce an exact-HEAD browser-review artifact through the `PR Article Preview` job in `.github/workflows/validate.yml` after normal validation succeeds.
 
 The workflow compiles the affected Article set through the repository compiler boundary and uploads one unarchived `article-preview.html` file. The Actions job summary links to that artifact; the file can be opened from the artifact UI for full-document review without mutating Ghost.
 
