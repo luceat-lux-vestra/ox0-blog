@@ -49,8 +49,8 @@
     "version": 1,
     "fingerprintVersion": 1,
     "accepted": {
-      "ko-KR": "sha256:2b1e431536d82f2fca9e12638d29b9427dffc15b0fed9a8255d2cabba41827ad",
-      "en": "sha256:d7cf2fc4b706fa5cc0b04a1a56033078644505daa07a499f383dcb7ae20c05f4"
+      "ko-KR": "sha256:39da9a368cc6732770cd52c4db959a75ef93a15bee85aebda769f326da9ff9d4",
+      "en": "sha256:1c3aa6cdc78966bfe57175cdcfba62156869915e727e38727b7e591385ee297d"
     },
     "review": {
       "kind": "agent",
@@ -60,9 +60,11 @@
   "readiness": {
     "epoch": 1,
     "checkpoint": {
-      "version": 1,
+      "version": 2,
       "sourceFingerprintVersion": 1,
-      "sourceFingerprint": "sha256:598147fa4b0b7bba53b2c2cd96bc738069b831306a92c1ad07e6f8907c7a86f0",
+      "sourceFingerprint": "sha256:30d273dec176e5aa2f6d483ae0688497ca591f0d3d7da3c04f866906dafab2ea",
+      "claimProofFingerprintVersion": 1,
+      "claimProofFingerprint": "sha256:a72705cdd16f065befbc737e9b73b507bdf9f9eab52538d24e059d3d0f490242",
       "priorReviewedEpoch": 1,
       "reviewedEpoch": 1,
       "resolvedInvalidationIds": [],
