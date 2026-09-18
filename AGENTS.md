@@ -32,7 +32,7 @@ At merge judgment, correctness/safety not proven is FAIL. `UNKNOWN`, `UNVERIFIED
 
 ## Publication boundary
 
-`발행 준비해` / `PREPARE_PUBLISH` is read-only with respect to Ghost and publication resource storage under contract v1: validate, resolve bounded read-only resource targets/current host approvals where applicable, fresh-read Ghost, and create a fresh publication plan. Ghost draft mutation requires an explicit draft-projection task. `발행해` authorizes production publication only after source/translation/public-resource/host-trust/identity/drift guards pass and does not implicitly authorize a pending Git merge.
+`발행 준비해` / `PREPARE_PUBLISH` is read-only with respect to Ghost and publication resource storage under contract v1: validate, resolve bounded read-only resource targets/current host approvals where applicable, fresh-read Ghost, and create a fresh publication plan. Ghost draft mutation normally requires an explicit draft-projection task; the approved exception is the repository-owned post-merge automation that projects a newly added canonical `READY + SYNCED` Article to managed Ghost drafts only. `발행해` authorizes production publication only after source/translation/public-resource/host-trust/identity/drift guards pass and does not implicitly authorize a pending Git merge.
 
 A prior PublicationPlan or prior host external-resource approval is not durable mutation authority. If source, resource target, host-policy evidence, or Ghost state changed—or the task/session was lost—re-plan before any new write.
 

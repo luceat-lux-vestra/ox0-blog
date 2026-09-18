@@ -155,6 +155,8 @@ Examples: `merge 판단 들어가`, `merge해`.
 
 This explicitly permits entering `MERGE_REVIEW`; `merge해` also authorizes the squash merge only if every exact-HEAD proof obligation passes. A failed/unknown gate remains blocked.
 
+For a newly added canonical Article, a successful merge may trigger the repository-approved non-production auto-draft policy. That automation is limited to exact pushed `main` source, requires `SYNCED + READY`, and may create managed Ghost drafts. It is not production publication authorization.
+
 ### `PREPARE_PUBLISH`
 
 Example: `발행 준비해`.
@@ -163,7 +165,7 @@ This is **read-only with respect to Ghost and publication resource storage by de
 
 Preparation must not create/update a Ghost draft, publish a post, or upload/mutate publication resources merely as a side effect. A host `plan` operation may inspect provider state but must remain read-only.
 
-A Ghost draft mutation requires a task that actually authorizes draft projection (for example, an explicit request to create/update a Ghost draft). It is still not production publication.
+A Ghost draft mutation normally requires a task that authorizes draft projection (for example, an explicit request to create/update a Ghost draft). The approved exception is `.github/workflows/article-auto-draft.yml`: when a new Article manifest is added to canonical `main`, it may synchronize that exact `SYNCED + READY` Article to managed drafts under the shared Ghost mutation lock. It never authorizes or performs production publication.
 
 ### `PUBLISH`
 

@@ -308,7 +308,8 @@ Host/resource-policy approval evidence is operation evidence, not durable public
 | From | Event | Guard / preconditions | Deterministic side effects | Semantic / agent review | To | User authorization required? |
 |---|---|---|---|---|---|---|
 | any non-reconciliation state | prepare/dry-run | source/translation/resource validation PASS; current host resource policy can be evaluated where applicable | resolve bounded resource targets/approvals; fresh-read Ghost; emit bounded plan; no write | inspect collision/ownership/publication intent and unresolved resource trust | unchanged | no |
-| NOT_PROJECTED | authorized draft projection | active task authorizes Ghost draft mutation; public-resource safety + plan/identity guards PASS | create managed draft; fresh-read verify | verify privacy/public-content policy | DRAFT_CURRENT | **yes for Ghost draft mutation** |
+| NOT_PROJECTED | authorized draft projection | active task authorizes Ghost draft mutation; public-resource safety + plan/identity guards PASS | create managed draft; fresh-read verify | verify privacy/public-content policy | DRAFT_CURRENT | **yes for ad-hoc Ghost draft mutation** |
+| NOT_PROJECTED | newly added canonical Article merged under approved auto-draft policy | exact pushed `main` source; manifest is newly added in that push; Article `READY`; translation `SYNCED`; repository/source guards PASS | synchronize managed drafts only; fresh-read verify | semantic/privacy review is already represented by exact readiness evidence | DRAFT_CURRENT | **no additional authorization; repository policy pre-authorizes this non-production automation** |
 | OUTDATED(DRAFT) | authorized draft refresh | active task authorizes Ghost draft mutation; public-resource safety + plan/identity guards PASS | update existing managed draft without publishing; fresh-read verify | review intended draft source | DRAFT_CURRENT | **yes for Ghost draft mutation** |
 | NOT_PROJECTED / DRAFT_CURRENT / OUTDATED(DRAFT) / OUTDATED(PUBLISHED) | production publish | Article READY for canonical production source; translation SYNCED; source canonical; public-resource safety PASS; every required external publication resource has current host approval bound to fresh plan; identity/drift guards PASS | create/publish or update managed public post; fresh-read verify | publication content/identity/resource checks PASS | PUBLISHED_CURRENT | **yes: explicit production publication authorization** |
 | DRAFT_CURRENT | targeted draft source/projection fingerprint changes | uniquely owned draft exists | no Ghost write; recompute relation | none | OUTDATED(DRAFT) | no |
@@ -338,7 +339,7 @@ If one locale succeeds and another fails:
 7. after task/session loss, do **not** infer production authorization or reuse old host-policy evidence from the partial state—require fresh planning and a fresh explicit publication instruction unless a durable automation policy exists;
 8. never adopt/overwrite an ambiguous unmanaged post to complete the set.
 
-A Git merge never automatically transitions a Ghost projection to `PUBLISHED_CURRENT`.
+A Git merge never automatically transitions a Ghost projection to `PUBLISHED_CURRENT`. A newly added `READY + SYNCED` Article may, however, transition from `NOT_PROJECTED` to `DRAFT_CURRENT` through the approved post-merge auto-draft workflow.
 
 ---
 
@@ -407,7 +408,7 @@ Examples:
   -> PUBLISH              # explicit production authorization
 ```
 
-Conversation events never bypass repository guards. `PUBLISH` does not implicitly authorize `MERGE`, and `MERGE` does not imply `PUBLISH`.
+Conversation events never bypass repository guards. `PUBLISH` does not implicitly authorize `MERGE`, and `MERGE` does not imply `PUBLISH`. Repository policy may attach the bounded non-production side effect `new canonical Article -> managed draft` to a successful merge without converting merge intent into production-publication intent.
 
 ---
 
