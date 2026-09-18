@@ -40,6 +40,7 @@ A prior PublicationPlan or prior host external-resource approval is not durable 
 
 - Technical claims must be traceable to evidence. Distinguish measurement, observation, inference, and opinion.
 - Any Blog mutation derived from private/non-public Conversation or RTA material must pass the `PUBLIC_SANITIZATION` gate in `docs/workflow/integrations.md` before the first durable public write and again after material content changes.
+- Any concrete example used in such work must also pass `PUBLIC_EXAMPLE_RESEARCH`: perform fresh public-web research, independently construct the example from public evidence where available, and never reuse a private scenario through superficial renaming or structural paraphrase.
 - Do not publish credentials, personal secrets, private/customer/company details, raw chat transcripts, private provenance, or organization-specific implementation identifiers merely because they appeared in source Conversation/RTA context.
 - Preserve publisher-owned `#ox0-*` state tags; authors must not add them manually.
 - Never put Ghost Admin credentials in source, logs, examples, issues, or pull requests.

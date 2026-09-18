@@ -69,6 +69,23 @@ Synthesize one or more RTA items into a public Article. A Blog mutation sourced 
 7. re-run the gate after material content changes; and
 8. fail closed when public safety is `UNKNOWN`, `UNVERIFIED`, or supported by `INSUFFICIENT EVIDENCE`.
 
+### PUBLIC_EXAMPLE_RESEARCH gate
+
+When a Blog mutation sourced from private/non-public Conversation or RTA material needs a concrete example, `PUBLIC_EXAMPLE_RESEARCH` is mandatory before drafting that example and before the first durable public write containing it.
+
+`PUBLIC_EXAMPLE_RESEARCH` requires:
+
+1. perform a fresh public-web research pass for the example, even when the private source already contains a usable-looking scenario;
+2. construct the example from public evidence such as official documentation, public engineering material, or public OSS examples when available;
+3. do not sanitize a private example by merely renaming identifiers, components, services, fields, or actors;
+4. do not preserve the same distinctive combination of roles, data flow, component boundaries, identifiers, or scenario structure from the private source merely with different names;
+5. if fresh research does not produce a suitable public example, use an explicitly synthetic, minimal example that does not reproduce the private scenario;
+6. keep the engineering thesis that justified the example separate from the example's provenance: the thesis may come from private research, but the concrete public example must be independently constructed;
+7. review the final public diff/body and answer: **Could this exact example reasonably have been constructed without access to the private source?**; and
+8. treat `NO`, `UNKNOWN`, `UNVERIFIED`, or `INSUFFICIENT EVIDENCE` for that provenance check as **FAIL**. Do not make the public mutation until the example is replaced or justified from public research.
+
+Material changes to a concrete example require a fresh `PUBLIC_EXAMPLE_RESEARCH` review before the next durable public mutation.
+
 A blog article is a public synthesis, not the authoritative research record. Private details may remain in RTA under its own policy while the Blog retains only the generalized publishable result.
 
 Creating the Article does not change the source RTA item's lifecycle. Adding a downstream-publication link back to RTA is a separate RTA mutation and must follow the active task's authorization and RTA governance.
