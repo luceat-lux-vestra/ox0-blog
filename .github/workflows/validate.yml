@@ -38,3 +38,109 @@ jobs:
         run: npm test
       - name: Validate Article sources
         run: npm run validate
+  preview:
+    name: PR Article Preview
+    needs: validate
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && needs.validate.result == 'success'
+    runs-on: ubuntu-24.04
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+      PREVIEW_FILE: ${{ runner.temp }}/article-preview.html
+      MANIFEST_LIST: ${{ runner.temp }}/article-preview-manifests.txt
+    steps:
+      - name: Check out exact pull request head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ env.EXPECTED_SHA }}
+
+      - name: Verify exact checkout and base
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git cat-file -e "$BASE_SHA^{commit}"
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Select affected Articles
+        id: discover
+        run: |
+          set -eu
+          changed="$RUNNER_TEMP/article-preview-changed.txt"
+          git diff --name-only --find-renames "$BASE_SHA" "$EXPECTED_SHA" > "$changed"
+
+          if grep -Eq '^(assets/|src/|scripts/build-article-preview[.]mjs$|package(-lock)?[.]json$|[.]github/workflows/validate[.]yml$)' "$changed"; then
+            find posts -mindepth 2 -maxdepth 2 -type f -name article.json -print | sort -u > "$MANIFEST_LIST"
+          else
+            awk -F/ '$1 == "posts" && NF >= 3 { print $1 "/" $2 "/article.json" }' "$changed" \
+              | sort -u \
+              | while IFS= read -r manifest; do
+                  [ -f "$manifest" ] && printf '%s\n' "$manifest"
+                done > "$MANIFEST_LIST"
+          fi
+
+          if [ -s "$MANIFEST_LIST" ]; then
+            echo 'has_articles=true' >> "$GITHUB_OUTPUT"
+            echo 'Selected Article manifests:'
+            cat "$MANIFEST_LIST"
+          else
+            echo 'has_articles=false' >> "$GITHUB_OUTPUT"
+            echo 'No current Article manifests require preview.'
+          fi
+
+      - name: Build exact-HEAD HTML preview
+        if: steps.discover.outputs.has_articles == 'true'
+        env:
+          RESOURCE_BASE_URL: https://raw.githubusercontent.com/${{ env.HEAD_REPOSITORY }}/${{ env.EXPECTED_SHA }}/
+        run: |
+          set -eu
+          npm run preview:articles -- \
+            --output "$PREVIEW_FILE" \
+            --resource-base-url "$RESOURCE_BASE_URL" \
+            --source-revision "$EXPECTED_SHA" \
+            --manifest-list "$MANIFEST_LIST"
+
+      - name: Upload browser-review HTML
+        if: steps.discover.outputs.has_articles == 'true'
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: ${{ env.PREVIEW_FILE }}
+          archive: false
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Publish preview summary
+        if: always()
+        env:
+          HAS_ARTICLES: ${{ steps.discover.outputs.has_articles }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        run: |
+          {
+            echo '## PR Article Preview'
+            echo
+            echo "Exact HEAD: $EXPECTED_SHA"
+            echo
+            if [ "$HAS_ARTICLES" = 'true' ]; then
+              echo "[Open Article preview artifact]($ARTIFACT_URL)"
+              echo
+              echo 'Open article-preview.html from the artifact view to review the complete rendered candidate.'
+              echo
+              echo '### Included manifests'
+              while IFS= read -r manifest; do
+                [ -n "$manifest" ] && echo "- $manifest"
+              done < "$MANIFEST_LIST"
+            else
+              echo 'No current Article manifest required preview for this pull request.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
