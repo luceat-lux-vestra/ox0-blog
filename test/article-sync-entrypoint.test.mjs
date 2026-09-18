@@ -1,0 +1,76 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+
+const SYNC_SCRIPT_URL = new URL('../scripts/sync-article.mjs', import.meta.url);
+const SYNC_SCRIPT = fileURLToPath(SYNC_SCRIPT_URL);
+
+function run(args, extraEnv = {}) {
+  return spawnSync(process.execPath, [SYNC_SCRIPT, ...args], {
+    env: {
+      ...process.env,
+      GHOST_ADMIN_URL: 'https://invalid.example',
+      GHOST_ADMIN_API_KEY: `test:${'11'.repeat(32)}`,
+      ...extraEnv
+    },
+    encoding: 'utf8',
+    timeout: 5000
+  });
+}
+
+function stderrJson(result) {
+  assert.notEqual(result.status, 0);
+  return JSON.parse(result.stderr);
+}
+
+test('target publish CLI requires external authorization before source or Ghost work', () => {
+  const result = run(['posts/missing/article.json', 'publish'], {
+    OX0_ARTICLE_PUBLICATION_AUTHORIZATION_JSON: ''
+  });
+  const error = stderrJson(result);
+  assert.match(error.message, /requires OX0_ARTICLE_PUBLICATION_AUTHORIZATION_JSON/);
+  assert.doesNotMatch(result.stderr, /ENOTFOUND|fetch failed|invalid\.example/);
+});
+
+test('target publish CLI parses authorization with strict duplicate-key rejection', () => {
+  const result = run(['posts/missing/article.json', 'publish'], {
+    OX0_ARTICLE_PUBLICATION_AUTHORIZATION_JSON: '{"version":1,"version":1}'
+  });
+  const error = stderrJson(result);
+  assert.match(error.message, /duplicate JSON object key: version/);
+  assert.doesNotMatch(result.stderr, /ENOTFOUND|fetch failed|invalid\.example/);
+});
+
+test('target publish CLI rejects malformed authorization shape before source or Ghost planning', () => {
+  for (const raw of [
+    '{}',
+    '{"version":2,"kind":"explicit-production-publication","articleId":"a","sourceFingerprints":{"en":"sha256:1111111111111111111111111111111111111111111111111111111111111111"}}',
+    '{"version":1,"kind":"wrong","articleId":"a","sourceFingerprints":{"en":"sha256:1111111111111111111111111111111111111111111111111111111111111111"}}',
+    '{"version":1,"kind":"explicit-production-publication","articleId":"a","sourceFingerprints":{"en":"bad"}}'
+  ]) {
+    const result = run(['posts/missing/article.json', 'publish'], {
+      OX0_ARTICLE_PUBLICATION_AUTHORIZATION_JSON: raw
+    });
+    stderrJson(result);
+    assert.doesNotMatch(result.stderr, /ENOENT|ENOTFOUND|fetch failed|invalid\.example/);
+  }
+});
+
+test('draft CLI rejects a production authorization envelope instead of silently ignoring it', () => {
+  const result = run(['posts/missing/article.json', 'draft'], {
+    OX0_ARTICLE_PUBLICATION_AUTHORIZATION_JSON: '{}'
+  });
+  const error = stderrJson(result);
+  assert.match(error.message, /only valid for publish/);
+  assert.doesNotMatch(result.stderr, /ENOTFOUND|fetch failed|invalid\.example/);
+});
+
+test('low-level publish CLI pins the same production mode guard used by the manual workflow', async () => {
+  const source = await readFile(SYNC_SCRIPT_URL, 'utf8');
+  assert.match(source, /prepareArticlePublicationOperation\(common\)/);
+  assert.match(source, /productionPublishModeForPlan\(prepared\.plan\)/);
+  assert.match(source, /requireProductionPublishMode\(plan, productionMode\)/);
+  assert.match(source, /publicationPlanGuard/);
+});
