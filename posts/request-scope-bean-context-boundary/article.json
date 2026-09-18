@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "articleId": "request-scope-bean-context-boundary",
+  "requiredLocales": [
+    "ko-KR",
+    "en"
+  ],
+  "variants": [
+    {
+      "variantId": "request-scope-bean-context-boundary-ko",
+      "locale": "ko-KR",
+      "source": "ko-KR.md",
+      "title": "RequestScopeBean은 대안인가, 또 다른 전역 상태인가",
+      "excerpt": "파라미터 릴레이, DTO 오염, 요청 컨텍스트 사이에서 RequestScopeBean을 어디까지 허용할지 판단하는 기준을 정리한다.",
+      "slug": "request-scope-bean-context-boundary",
+      "publication": {
+        "tags": [
+          "Engineering",
+          "Spring"
+        ],
+        "featureImage": null,
+        "featureImageAlt": null,
+        "featured": false,
+        "visibility": "public",
+        "canonicalUrl": null
+      }
+    },
+    {
+      "variantId": "request-scope-bean-context-boundary-en",
+      "locale": "en",
+      "source": "en.md",
+      "title": "Is RequestScopeBean an Alternative, or Just Another Global State?",
+      "excerpt": "A practical boundary for choosing between explicit parameters, DTOs, and request-scoped context in Spring applications.",
+      "slug": "request-scope-bean-context-boundary-en",
+      "publication": {
+        "tags": [
+          "Engineering",
+          "Spring"
+        ],
+        "featureImage": null,
+        "featureImageAlt": null,
+        "featured": false,
+        "visibility": "public",
+        "canonicalUrl": null
+      }
+    }
+  ],
+  "translationCheckpoint": {
+    "version": 1,
+    "fingerprintVersion": 1,
+    "accepted": {
+      "ko-KR": "sha256:4f1c50448b068792f81b10042ee892dec48404b47143d2d7f238e12cd964b290",
+      "en": "sha256:a6049cc3f275e5746d536f66f1939d7cfcf63706a616cb6e7dc63ccc15bfc376"
+    },
+    "review": {
+      "kind": "agent",
+      "contractVersion": 1
+    }
+  },
+  "readiness": {
+    "epoch": 1,
+    "checkpoint": {
+      "version": 1,
+      "sourceFingerprintVersion": 1,
+      "sourceFingerprint": "sha256:8e454b8975b498517927277c7817f40bc8f81f3771b1870fb948dbe4ac2e5fc6",
+      "priorReviewedEpoch": 0,
+      "reviewedEpoch": 1,
+      "resolvedInvalidationIds": [
+        "e7f3b7a9-4ece-4274-9d4a-d38dac3d8b52"
+      ],
+      "review": {
+        "kind": "agent",
+        "contractVersion": 1
+      }
+    },
+    "invalidations": []
+  }
+}
