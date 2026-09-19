@@ -70,7 +70,7 @@ A generic production `publish` mutation requires all of:
 - authorization `articleId` equal to the prepared Article;
 - authorization source fingerprint for every required locale equal to the exact prepared projection source fingerprint.
 
-The publication library does not create that authorization assertion itself. Doing so would let repository mechanics manufacture evidence of user intent. The conversation/control layer owns the statement “the user explicitly requested production publication”.
+The publication library does not create that authorization assertion itself. Doing so would let repository mechanics manufacture evidence of user intent. A trusted external control surface owns that statement: normally the exact reviewed merge-to-`main` event for affected Articles, or an explicit manual recovery dispatch.
 
 The authorization object is ephemeral. It is not persisted in `article.json`, Ghost, Git, or RTA.
 
@@ -207,15 +207,18 @@ Each locale still gets low-level safeguards such as:
 
 Sequential mutation does not imply transactionality across Ghost posts. The orchestration therefore treats partial failure as a first-class state rather than pretending distributed rollback exists.
 
-## Automatic first-draft control surface
+## Automatic PR-draft and main-publish control surface
 
-`.github/workflows/article-auto-draft.yml` is a separate non-production control surface. It runs only for `main` pushes that add a new canonical Article manifest, validates every selected exact pushed source as `SYNCED + READY`, confirms that pushed SHA is still current `main`, read-only plans every selected Ghost draft before any write, and only then invokes the normal guarded Article synchronization library with `action=draft` under the shared Ghost mutation lock.
+`.github/workflows/article-publication-lifecycle.yml` separates candidate staging from production authorization.
 
-This automation deliberately stops at managed draft projection. It does not construct a production authorization envelope, does not call the `publish` action, and does not change the first-publication `draft-promotion` requirement. Consequently, the later explicit production publish still observes exact-current managed drafts and promotes them by status change only.
+On same-repository pull requests it runs trusted base tooling against the exact PR Article data and may create/update managed drafts only for newly added `SYNCED + READY` Articles. Candidate executable code is not run with Ghost credentials. Existing published revisions stay public and use the HTML preview during review.
 
-Existing Article revisions are excluded from this automatic first-draft path. Already-published Articles therefore remain on the published-revision workflow and are never pushed back to draft by a routine merge.
+On the corresponding `main` push, the exact affected Article bundles are revalidated and fresh production plans are classified. The merge event supplies production intent; the control surface creates the exact-source authorization envelope only after all merge-time checks pass. First publication remains `draft-promotion`, so an Article that should have been staged as a PR draft cannot silently widen into first-create production publication. Existing managed published revisions use `published-revision` and stay public.
 
-## Manual production control surface
+The workflow allows an unrelated later `main` commit only when the selected Article directory is unchanged. If that Article changed again, the older run fails closed and the later Article-changing push owns publication.
+
+After every selected locale has post-verified as `PUBLISHED_CURRENT`, the workflow may emit a `blog-publication` repository dispatch to refresh the GitHub profile Publications projection. That downstream profile refresh never authorizes or repairs Ghost publication.
+## Manual production recovery/control surface
 
 `.github/workflows/article-ghost.yml` is the target manual GitHub Actions control surface. It is `workflow_dispatch` only and operates only on the exact current `main` SHA supplied as `source_sha`.
 

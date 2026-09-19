@@ -85,10 +85,10 @@ create Article manifest + locale Markdown
 → validate
 → translation review/checkpoint
 → semantic readiness review
-→ plan-draft
-→ draft
-→ plan-publish
-→ explicit publish
+→ same-repository PR
+→ trusted workflow stages managed draft
+→ explicit merge judgment + PASS + squash merge
+→ automatic exact-merge production publish
 ```
 
 An already-published Article revision remains public:
@@ -96,8 +96,9 @@ An already-published Article revision remains public:
 ```text
 edit source
 → revalidate/review as needed
-→ plan-publish
-→ explicit published-revision update
+→ PR HTML preview (published post remains live)
+→ explicit merge judgment + PASS + squash merge
+→ automatic exact-merge published-revision update
 ```
 
 It is not temporarily unpublished merely to stage an edit.
@@ -114,6 +115,6 @@ Repository validation checks the complete Article corpus and rejects unclaimed M
 
 ## Publication authorization
 
-`draft|publish` is an explicit operation. Production publication authorization is task-scoped under `docs/workflow/`; it is not stored in `article.json`, inferred from Article readiness, recovered from Ghost status, or implied by merge state.
+`draft|publish` remains an explicit low-level operation. Production publication authorization is not stored in `article.json`, inferred from Article readiness, or recovered from Ghost status. It comes either from an explicit manual/recovery publication task or from the approved Article lifecycle, where an explicitly authorized exact-HEAD Article merge that PASSes and is successfully squash-merged authorizes publication of that exact affected merged source.
 
 See `docs/article-manifest-v1.md`, `docs/article-review-operations.md`, `docs/article-operations.md`, and `docs/article-publication.md` for the detailed contracts.

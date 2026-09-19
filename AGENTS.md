@@ -18,8 +18,8 @@ Then recover current repository, Article, RTA, PR, and Ghost-related state relev
 - Article bundles under `posts/<article>/` are canonical public-content source; Ghost is a projection target, not an editing source.
 - `research-to-action` owns research/evidence/promotion governance. RTA state does not authorize Blog publication or project mutation.
 - The user normally supplies intent and material decisions. The agent owns routine editing, translation synchronization/review/checkpoints, Git/PR mechanics, validation, and authorized Ghost mechanics.
-- Production publication requires an explicit publication instruction unless a separately approved automation policy exists.
-- Merge/merge-judgment authorization and production-publication authorization are separate and task-scoped. Do not infer either from recovered PR/Ghost state after task/session loss.
+- Production publication requires an explicit publication instruction unless a separately approved automation policy exists. The approved Article lifecycle treats a successfully reviewed/squash-merged Article PR as production authorization for the exact affected merged source.
+- Merge/merge-judgment authorization remains task-scoped. Outside the approved merge-publication automation, production-publication authorization is separate and must not be inferred from recovered PR/Ghost state after task/session loss.
 - Production publication authorization does not substitute for current public-resource safety or required host trust for external publication resources. Recompute plan-bound resource targets/approvals from current source/current host policy after task/session loss.
 
 ## Development and merge policy
@@ -32,7 +32,7 @@ At merge judgment, correctness/safety not proven is FAIL. `UNKNOWN`, `UNVERIFIED
 
 ## Publication boundary
 
-`발행 준비해` / `PREPARE_PUBLISH` is read-only with respect to Ghost and publication resource storage under contract v1: validate, resolve bounded read-only resource targets/current host approvals where applicable, fresh-read Ghost, and create a fresh publication plan. Ghost draft mutation normally requires an explicit draft-projection task; the approved exception is the repository-owned post-merge automation that projects a newly added canonical `READY + SYNCED` Article to managed Ghost drafts only. `발행해` authorizes production publication only after source/translation/public-resource/host-trust/identity/drift guards pass and does not implicitly authorize a pending Git merge.
+`발행 준비해` / `PREPARE_PUBLISH` is read-only with respect to Ghost and publication resource storage under contract v1: validate, resolve bounded read-only resource targets/current host approvals where applicable, fresh-read Ghost, and create a fresh publication plan. For same-repository PRs, the approved lifecycle may stage a newly added `READY + SYNCED` Article as a managed Ghost draft using trusted base tooling. When that exact Article PR is later squash-merged after the merge gate passes, the reviewed merge authorizes production publication of the exact affected merged source. `발행해` remains the explicit manual/recovery publication command and does not implicitly authorize a pending Git merge.
 
 A prior PublicationPlan or prior host external-resource approval is not durable mutation authority. If source, resource target, host-policy evidence, or Ghost state changed—or the task/session was lost—re-plan before any new write.
 

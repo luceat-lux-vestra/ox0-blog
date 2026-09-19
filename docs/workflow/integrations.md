@@ -20,7 +20,7 @@ An observed relationship or useful signal does not itself authorize mutation of 
 - A request to capture/update RTA authorizes the requested RTA mutation, not Blog authoring/publication.
 - Reading Blog or RTA as conversational context is read-only unless the active task requests a durable change.
 - A compound request may authorize multiple edges explicitly in one task.
-- Production publication and Git merge remain their own explicit authorization boundaries under the Blog workflow contract.
+- Production publication and Git merge are separate by default. The approved Article lifecycle is the bounded exception: once an Article PR has explicit merge authorization and exact-HEAD merge PASS, that successful merge authorizes production publication of the exact affected merged Article source.
 
 When a read-only task discovers a useful cross-system consequence, the agent may surface or retain it as an in-task signal. Durable mutation of the other repository requires that edge to be authorized by the task/policy. Do not turn “this would be useful to record” into an implicit cross-repository write.
 
@@ -28,7 +28,7 @@ When a read-only task discovers a useful cross-system consequence, the agent may
 
 Direct authoring/update path. RTA is optional.
 
-The agent extracts a public-safe thesis from the conversation, verifies changing facts when needed, creates/updates the Article, synchronizes locales, handles Git/PR, and stops before production publication unless explicitly authorized.
+The agent extracts a public-safe thesis from the conversation, verifies changing facts when needed, creates/updates the Article, synchronizes locales, and handles Git/PR. Production publication requires either an explicit manual publication instruction or the approved reviewed-Article-merge automation.
 
 If reusable research is discovered but RTA mutation was not authorized, it may be surfaced as a candidate routing signal rather than silently creating/updating an RTA issue.
 
@@ -174,4 +174,4 @@ Conversation -> RTA -> Blog
 
 Choose the shortest route that preserves correct ownership/provenance; do not force a central workflow engine.
 
-The compound request authorizes only the edges it actually requests. It still does not implicitly authorize RTA promotion, Git merge, or production Blog publication.
+The compound request authorizes only the edges it actually requests. It still does not implicitly authorize RTA promotion or Git merge. Production Blog publication is authorized only by an explicit publication instruction or, after a separately explicit merge authorization and PASS, by the approved exact-merge Article automation.

@@ -4,6 +4,8 @@ import {
   PRODUCTION_PUBLISH_MODE,
   productionPublishModeForPlan,
   publicationAuthorizationForDispatchPlan,
+  publicationAuthorizationForPlan,
+  requireArticleMainPushContext,
   requireArticleWorkflowDispatchContext,
   requireExactCurrentDraftsForProduction,
   requireProductionPublishMode
@@ -358,4 +360,53 @@ test('workflow dispatch authorization rejects non-publish contexts and malformed
     })),
     /source fingerprint is invalid/
   );
+});
+
+test('main-push control binds production intent to exact main push and canonical Article path', () => {
+  assert.deepEqual(requireArticleMainPushContext({
+    actions: 'true',
+    eventName: 'push',
+    ref: 'refs/heads/main',
+    sha: SHA,
+    expectedSha: SHA,
+    manifestRef: MANIFEST
+  }), {
+    sourceSha: SHA,
+    manifestRef: MANIFEST,
+    action: 'publish',
+    productionPublish: true
+  });
+});
+
+test('main-push control fails closed outside exact main push execution', () => {
+  const base = {
+    actions: 'true',
+    eventName: 'push',
+    ref: 'refs/heads/main',
+    sha: SHA,
+    expectedSha: SHA,
+    manifestRef: MANIFEST
+  };
+  const cases = [
+    [{ actions: 'false' }, /requires GitHub Actions/],
+    [{ eventName: 'workflow_dispatch' }, /requires push/],
+    [{ ref: 'refs/heads/feature' }, /only from refs\/heads\/main/],
+    [{ sha: 'b'.repeat(40) }, /exact main push SHA/],
+    [{ manifestRef: '../article.json' }, /workflow manifest path/]
+  ];
+  for (const [overrides, pattern] of cases) {
+    assert.throws(() => requireArticleMainPushContext({ ...base, ...overrides }), pattern);
+  }
+});
+
+test('generic production authorization is plan-bound and reusable by trusted control surfaces', () => {
+  assert.deepEqual(publicationAuthorizationForPlan(publishPlan()), {
+    version: 1,
+    kind: 'explicit-production-publication',
+    articleId: 'article-1',
+    sourceFingerprints: {
+      'ko-KR': fingerprint('1'),
+      en: fingerprint('2')
+    }
+  });
 });

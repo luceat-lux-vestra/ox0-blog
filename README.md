@@ -26,8 +26,8 @@ Every Markdown file under `posts/` must be owned by an Article manifest. The for
 - Translation synchronization, Article semantic readiness, Git state, Ghost projection state, and RTA state are independent.
 - Translation generation alone never produces `SYNCED`; an exact-current review checkpoint is required.
 - Article `READY` never implies merge or production-publication authorization.
-- Production publication authorization is explicit, task-scoped, and bound to the exact Article plus every required locale projection fingerprint.
-- Pull-request validation never mutates Ghost. A newly added canonical `READY + SYNCED` Article merged to `main` is automatically synchronized to managed Ghost drafts; this automation never publishes.
+- Production publication authorization is supplied by a trusted control surface and bound to the exact Article plus every required locale projection fingerprint. A reviewed merge to `main` authorizes publication of the exact affected Article source; manual dispatch remains an explicit recovery/operations path.
+- The normal PR validation workflow never mutates Ghost. A separate trusted `pull_request_target` publication workflow may stage **new same-repository `READY + SYNCED` Articles** as managed Ghost drafts; PR executable code is never run with Ghost secrets.
 - Planning is read-only with respect to Ghost and publication resource storage.
 - Draft preparation is a real mutation and may prepare body assets or upload a local feature image.
 - Published Articles are updated in place; they are never temporarily unpublished merely to stage a revision.
@@ -95,12 +95,17 @@ The preview operation is source/compiler-neutral above the `DocumentCompiler` bo
 
 See `docs/article-preview.md`.
 
-## Automatic post-merge draft projection
+## Automatic Article publication lifecycle
 
-`.github/workflows/article-auto-draft.yml` runs on `main` pushes that touch `posts/**`. It identifies only Article manifests newly added by that exact push, reruns tests and repository validation, requires each selected Article to recover as `translation=SYNCED` and `readiness=READY`, then executes `sync:article ... draft` under the shared Ghost mutation lock.
+`.github/workflows/article-publication-lifecycle.yml` owns the normal Article projection lifecycle.
 
-This is an approved non-production automation policy. It never constructs production publication authorization, never requests `published` status, and does not auto-stage already-published Article revisions.
+For same-repository non-draft pull requests, it executes only trusted base-branch tooling, treats the exact PR head as Article/source data, and stages **newly added** `READY + SYNCED` Articles as managed Ghost drafts. Existing published Article revisions continue to use the PR HTML preview instead of being unpublished or rewritten as drafts.
 
+For `main` pushes that touch Article bundles, the workflow selects only Articles affected by that exact push, re-runs tests and readiness validation, proves that the selected Article directories have not changed on a later `main` commit, fresh-plans every production transition, and then publishes with mode pinning plus normal `PUBLISHED_CURRENT` post-verification.
+
+The merge is the normal production authorization boundary. The manual workflow remains available for recovery and operator-controlled retries.
+
+After every successful automatic publication batch, the workflow emits a `blog-publication` repository dispatch to the GitHub profile updater when `PROFILE_REPO_DISPATCH_TOKEN` is configured. The profile repository's own schedule remains the fallback.
 ## Manual GitHub Actions control surface
 
 `.github/workflows/article-ghost.yml` is `workflow_dispatch` only. Inputs are:
