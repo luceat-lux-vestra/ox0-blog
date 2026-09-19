@@ -134,3 +134,24 @@ jobs:
           GHOST_ADMIN_API_KEY: ${{ secrets.GHOST_ADMIN_API_KEY }}
           OX0_HOST_RUNTIME_MODULE: ${{ vars.OX0_HOST_RUNTIME_MODULE }}
         run: node scripts/workflow-dispatch-article.mjs "$MANIFEST_PATH"
+
+      - name: Trigger profile Publications refresh
+        if: inputs.operation == 'publish'
+        env:
+          PROFILE_REPO_DISPATCH_TOKEN: ${{ secrets.PROFILE_REPO_DISPATCH_TOKEN }}
+        run: |
+          set -eu
+          if [ -z "$PROFILE_REPO_DISPATCH_TOKEN" ]; then
+            echo '::warning::PROFILE_REPO_DISPATCH_TOKEN is not configured; profile schedule remains the fallback.'
+            exit 0
+          fi
+          payload="$(
+            python3 -c 'import json, os; print(json.dumps({"event_type":"blog-publication","client_payload":{"source_sha":os.environ["OX0_ARTICLE_SOURCE_SHA"],"manifests":[os.environ["MANIFEST_PATH"]],"trigger":"manual-publish"}}))'
+          )"
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $PROFILE_REPO_DISPATCH_TOKEN" \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            --data "$payload" \
+            "https://api.github.com/repos/luceat-lux-vestra/luceat-lux-vestra/dispatches"

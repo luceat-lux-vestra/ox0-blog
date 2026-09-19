@@ -85,3 +85,17 @@ test('target manual workflow invokes only Article control surfaces', async () =>
     assert.equal(workflow.includes(marker), false, `target workflow must not invoke ${marker}`);
   }
 });
+
+test('manual publish refreshes profile only after the guarded publish succeeds', async () => {
+  const workflow = await source('../.github/workflows/article-ghost.yml');
+  assert.match(workflow, /name: Trigger profile Publications refresh/);
+  assert.match(workflow, /if: inputs\.operation == 'publish'/);
+  assert.match(workflow, /PROFILE_REPO_DISPATCH_TOKEN/);
+  assert.match(workflow, /"event_type":"blog-publication"/);
+  assert.match(workflow, /"trigger":"manual-publish"/);
+  assert.match(workflow, /luceat-lux-vestra\/luceat-lux-vestra\/dispatches/);
+
+  const executeIndex = workflow.indexOf('name: Execute guarded Article operation');
+  const refreshIndex = workflow.indexOf('name: Trigger profile Publications refresh');
+  assert.ok(executeIndex >= 0 && refreshIndex > executeIndex);
+});
