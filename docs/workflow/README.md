@@ -155,7 +155,7 @@ Examples: `merge 판단 들어가`, `merge해`.
 
 This explicitly permits entering `MERGE_REVIEW`; `merge해` also authorizes the squash merge only if every exact-HEAD proof obligation passes. A failed/unknown gate remains blocked.
 
-For a newly added canonical Article, a successful merge may trigger the repository-approved non-production auto-draft policy. That automation is limited to exact pushed `main` source, requires `SYNCED + READY`, and may create managed Ghost drafts. It is not production publication authorization.
+For a newly added canonical Article, the approved lifecycle may stage a managed Ghost draft from the exact same-repository PR candidate using trusted base tooling. After an explicit merge instruction and exact-HEAD merge gate PASS, the successful squash merge becomes production-publication authorization for the exact affected merged Article source.
 
 ### `PREPARE_PUBLISH`
 
@@ -165,13 +165,13 @@ This is **read-only with respect to Ghost and publication resource storage by de
 
 Preparation must not create/update a Ghost draft, publish a post, or upload/mutate publication resources merely as a side effect. A host `plan` operation may inspect provider state but must remain read-only.
 
-A Ghost draft mutation normally requires a task that authorizes draft projection (for example, an explicit request to create/update a Ghost draft). The approved exception is `.github/workflows/article-auto-draft.yml`: when a new Article manifest is added to canonical `main`, it may synchronize that exact `SYNCED + READY` Article to managed drafts under the shared Ghost mutation lock. It never authorizes or performs production publication.
+A Ghost draft mutation normally requires a task that authorizes draft projection. The approved exception is `.github/workflows/article-publication-lifecycle.yml`: for a same-repository non-draft PR, trusted base tooling may synchronize a newly added exact `SYNCED + READY` Article candidate to managed drafts under the shared Ghost mutation lock.
 
 ### `PUBLISH`
 
 Example: `발행해`.
 
-This is explicit production-publication authorization for the intended Article operation, subject to all source, translation, public-resource safety, current host external-resource trust, identity, drift, and publication guards. It does **not** implicitly authorize a pending Git merge; merge and production publication remain separate authorization boundaries.
+For manual/recovery operations, this is explicit production-publication authorization for the intended Article operation. The approved automatic lifecycle supplies the same bounded authorization from a successful reviewed Article PR squash merge, and only for the exact affected merged source. Publication guards still apply in both cases. `PUBLISH` does **not** implicitly authorize a pending Git merge.
 
 Production authorization does not substitute for host external-resource trust. If a publication resource is external to repository-owned bytes, any required current host approval/policy evidence must be present in the fresh plan under repository policy.
 

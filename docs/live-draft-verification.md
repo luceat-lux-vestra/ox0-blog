@@ -93,4 +93,4 @@ A PASS does **not** prove:
 - local feature-image deployment;
 - merge safety by itself.
 
-Production publication remains a separate explicit user-authorized operation. The target manual workflow restricts that final step to exact-current managed drafts and status-only promotion; the live draft verifier does not execute it merely for evidence collection.
+Production publication still requires a valid authorization source: either an explicit manual/recovery publication instruction or the approved reviewed-Article-merge automation. The live draft verifier supplies neither; it does not execute production promotion merely for evidence collection.

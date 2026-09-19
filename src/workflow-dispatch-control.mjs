@@ -244,6 +244,39 @@ export function requireArticleWorkflowDispatchContext({
   };
 }
 
+export function requireArticleMainPushContext({
+  actions,
+  eventName,
+  ref,
+  sha,
+  expectedSha,
+  manifestRef
+}) {
+  if (actions !== 'true') throw new Error('Article main-push control surface requires GitHub Actions');
+  if (eventName !== 'push') {
+    throw new Error('Article main-push control surface requires push');
+  }
+  if (ref !== 'refs/heads/main') {
+    throw new Error('Article main-push control surface may run only from refs/heads/main');
+  }
+
+  const sourceSha = requireString(sha, 'GITHUB_SHA');
+  const requestedSha = requireString(expectedSha, 'workflow source_sha');
+  if (!SHA_RE.test(sourceSha) || !SHA_RE.test(requestedSha)) {
+    throw new Error('Article main-push control surface requires lowercase 40-hex source SHAs');
+  }
+  if (sourceSha !== requestedSha) {
+    throw new Error('workflow source_sha must equal the exact main push SHA');
+  }
+
+  return {
+    sourceSha,
+    manifestRef: normalizeManifestRef(manifestRef),
+    action: 'publish',
+    productionPublish: true
+  };
+}
+
 export function productionPublishModeForPlan(plan) {
   requirePublishPlan(plan);
   const statuses = [];
@@ -289,10 +322,7 @@ export function requireExactCurrentDraftsForProduction(plan) {
   return plan;
 }
 
-export function publicationAuthorizationForDispatchPlan(context, plan) {
-  if (!context || context.productionPublish !== true || context.operation !== 'publish') {
-    throw new Error('production publication authorization requires an exact publish workflow_dispatch context');
-  }
+export function publicationAuthorizationForPlan(plan) {
   productionPublishModeForPlan(plan);
   const articleId = requireString(plan.articleId, 'publication plan articleId');
 
@@ -308,4 +338,11 @@ export function publicationAuthorizationForDispatchPlan(context, plan) {
     articleId,
     sourceFingerprints
   };
+}
+
+export function publicationAuthorizationForDispatchPlan(context, plan) {
+  if (!context || context.productionPublish !== true || context.operation !== 'publish') {
+    throw new Error('production publication authorization requires an exact publish workflow_dispatch context');
+  }
+  return publicationAuthorizationForPlan(plan);
 }

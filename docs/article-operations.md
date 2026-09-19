@@ -1,6 +1,6 @@
 # Article operations
 
-This document describes repository validation, read-only planning, synchronization, and the manual production control surface. Durable authorization/state-machine policy in `docs/workflow/` remains authoritative. Validation or planning never grants merge or production-publication authorization.
+This document describes repository validation, read-only planning, synchronization, the automatic PR→draft→main-publish lifecycle, and the manual production recovery surface. Durable authorization/state-machine policy in `docs/workflow/` remains authoritative. Validation or planning alone never grants merge or production-publication authorization.
 
 ## Validate repository source
 
@@ -106,24 +106,41 @@ The authorization must bind explicit task intent to the exact Article and every 
 
 The publication library re-plans and revalidates source, assets, remote-resource policy, authorization, and Ghost observations before mutation. Errors preserve stage, completed body-asset side effects, feature-image upload evidence where applicable, and fresh per-locale recovery state.
 
-## Automatic post-merge draft projection
+## Automatic PR draft and post-merge publication
 
-`.github/workflows/article-auto-draft.yml` is the approved non-production automation path for newly added Articles on `main`.
+`.github/workflows/article-publication-lifecycle.yml` is the normal publication path.
 
-On an exact `main` push it:
+### PR candidate draft
 
-1. checks out the exact pushed SHA with full history;
-2. verifies the push is a normal descendant of the prior `main` SHA;
-3. selects only exact-lowercase `posts/<article>/article.json` files whose Git status is `A` in that push (renames/copies are not treated as new Articles);
-4. runs the test suite and repository validation;
-5. requires every selected Article to pass `validate:articles -- --ready` (`SYNCED + READY`) before any Ghost write;
-6. fresh-checks that the pushed SHA is still current `main`;
-7. read-only plans every selected Article as a Ghost draft before any Ghost write;
-8. only after all preflights pass, runs `sync:article ... draft` under the same Ghost concurrency lock as manual operations.
+For a same-repository, non-draft pull request that changes `posts/**`:
 
-The automation may create/update managed drafts and required draft resources, but it never creates production-publication authorization and never requests `published` status. Existing Article edits, renamed bundles, and published revisions are not automatically staged by this workflow.
+1. the workflow runs from `pull_request_target`, so the workflow definition and executable tooling come from the trusted base;
+2. the PR head is checked out separately and treated only as Article/source data;
+3. candidate package scripts and candidate executable code are never run with Ghost credentials;
+4. only newly added canonical `posts/<article>/article.json` manifests are selected for Ghost draft staging;
+5. the candidate repository and each selected Article are validated by trusted base tooling and must be `SYNCED + READY`;
+6. the exact current PR head is re-read from GitHub immediately before Ghost access;
+7. every selected draft is read-only planned before any selected draft mutation;
+8. selected Articles are synchronized as managed drafts.
 
-## Manual GitHub Actions control surface
+Existing published Article revisions are not converted back to drafts; their PR review surface remains the generated HTML preview.
+
+### Main merge publication
+
+For a `main` push that changes `posts/**`:
+
+1. the exact pushed source is checked out;
+2. every currently existing Article affected by that push is selected;
+3. tests, repository validation, and `SYNCED + READY` checks rerun;
+4. the pushed source must remain an ancestor of current `main`;
+5. each selected Article directory must be unchanged between the pushed source and current `main`, so unrelated later pushes do not block publication while later Article changes do;
+6. every production transition is freshly planned and classified before any selected Article is published;
+7. first publication promotes exact-current managed drafts; published revisions update managed public projections in place;
+8. production mode remains pinned across internal replans and every locale must recover as `PUBLISHED_CURRENT`;
+9. only after the Ghost batch succeeds does the workflow request a profile Publications refresh.
+
+The merge itself is the normal external production-authorization event. Low-level synchronization still cannot manufacture authorization on its own.
+## Manual GitHub Actions recovery/control surface
 
 `.github/workflows/article-ghost.yml` is `workflow_dispatch` only. Inputs are:
 

@@ -1,0 +1,322 @@
+name: Article Publication Lifecycle
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'posts/**'
+  push:
+    branches: [main]
+    paths:
+      - 'posts/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ox0-blog-ghost-control
+  cancel-in-progress: false
+
+jobs:
+  pr-drafts:
+    name: Stage new Article candidates as Ghost drafts
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: ox0-blog
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      OX0_HOST_RUNTIME_MODULE: ${{ vars.OX0_HOST_RUNTIME_MODULE }}
+    steps:
+      - name: Check out trusted base tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ env.BASE_SHA }}
+          path: tooling
+
+      - name: Check out exact same-repository PR candidate as data
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ env.HEAD_SHA }}
+          path: candidate
+
+      - name: Verify trusted and candidate checkouts
+        run: |
+          set -eu
+          test "$(git -C tooling rev-parse HEAD)" = "$BASE_SHA"
+          test "$(git -C candidate rev-parse HEAD)" = "$HEAD_SHA"
+          git -C candidate cat-file -e "$BASE_SHA^{commit}"
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: tooling/package-lock.json
+
+      - name: Install trusted locked dependencies
+        working-directory: tooling
+        run: npm ci --ignore-scripts
+
+      - name: Test trusted publication tooling
+        working-directory: tooling
+        run: npm test
+
+      - name: Pin host runtime to trusted base
+        run: |
+          set -eu
+          if [ -n "$OX0_HOST_RUNTIME_MODULE" ]; then
+            test -d tooling/host || {
+              echo 'configured host runtime requires trusted tooling/host' >&2
+              exit 1
+            }
+            rm -rf candidate/host
+            cp -a tooling/host candidate/host
+          fi
+
+      - name: Discover newly added Article manifests in exact PR diff
+        id: discover
+        run: |
+          set -eu
+          output="$RUNNER_TEMP/pr-article-manifests.txt"
+          merge_base="$(git -C candidate merge-base "$BASE_SHA" "$HEAD_SHA")"
+          git -C candidate diff --name-status --find-renames "$merge_base" "$HEAD_SHA" -- posts/ \
+            | awk -F '\t' '$1 == "A" && $2 ~ /^posts\/[^/]+\/article[.]json$/ { print $2 }' \
+            | sort -u > "$output"
+          if [ -s "$output" ]; then
+            echo 'has_articles=true' >> "$GITHUB_OUTPUT"
+            cat "$output"
+          else
+            echo 'has_articles=false' >> "$GITHUB_OUTPUT"
+            echo 'No newly added Article manifests require Ghost draft staging.'
+          fi
+
+      - name: Validate candidate with trusted tooling
+        if: steps.discover.outputs.has_articles == 'true'
+        working-directory: candidate
+        run: |
+          set -eu
+          node ../tooling/scripts/validate-repository.mjs
+          while IFS= read -r manifest; do
+            [ -n "$manifest" ] || continue
+            node ../tooling/scripts/validate-articles.mjs --ready "$manifest"
+          done < "$RUNNER_TEMP/pr-article-manifests.txt"
+
+      - name: Reverify exact PR head before Ghost access
+        if: steps.discover.outputs.has_articles == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          current_head="$(
+            curl --fail --silent --show-error \
+              --header "Authorization: Bearer $GITHUB_TOKEN" \
+              --header 'Accept: application/vnd.github+json' \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" \
+            | python3 -c 'import json, sys; print(json.load(sys.stdin)["head"]["sha"])'
+          )"
+          test "$current_head" = "$HEAD_SHA" || {
+            echo 'PR head advanced; refusing stale draft projection' >&2
+            exit 1
+          }
+
+      - name: Preflight every selected Ghost draft
+        if: steps.discover.outputs.has_articles == 'true'
+        working-directory: candidate
+        env:
+          GHOST_ADMIN_URL: ${{ vars.GHOST_ADMIN_URL || secrets.GHOST_ADMIN_URL }}
+          GHOST_ADMIN_API_KEY: ${{ secrets.GHOST_ADMIN_API_KEY }}
+        run: |
+          set -eu
+          while IFS= read -r manifest; do
+            [ -n "$manifest" ] || continue
+            node ../tooling/scripts/plan-article.mjs "$manifest" draft > /dev/null
+          done < "$RUNNER_TEMP/pr-article-manifests.txt"
+
+      - name: Synchronize READY/SYNCED candidates as drafts
+        if: steps.discover.outputs.has_articles == 'true'
+        working-directory: candidate
+        env:
+          GHOST_ADMIN_URL: ${{ vars.GHOST_ADMIN_URL || secrets.GHOST_ADMIN_URL }}
+          GHOST_ADMIN_API_KEY: ${{ secrets.GHOST_ADMIN_API_KEY }}
+        run: |
+          set -eu
+          while IFS= read -r manifest; do
+            [ -n "$manifest" ] || continue
+            node ../tooling/scripts/sync-article.mjs "$manifest" draft
+          done < "$RUNNER_TEMP/pr-article-manifests.txt"
+
+  main-publish:
+    name: Publish exact merged Articles
+    if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: ox0-blog
+    env:
+      BEFORE_SHA: ${{ github.event.before }}
+      SOURCE_SHA: ${{ github.sha }}
+      OX0_ARTICLE_SOURCE_SHA: ${{ github.sha }}
+    steps:
+      - name: Check out exact merged main source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ env.SOURCE_SHA }}
+
+      - name: Verify exact merged source
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git merge-base --is-ancestor "$BEFORE_SHA" "$SOURCE_SHA"
+
+      - name: Prove source is a reviewed PR merge to main
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          merged_match="$(
+            curl --fail --silent --show-error \
+              --header "Authorization: Bearer $GITHUB_TOKEN" \
+              --header 'Accept: application/vnd.github+json' \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/commits/$SOURCE_SHA/pulls" \
+            | python3 -c 'import json, os, sys; sha=os.environ["SOURCE_SHA"]; prs=json.load(sys.stdin); print(sum(1 for pr in prs if pr.get("merged_at") and pr.get("base", {}).get("ref") == "main" and pr.get("merge_commit_sha") == sha))'
+          )"
+          test "$merged_match" -ge 1 || {
+            echo 'main push is not the exact merge commit of a reviewed PR; refusing automatic publication' >&2
+            exit 1
+          }
+      - name: Discover Articles affected by this main push
+        id: discover
+        run: |
+          set -eu
+          output="$RUNNER_TEMP/publish-article-manifests.txt"
+          git diff --name-only --find-renames "$BEFORE_SHA" "$SOURCE_SHA" -- posts/ \
+            | awk -F/ '$1 == "posts" && NF >= 3 { print $1 "/" $2 "/article.json" }' \
+            | sort -u \
+            | while IFS= read -r manifest; do
+                [ -f "$manifest" ] && printf '%s\n' "$manifest"
+              done > "$output"
+          if [ -s "$output" ]; then
+            echo 'has_articles=true' >> "$GITHUB_OUTPUT"
+            cat "$output"
+          else
+            echo 'has_articles=false' >> "$GITHUB_OUTPUT"
+            echo 'No current Article manifests require publication.'
+          fi
+
+      - name: Set up Node.js 24
+        if: steps.discover.outputs.has_articles == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install locked dependencies
+        if: steps.discover.outputs.has_articles == 'true'
+        run: npm ci --ignore-scripts
+
+      - name: Test
+        if: steps.discover.outputs.has_articles == 'true'
+        run: npm test
+
+      - name: Validate repository and selected Articles
+        if: steps.discover.outputs.has_articles == 'true'
+        run: |
+          set -eu
+          npm run validate
+          while IFS= read -r manifest; do
+            [ -n "$manifest" ] || continue
+            npm run validate:articles -- --ready "$manifest"
+          done < "$RUNNER_TEMP/publish-article-manifests.txt"
+
+      - name: Prove selected Article bundles are still current on main
+        if: steps.discover.outputs.has_articles == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          CURRENT_MAIN_SHA="$(
+            curl --fail --silent --show-error \
+              --header "Authorization: Bearer $GITHUB_TOKEN" \
+              --header 'Accept: application/vnd.github+json' \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/git/ref/heads/main" \
+            | python3 -c 'import json, sys; print(json.load(sys.stdin)["object"]["sha"])'
+          )"
+          git fetch --no-tags origin "$CURRENT_MAIN_SHA"
+          git merge-base --is-ancestor "$SOURCE_SHA" "$CURRENT_MAIN_SHA"
+          while IFS= read -r manifest; do
+            [ -n "$manifest" ] || continue
+            article_dir="${manifest%/article.json}"
+            git diff --quiet "$SOURCE_SHA" "$CURRENT_MAIN_SHA" -- "$article_dir" || {
+              echo "Article changed after this push; refusing stale publish: $manifest" >&2
+              exit 1
+            }
+          done < "$RUNNER_TEMP/publish-article-manifests.txt"
+
+      - name: Preflight every selected production transition
+        if: steps.discover.outputs.has_articles == 'true'
+        env:
+          GHOST_ADMIN_URL: ${{ vars.GHOST_ADMIN_URL || secrets.GHOST_ADMIN_URL }}
+          GHOST_ADMIN_API_KEY: ${{ secrets.GHOST_ADMIN_API_KEY }}
+          OX0_HOST_RUNTIME_MODULE: ${{ vars.OX0_HOST_RUNTIME_MODULE }}
+        run: |
+          set -eu
+          while IFS= read -r manifest; do
+            [ -n "$manifest" ] || continue
+            node scripts/main-push-article.mjs "$manifest" plan-publish > /dev/null
+          done < "$RUNNER_TEMP/publish-article-manifests.txt"
+
+      - name: Publish exact merged Articles
+        if: steps.discover.outputs.has_articles == 'true'
+        env:
+          GHOST_ADMIN_URL: ${{ vars.GHOST_ADMIN_URL || secrets.GHOST_ADMIN_URL }}
+          GHOST_ADMIN_API_KEY: ${{ secrets.GHOST_ADMIN_API_KEY }}
+          OX0_HOST_RUNTIME_MODULE: ${{ vars.OX0_HOST_RUNTIME_MODULE }}
+        run: |
+          set -eu
+          while IFS= read -r manifest; do
+            [ -n "$manifest" ] || continue
+            node scripts/main-push-article.mjs "$manifest" publish
+          done < "$RUNNER_TEMP/publish-article-manifests.txt"
+
+      - name: Trigger profile Publications refresh
+        if: steps.discover.outputs.has_articles == 'true'
+        env:
+          PROFILE_REPO_DISPATCH_TOKEN: ${{ secrets.PROFILE_REPO_DISPATCH_TOKEN }}
+        run: |
+          set -eu
+          if [ -z "$PROFILE_REPO_DISPATCH_TOKEN" ]; then
+            echo '::warning::PROFILE_REPO_DISPATCH_TOKEN is not configured; profile schedule remains the fallback.'
+            exit 0
+          fi
+          payload="$(
+            python3 - "$SOURCE_SHA" "$RUNNER_TEMP/publish-article-manifests.txt" <<'PY'
+import json, pathlib, sys
+sha, path = sys.argv[1], pathlib.Path(sys.argv[2])
+manifests = [line.strip() for line in path.read_text().splitlines() if line.strip()]
+print(json.dumps({
+    "event_type": "blog-publication",
+    "client_payload": {"source_sha": sha, "manifests": manifests},
+}))
+PY
+          )"
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $PROFILE_REPO_DISPATCH_TOKEN" \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            --data "$payload" \
+            "https://api.github.com/repos/luceat-lux-vestra/luceat-lux-vestra/dispatches"

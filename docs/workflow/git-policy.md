@@ -148,6 +148,6 @@ The user-facing distinction should remain simple:
 - ordinary authoring/update request -> agent develops and prepares the PR;
 - merge preparation -> agent makes a coherent candidate but does not merge;
 - explicit merge/merge-judgment request -> agent may run the strict exact-HEAD gate and merge only on PASS;
-- production publication -> separate explicit authorization boundary.
+- production publication -> separate explicit authorization boundary except for the approved Article merge-publication automation, where a reviewed exact-HEAD Article PR merge is the bounded production authorization event.
 
-Production publication is not a Git merge side effect. A merged Article may remain unprojected/outdated until explicit publication authorization and Ghost guards pass. Conversely, `발행해` does not authorize a pending Git merge.
+Production publication is not an arbitrary Git side effect. Under the approved Article lifecycle, a successful reviewed squash merge of an affected Article PR authorizes the exact merged Article source for automatic Ghost publication; all publication guards still must pass. If that automation is inapplicable or fails, the Article may remain draft/outdated until an explicitly authorized recovery operation succeeds. Conversely, `발행해` does not authorize a pending Git merge.
