@@ -220,7 +220,7 @@ The workflow allows an unrelated later `main` commit only when the selected Arti
 After every selected locale has post-verified as `PUBLISHED_CURRENT`, the workflow may emit a `blog-publication` repository dispatch to refresh the GitHub profile Publications projection. That downstream profile refresh never authorizes or repairs Ghost publication.
 ## Manual production recovery/control surface
 
-`.github/workflows/article-ghost.yml` is the target manual GitHub Actions control surface. It is `workflow_dispatch` only and operates only on the exact current `main` SHA supplied as `source_sha`.
+`.github/workflows/article-ghost.yml` is the target manual GitHub Actions control surface. It is `workflow_dispatch` only and operates only on the exact current `main` SHA supplied as `source_sha`. A successful manual `publish` uses the same `blog-publication` downstream dispatch as automatic publication so the GitHub profile Publications projection refreshes immediately; if the dispatch token is unavailable, the profile repository's hourly schedule remains the recovery path.
 
 The workflow may use four operations:
 

@@ -139,6 +139,8 @@ For a `main` push that changes `posts/**`:
 8. production mode remains pinned across internal replans and every locale must recover as `PUBLISHED_CURRENT`;
 9. only after the Ghost batch succeeds does the workflow request a profile Publications refresh.
 
+The same ordering applies to the manual recovery/control surface: `operation=publish` dispatches the profile refresh only after the guarded publication command returns success. Read-only plans and draft synchronization never trigger the profile projection.
+
 The merge itself is the normal external production-authorization event. Low-level synchronization still cannot manufacture authorization on its own.
 ## Manual GitHub Actions recovery/control surface
 
