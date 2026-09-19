@@ -55,7 +55,14 @@ test('profile refresh happens only after successful publication', async () => {
   const source = await readFile(WORKFLOW, 'utf8');
   assert.ok(source.includes('Trigger profile Publications refresh'));
   assert.ok(source.includes('PROFILE_REPO_DISPATCH_TOKEN'));
-  assert.ok(source.includes('"event_type": "blog-publication"'));
+  assert.ok(source.includes('"event_type":"blog-publication"'));
   assert.ok(source.includes('repos/luceat-lux-vestra/luceat-lux-vestra/dispatches'));
   assert.ok(source.indexOf('Publish exact merged Articles') < source.indexOf('Trigger profile Publications refresh'));
+});
+
+test('profile dispatch payload stays inside the YAML run block', async () => {
+  const source = await readFile(WORKFLOW, 'utf8');
+  assert.ok(source.includes("python3 -c 'import json, pathlib, sys;"));
+  assert.ok(!source.includes("\nimport json, pathlib, sys\n"));
+  assert.ok(!source.includes("\nPY\n"));
 });

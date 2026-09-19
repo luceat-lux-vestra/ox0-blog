@@ -303,15 +303,8 @@ jobs:
             exit 0
           fi
           payload="$(
-            python3 - "$SOURCE_SHA" "$RUNNER_TEMP/publish-article-manifests.txt" <<'PY'
-import json, pathlib, sys
-sha, path = sys.argv[1], pathlib.Path(sys.argv[2])
-manifests = [line.strip() for line in path.read_text().splitlines() if line.strip()]
-print(json.dumps({
-    "event_type": "blog-publication",
-    "client_payload": {"source_sha": sha, "manifests": manifests},
-}))
-PY
+            python3 -c 'import json, pathlib, sys; sha=sys.argv[1]; p=pathlib.Path(sys.argv[2]); manifests=[line.strip() for line in p.read_text().splitlines() if line.strip()]; print(json.dumps({"event_type":"blog-publication","client_payload":{"source_sha":sha,"manifests":manifests}}))' \
+              "$SOURCE_SHA" "$RUNNER_TEMP/publish-article-manifests.txt"
           )"
           curl --fail --silent --show-error \
             --request POST \
