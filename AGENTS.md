@@ -30,6 +30,62 @@ A coherent PR may reach `CANDIDATE` without beginning strict merge judgment. Do 
 
 At merge judgment, correctness/safety not proven is FAIL. `UNKNOWN`, `UNVERIFIED`, and `INSUFFICIENT EVIDENCE` are FAIL. Exact final HEAD is the evidence unit; if it moves, exact-HEAD merge evidence is invalidated. Use squash merge and exact reviewed-head locking (`expected_head_sha`) where supported.
 
+## Failure classification before remediation
+
+A failing Article/tooling test, claim-proof check, PUBLIC_SANITIZATION gate,
+publication workflow, Ghost operation, hardening audit, or other red signal is
+an **observation**, not a remediation instruction. Before a non-trivial
+remediation, classify the observed failure as exactly one of:
+
+- `implementation defect` — Article tooling, workflow/state-machine logic,
+  translation/publication mechanics, or other repository-owned implementation
+  violates the accepted contract;
+- `test defect` — a test, fixture, harness, oracle, assertion, or negative
+  control is wrong for the intended contract;
+- `evidence defect` — claim proof, public-example research, sanitization
+  evidence, publication/Ghost state evidence, attribution, freshness, parsing,
+  or proof construction is wrong or insufficient;
+- `workflow-policy drift` — checked-in authority, Content Workflow Contract,
+  publication policy, repository hardening, live settings, or their assumed
+  relationship have diverged;
+- `environment failure` — Ghost service/state availability, host trust,
+  credentials/resource availability, runner, network, or another external
+  execution environment caused the failure;
+- `UNKNOWN` — available evidence does not justify any of the five classes.
+
+`UNKNOWN`, `UNVERIFIED`, and `INSUFFICIENT EVIDENCE` remain fail-closed.
+Classification is itself a proof obligation. Preserve at least:
+
+```text
+Observed:
+Classification:
+Basis:
+Root cause:
+Remediation:
+Proof:
+```
+
+The `Basis` must justify the selected responsibility layer and identify
+plausible alternatives that were rejected or remain unresolved. A failed
+claim-proof or PUBLIC_SANITIZATION check is not evidence that the Article text
+should be weakened until it passes; determine whether the claim/content is
+wrong, the test/evidence is wrong or stale, authority drifted, or an external
+publication environment failed.
+
+Never weaken or bypass a valid claim-proof obligation,
+`PUBLIC_SANITIZATION`, `PUBLIC_EXAMPLE_RESEARCH`, publication authorization,
+workflow state machine, negative control, or repository hardening gate merely
+to obtain green. A deterministic/reproducible failure does not become an
+`environment failure` merely because a rerun later passes.
+
+If remediation changes Article/tooling implementation, claim or evidence
+premises, sanitization/public-example evidence, publication workflow/policy,
+Ghost/resource assumptions, or another premise of an exact-HEAD proof,
+invalidate the affected evidence. Re-run the relevant content/workflow proof
+and required repository validation on the new exact final PR HEAD before merge.
+For production publication, merge evidence still does not substitute for the
+publication/resource authorization rules above.
+
 ## Publication boundary
 
 `발행 준비해` / `PREPARE_PUBLISH` is read-only with respect to Ghost and publication resource storage under contract v1: validate, resolve bounded read-only resource targets/current host approvals where applicable, fresh-read Ghost, and create a fresh publication plan. For same-repository PRs, the approved lifecycle may stage a newly added `READY + SYNCED` Article as a managed Ghost draft using trusted base tooling. When that exact Article PR is later squash-merged after the merge gate passes, the reviewed merge authorizes production publication of the exact affected merged source. `발행해` remains the explicit manual/recovery publication command and does not implicitly authorize a pending Git merge.
