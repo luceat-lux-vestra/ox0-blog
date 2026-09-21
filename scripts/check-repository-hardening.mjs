@@ -8,6 +8,65 @@ const fail = (message) => {
   process.exitCode = 1;
 };
 
+function topLevelPermissionViolations(source, rel) {
+  const lines = source.split(/\r?\n/);
+  const index = lines.findIndex((line) => /^permissions:(?:\s.*)?$/.test(line));
+  if (index < 0) return [`${rel} lacks explicit workflow permissions`];
+
+  const header = lines[index].trim();
+  if (header === 'permissions: {}' || header === 'permissions: read-all') return [];
+  if (header !== 'permissions:') {
+    return [`${rel} uses unsupported workflow-level permissions form: ${header}`];
+  }
+
+  const violations = [];
+  let entries = 0;
+  for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
+    const line = lines[cursor];
+    if (!line.trim() || /^\s*#/.test(line)) continue;
+    if (/^\S/.test(line)) break;
+
+    const match = line.match(/^  ([A-Za-z0-9_-]+):\s*(read|none|write)\s*(?:#.*)?$/);
+    if (!match) {
+      violations.push(`${rel} has unsupported workflow-level permission entry: ${line.trim()}`);
+      continue;
+    }
+    entries += 1;
+    if (match[2] === 'write') {
+      violations.push(`${rel} grants workflow-level ${match[1]}:write; move write authority to the exact job`);
+    }
+  }
+  if (entries === 0 && violations.length === 0) {
+    violations.push(`${rel} has an empty permissions block; use permissions: {} explicitly`);
+  }
+  return violations;
+}
+
+function permissionSelfTest() {
+  const cases = [
+    ['read-only block', 'permissions:\n  contents: read\n', true],
+    ['explicit empty', 'permissions: {}\n', true],
+    ['read-all', 'permissions: read-all\n', true],
+    ['none block', 'permissions:\n  contents: none\n', true],
+    ['workflow write', 'permissions:\n  contents: read\n  issues: write\n', false],
+    ['inline write mapping', 'permissions: { contents: read, issues: write }\n', false],
+    ['write-all', 'permissions: write-all\n', false],
+    ['missing declaration', 'name: fixture\n', false]
+  ];
+  for (const [name, source, shouldPass] of cases) {
+    const observed = topLevelPermissionViolations(source, 'fixture.yml');
+    if ((observed.length === 0) !== shouldPass) {
+      throw new Error(`permission self-test ${name} failed: ${JSON.stringify(observed)}`);
+    }
+  }
+  console.log('Workflow permission negative controls: PASS');
+}
+
+if (process.argv.includes('--self-test')) {
+  permissionSelfTest();
+  process.exit(0);
+}
+
 const policy = JSON.parse(await readFile(path.join(root, '.github/repository-policy.json'), 'utf8'));
 
 if (policy.assessment?.name !== 'Hardening Reassessment') fail('assessment name drifted');
@@ -27,7 +86,7 @@ for (const entry of entries) {
   const rel = `.github/workflows/${entry}`;
   const source = await readFile(path.join(workflowDir, entry), 'utf8');
 
-  if (!/^permissions:/m.test(source)) fail(`${rel} lacks explicit workflow permissions`);
+  for (const violation of topLevelPermissionViolations(source, rel)) fail(violation);
 
   const checkoutCount = [...source.matchAll(/uses:\s*actions\/checkout@[0-9a-f]{40}/g)].length;
   const persistFalseCount = [...source.matchAll(/persist-credentials:\s*false/g)].length;
