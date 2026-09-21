@@ -17,25 +17,29 @@ Another luceat-lux-vestra repository is not the normative authority.
 
 ## Findings and dispositions
 
-### PARTIAL / GAP — live repository merge settings and protection
+### PASS — live repository merge settings and protection
 
-Fresh repository readback on 2026-09-21 confirms the repository-level merge settings now match the checked-in intent:
+Fresh repository readback on 2026-09-21 confirms the repository-level merge settings match the checked-in intent:
 
 - squash merge: enabled;
 - merge commits: disabled;
 - rebase merge: disabled;
 - branch-update support: enabled.
 
-The remaining live-policy gap is branch protection itself. Fresh authoritative ruleset collection readback is exactly `[]`.
+Fresh ruleset readback also confirms active repository ruleset `Protect main` (id `23748922`) targets the default branch with:
 
-The reassessment does not pass until active `main` protection exists and is fresh-read with the checked-in required contexts exactly:
+- deletion and non-fast-forward protection;
+- required linear history;
+- pull-request-only changes with squash as the only allowed merge method;
+- required review-thread resolution;
+- no bypass actors;
+- strict required status checks with the exact contexts:
+  - `Validate source`;
+  - `Workflow Security`;
+  - `Dependency Review`;
+  - `failure-triage`.
 
-- `Validate source`;
-- `Workflow Security`;
-- `Dependency Review`;
-- `failure-triage`.
-
-Do not treat the repository-level merge-setting correction as proof that branch protection exists.
+The live required-context promotion therefore matches `.github/repository-policy.json` and is no longer a blocker for PR #24.
 
 ### GAP — generic workflow validation
 
@@ -52,7 +56,7 @@ The remediation adds:
 
 The trusted-base `failure-triage` workflow and PR input surface are already on current `main`. Real PR evidence under #27 proved invalid metadata fails and a body-only correction succeeds on the unchanged code HEAD.
 
-The hardening authority therefore recognizes `.github/workflows/failure-triage.yml` as the second intentionally audited metadata-only `pull_request_target` workflow and includes the exact `failure-triage` context in required-context intent. It must not become live-required until the repository protection/ruleset is applied and fresh-read.
+The hardening authority therefore recognizes `.github/workflows/failure-triage.yml` as the second intentionally audited metadata-only `pull_request_target` workflow and includes the exact `failure-triage` context in required-context intent. Fresh ruleset readback confirms that `failure-triage` is now live-required together with the other checked-in required contexts.
 
 ### INTEGRATED / LIVE-PROVEN — dependency admission and update coverage
 
@@ -84,7 +88,7 @@ Issue metadata automation remains out of scope until the repository defines a us
 
 ### GAP — public security reporting / live security features
 
-`SECURITY.md` is added. Dependency Review success on the exact candidate establishes that the dependency graph path needed by that gate is currently operational. Private vulnerability reporting, secret scanning, push protection, and repository protection remain live GitHub settings whose final status requires authoritative readback and, where necessary, administrative enablement.
+`SECURITY.md` is added. Dependency Review success on the exact candidate establishes that the dependency graph path needed by that gate is currently operational. Repository protection is live-proven by the active `Protect main` ruleset. Private vulnerability reporting, secret scanning, and push protection remain separate live GitHub settings whose final status still requires authoritative readback and, where necessary, administrative enablement.
 
 ### OWNER DECISION — licensing
 
