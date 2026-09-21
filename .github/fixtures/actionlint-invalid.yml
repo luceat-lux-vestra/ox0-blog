@@ -1,0 +1,11 @@
+name: intentionally invalid workflow fixture
+on:
+  pull_request:
+jobs:
+  broken:
+    runs-on: ubuntu-latest
+    steps:
+      - name: malformed mapping
+        run: echo "this fixture must be rejected"
+       env:
+          BROKEN: true

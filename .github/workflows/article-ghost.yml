@@ -143,15 +143,22 @@ jobs:
           set -eu
           if [ -z "$PROFILE_REPO_DISPATCH_TOKEN" ]; then
             echo '::warning::PROFILE_REPO_DISPATCH_TOKEN is not configured; profile schedule remains the fallback.'
+            echo 'Profile Publications refresh: hourly fallback (dispatch token not configured).' >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           payload="$(
             python3 -c 'import json, os; print(json.dumps({"event_type":"blog-publication","client_payload":{"source_sha":os.environ["OX0_ARTICLE_SOURCE_SHA"],"manifests":[os.environ["MANIFEST_PATH"]],"trigger":"manual-publish"}}))'
           )"
-          curl --fail --silent --show-error \
+          if ! curl --fail --silent --show-error \
             --request POST \
             --header "Authorization: Bearer $PROFILE_REPO_DISPATCH_TOKEN" \
             --header 'Accept: application/vnd.github+json' \
             --header 'X-GitHub-Api-Version: 2022-11-28' \
             --data "$payload" \
-            "https://api.github.com/repos/luceat-lux-vestra/luceat-lux-vestra/dispatches"
+            "https://api.github.com/repos/luceat-lux-vestra/luceat-lux-vestra/dispatches"; then
+            echo '::error::Profile Publications refresh dispatch failed; Ghost publication is not rolled back.'
+            echo 'Profile Publications refresh: dispatch failed; hourly refresh remains the recovery path.' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo '::notice::Profile Publications refresh dispatch accepted.'
+          echo 'Profile Publications refresh: repository dispatch accepted.' >> "$GITHUB_STEP_SUMMARY"

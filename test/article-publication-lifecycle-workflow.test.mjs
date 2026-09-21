@@ -57,6 +57,9 @@ test('profile refresh happens only after successful publication', async () => {
   assert.ok(source.includes('PROFILE_REPO_DISPATCH_TOKEN'));
   assert.ok(source.includes('"event_type":"blog-publication"'));
   assert.ok(source.includes('repos/luceat-lux-vestra/luceat-lux-vestra/dispatches'));
+  assert.ok(source.includes('Profile Publications refresh: hourly fallback (dispatch token not configured).'));
+  assert.ok(source.includes('Profile Publications refresh: dispatch failed; hourly refresh remains the recovery path.'));
+  assert.ok(source.includes('Profile Publications refresh: repository dispatch accepted.'));
   assert.ok(source.indexOf('Publish exact merged Articles') < source.indexOf('Trigger profile Publications refresh'));
 });
 
