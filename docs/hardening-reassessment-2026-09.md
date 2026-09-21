@@ -90,6 +90,17 @@ Issue metadata automation remains out of scope until the repository defines a us
 
 `SECURITY.md` is added. Dependency Review success on the exact candidate establishes that the dependency graph path needed by that gate is currently operational. Repository protection is live-proven by the active `Protect main` ruleset. Private vulnerability reporting, secret scanning, and push protection remain separate live GitHub settings whose final status still requires authoritative readback and, where necessary, administrative enablement.
 
+### ADDED — recurring low-privilege live drift detection
+
+The checked-in policy previously had authoritative exit readback but no recurring live drift owner. Because repository/ruleset changes can invalidate the publication trust boundary without changing Git, a scheduled read-only audit now re-checks the live controls GitHub exposes to a low-privilege repository token:
+
+- repository visibility/default branch/archive state;
+- the active `Protect main` ruleset target, required rule types, squash-only pull-request policy, review-thread resolution, strict status-check policy, and exact required contexts;
+- an operational Dependency Graph through the SBOM endpoint;
+- private vulnerability reporting.
+
+GitHub deliberately withholds `bypass_actors` unless the caller has ruleset write access. Secret-scanning and push-protection administration also remains an administrator assertion. The scheduled audit therefore prints these as `MANUAL_READBACK_REQUIRED` instead of interpreting an omitted field as PASS. No long-lived administration credential is added merely to make the scheduled check look complete.
+
 ### OWNER DECISION — licensing
 
 The public repository has no explicit root license. Tooling code and published Article content do not necessarily need the same licensing policy, so automation must not select a license on the owner's behalf. A separate owner-decision issue tracks this.
