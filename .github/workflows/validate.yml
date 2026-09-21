@@ -15,8 +15,10 @@ concurrency:
 
 jobs:
   validate:
+    name: Validate source
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
@@ -43,6 +45,7 @@ jobs:
     needs: validate
     if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && needs.validate.result == 'success'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
       BASE_SHA: ${{ github.event.pull_request.base.sha }}

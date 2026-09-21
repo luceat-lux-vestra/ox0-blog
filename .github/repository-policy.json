@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "assessment": {
+    "name": "Hardening Reassessment",
+    "date": "2026-09-20"
+  },
+  "repository": {
+    "full_name": "luceat-lux-vestra/ox0-blog",
+    "default_branch": "main",
+    "visibility": "public",
+    "allow_squash_merge": true,
+    "allow_merge_commit": false,
+    "allow_rebase_merge": false,
+    "allow_auto_merge": false,
+    "allow_update_branch": true,
+    "delete_branch_on_merge": true
+  },
+  "main": {
+    "pull_request_only": true,
+    "linear_history": true,
+    "deletion_protection": true,
+    "non_fast_forward_protection": true,
+    "strict_required_status_checks": true,
+    "required_review_thread_resolution": true,
+    "allowed_merge_methods": ["squash"],
+    "required_context_targets": [
+      "Validate source",
+      "Workflow Security",
+      "Dependency Review",
+      "failure-triage"
+    ],
+    "routine_bypass_actors": []
+  },
+  "actions": {
+    "default_workflow_permissions": "read",
+    "can_approve_pull_request_reviews": false,
+    "sha_pinning_required": true,
+    "persist_credentials_default": false,
+    "allowed_pull_request_target_workflows": [
+      ".github/workflows/article-publication-lifecycle.yml",
+      ".github/workflows/failure-triage.yml"
+    ]
+  },
+  "security_analysis": {
+    "codeql_languages": ["javascript-typescript", "actions"],
+    "codeql_required": false,
+    "workflow_static_analysis_required": true,
+    "dependency_review_required": true
+  },
+  "issue_metadata": {
+    "disposition": "EXCEPTION",
+    "reason": "No canonical managed issue-label taxonomy is declared; do not invent one solely to add automation."
+  },
+  "publication": {
+    "ghost_environment_split_required": false,
+    "invariant": "PR-controlled executable code never runs with Ghost authority; same-repository candidate content is data processed by trusted base tooling."
+  }
+}
