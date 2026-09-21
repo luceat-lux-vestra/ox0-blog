@@ -17,11 +17,25 @@ Another luceat-lux-vestra repository is not the normative authority.
 
 ## Findings and dispositions
 
-### GAP — live repository merge settings
+### PARTIAL / GAP — live repository merge settings and protection
 
-Readback on 2026-09-21 still shows merge commits and rebase merges enabled and branch-update support disabled. The intended state is checked into `.github/repository-policy.json`.
+Fresh repository readback on 2026-09-21 confirms the repository-level merge settings now match the checked-in intent:
 
-The reassessment does not pass until live settings/ruleset state is changed and fresh-read.
+- squash merge: enabled;
+- merge commits: disabled;
+- rebase merge: disabled;
+- branch-update support: enabled.
+
+The remaining live-policy gap is branch protection itself. Fresh authoritative ruleset collection readback is exactly `[]`.
+
+The reassessment does not pass until active `main` protection exists and is fresh-read with the checked-in required contexts exactly:
+
+- `Validate source`;
+- `Workflow Security`;
+- `Dependency Review`;
+- `failure-triage`.
+
+Do not treat the repository-level merge-setting correction as proof that branch protection exists.
 
 ### GAP — generic workflow validation
 
@@ -40,11 +54,11 @@ The trusted-base `failure-triage` workflow and PR input surface are already on c
 
 The hardening authority therefore recognizes `.github/workflows/failure-triage.yml` as the second intentionally audited metadata-only `pull_request_target` workflow and includes the exact `failure-triage` context in required-context intent. It must not become live-required until the repository protection/ruleset is applied and fresh-read.
 
-### GAP — dependency admission and update coverage
+### INTEGRATED / LIVE-PROVEN — dependency admission and update coverage
 
 The repository has an npm lockfile and GitHub Actions dependencies but previously had neither Dependabot configuration nor a dependency-review PR gate.
 
-Both npm and GitHub Actions are covered by the candidate. Dependency Review must remain fail-closed; the current live repository still needs Dependency Graph enabled before the check can succeed.
+Both npm and GitHub Actions are covered by the candidate. Fresh exact-candidate evidence on 2026-09-21 shows Dependency Review succeeds after the live dependency/security support was enabled. The check remains fail-closed and is part of the intended required-context set.
 
 ### GAP — security analysis
 
@@ -70,7 +84,7 @@ Issue metadata automation remains out of scope until the repository defines a us
 
 ### GAP — public security reporting / live security features
 
-`SECURITY.md` is added, but private vulnerability reporting, secret scanning, push protection, Dependency Graph, and repository protection are live GitHub settings. Their final status requires authoritative readback and, where necessary, administrative enablement.
+`SECURITY.md` is added. Dependency Review success on the exact candidate establishes that the dependency graph path needed by that gate is currently operational. Private vulnerability reporting, secret scanning, push protection, and repository protection remain live GitHub settings whose final status requires authoritative readback and, where necessary, administrative enablement.
 
 ### OWNER DECISION — licensing
 
