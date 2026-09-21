@@ -1,0 +1,42 @@
+name: Repository Drift
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '41 4 * * 2'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repository-drift-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Repository Drift
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+
+      - name: Verify exact checkout
+        run: test "$(git rev-parse HEAD)" = "${{ github.sha }}"
+
+      - name: Audit checked-in and readable live controls
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/check-repository-hardening.mjs --self-test
+          node scripts/check-repository-hardening.mjs --live

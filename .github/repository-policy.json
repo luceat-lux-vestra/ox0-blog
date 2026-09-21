@@ -22,7 +22,9 @@
     "non_fast_forward_protection": true,
     "strict_required_status_checks": true,
     "required_review_thread_resolution": true,
-    "allowed_merge_methods": ["squash"],
+    "allowed_merge_methods": [
+      "squash"
+    ],
     "required_context_targets": [
       "Validate source",
       "Workflow Security",
@@ -42,7 +44,10 @@
     ]
   },
   "security_analysis": {
-    "codeql_languages": ["javascript-typescript", "actions"],
+    "codeql_languages": [
+      "javascript-typescript",
+      "actions"
+    ],
     "codeql_required": false,
     "workflow_static_analysis_required": true,
     "dependency_review_required": true
@@ -54,5 +59,22 @@
   "publication": {
     "ghost_environment_split_required": false,
     "invariant": "PR-controlled executable code never runs with Ghost authority; same-repository candidate content is data processed by trusted base tooling."
+  },
+  "live_drift": {
+    "workflow": ".github/workflows/repository-drift.yml",
+    "automated_readback": [
+      "repository.visibility",
+      "repository.default_branch",
+      "repository.archived",
+      "main.ruleset",
+      "security.dependency_graph",
+      "security.private_vulnerability_reporting"
+    ],
+    "manual_readback": [
+      "main.routine_bypass_actors",
+      "security.secret_scanning",
+      "security.secret_scanning_push_protection"
+    ],
+    "principle": "A low-privilege scheduled audit must not infer PASS from fields GitHub deliberately withholds. Privilege-limited controls remain explicit manual assertions."
   }
 }

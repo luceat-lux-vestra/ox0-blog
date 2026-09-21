@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFile, readdir } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
 const root = process.cwd();
@@ -134,5 +135,115 @@ if (lifecycle.includes('working-directory: candidate\n        run: npm ci')) {
   fail('candidate-controlled dependencies must not execute with Ghost authority');
 }
 
+const drift = policy.live_drift;
+if (drift?.workflow !== '.github/workflows/repository-drift.yml') {
+  fail('recurring live-drift workflow ownership is missing');
+} else {
+  const driftWorkflow = await readFile(path.join(root, drift.workflow), 'utf8');
+  for (const fragment of [
+    'schedule:',
+    'workflow_dispatch:',
+    'permissions:\n  contents: read',
+    'persist-credentials: false',
+    'node scripts/check-repository-hardening.mjs --live'
+  ]) {
+    if (!driftWorkflow.includes(fragment)) fail(`repository drift workflow missing contract fragment: ${fragment}`);
+  }
+}
+
+function ghApi(endpoint) {
+  try {
+    return JSON.parse(execFileSync('gh', ['api', endpoint], {
+      cwd: root,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe']
+    }));
+  } catch (error) {
+    const detail = error?.stderr?.toString?.().trim() || error?.message || String(error);
+    fail(`live readback failed for ${endpoint}: ${detail}`);
+    return null;
+  }
+}
+
+function sameSet(left, right) {
+  return JSON.stringify([...left].sort()) === JSON.stringify([...right].sort());
+}
+
+if (process.argv.includes('--live')) {
+  const fullName = policy.repository?.full_name;
+  const repository = ghApi(`repos/${fullName}`);
+  if (repository) {
+    for (const [key, expected] of [
+      ['visibility', policy.repository.visibility],
+      ['default_branch', policy.repository.default_branch],
+      ['archived', false]
+    ]) {
+      if (!(key in repository)) fail(`live repository readback omitted ${key}; evidence is insufficient`);
+      else if (repository[key] !== expected) fail(`live repository ${key}=${JSON.stringify(repository[key])}; expected ${JSON.stringify(expected)}`);
+    }
+  }
+
+  const summaries = ghApi(`repos/${fullName}/rulesets?includes_parents=false`);
+  let ruleset = null;
+  if (Array.isArray(summaries)) {
+    const matches = summaries.filter((entry) => entry.name === 'Protect main' && entry.target === 'branch');
+    if (matches.length !== 1) fail(`expected exactly one repository branch ruleset named Protect main; found ${matches.length}`);
+    else ruleset = ghApi(`repos/${fullName}/rulesets/${matches[0].id}?includes_parents=false`);
+  }
+
+  if (ruleset) {
+    if (ruleset.enforcement !== 'active') fail(`Protect main enforcement=${ruleset.enforcement}; expected active`);
+    const refs = ruleset.conditions?.ref_name;
+    if (!refs || !sameSet(refs.include || [], ['~DEFAULT_BRANCH']) || (refs.exclude || []).length !== 0) {
+      fail('Protect main must target only the default branch');
+    }
+
+    const byType = new Map((ruleset.rules || []).map((rule) => [rule.type, rule.parameters || {}]));
+    const requiredTypes = ['deletion', 'non_fast_forward', 'required_linear_history', 'pull_request', 'required_status_checks'];
+    for (const type of requiredTypes) if (!byType.has(type)) fail(`Protect main is missing ${type}`);
+
+    const pr = byType.get('pull_request');
+    if (pr) {
+      if (!sameSet(pr.allowed_merge_methods || [], policy.main.allowed_merge_methods || [])) {
+        fail(`Protect main merge methods drifted: ${JSON.stringify(pr.allowed_merge_methods)}`);
+      }
+      if (pr.required_review_thread_resolution !== policy.main.required_review_thread_resolution) {
+        fail('Protect main review-thread resolution drifted');
+      }
+    }
+
+    const checks = byType.get('required_status_checks');
+    if (checks) {
+      if (checks.strict_required_status_checks_policy !== policy.main.strict_required_status_checks) {
+        fail('Protect main strict required-status policy drifted');
+      }
+      const observed = (checks.required_status_checks || []).map((item) => item.context);
+      if (!sameSet(observed, policy.main.required_context_targets || [])) {
+        fail(`Protect main required contexts drifted: actual=${JSON.stringify(observed)} expected=${JSON.stringify(policy.main.required_context_targets)}`);
+      }
+    }
+
+    if ('bypass_actors' in ruleset) {
+      if (!Array.isArray(ruleset.bypass_actors) || ruleset.bypass_actors.length !== 0) {
+        fail('Protect main has a live bypass actor');
+      }
+    } else {
+      console.log('MANUAL_READBACK_REQUIRED: main.routine_bypass_actors (GitHub hides this field without ruleset write access)');
+    }
+  }
+
+  const sbom = ghApi(`repos/${fullName}/dependency-graph/sbom`);
+  if (sbom && !sbom.sbom) fail('Dependency Graph SBOM response is missing sbom');
+
+  const pvr = ghApi(`repos/${fullName}/private-vulnerability-reporting`);
+  if (pvr && pvr.enabled !== true) fail('private vulnerability reporting is not enabled');
+
+  for (const control of drift?.manual_readback || []) {
+    console.log(`MANUAL_READBACK_REQUIRED: ${control}`);
+  }
+}
+
 if (process.exitCode) process.exit(process.exitCode);
-console.log('Hardening reassessment repository policy: PASS');
+console.log(process.argv.includes('--live')
+  ? 'Hardening reassessment repository + readable live policy: PASS (manual assertions remain explicit)'
+  : 'Hardening reassessment repository policy: PASS');
