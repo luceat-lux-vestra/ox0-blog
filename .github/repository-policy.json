@@ -39,8 +39,7 @@
     "sha_pinning_required": true,
     "persist_credentials_default": false,
     "allowed_pull_request_target_workflows": [
-      ".github/workflows/article-publication-lifecycle.yml",
-      ".github/workflows/failure-triage.yml"
+      ".github/workflows/article-publication-lifecycle.yml"
     ]
   },
   "security_analysis": {
