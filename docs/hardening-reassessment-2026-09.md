@@ -52,11 +52,30 @@ The remediation adds:
 - repository-owned workflow-policy checks;
 - pinned zizmor analysis for GitHub Actions trust-boundary findings.
 
-### INTEGRATED — executable failure triage
+### INTEGRATED — centralized failure declaration and classification
 
-The trusted-base `failure-triage` workflow and PR input surface are already on current `main`. Real PR evidence under #27 proved invalid metadata fails and a body-only correction succeeds on the unchanged code HEAD.
+The required `failure-triage` context now comes from the unprivileged
+`.github/workflows/failure-declaration.yml` `pull_request` adapter, pinned by
+full commit SHA to the organization-wide declaration validator. The legacy
+trusted-base `.github/workflows/failure-triage.yml` implementation has been
+removed.
 
-The hardening authority therefore recognizes `.github/workflows/failure-triage.yml` as the second intentionally audited metadata-only `pull_request_target` workflow and includes the exact `failure-triage` context in required-context intent. Fresh ruleset readback confirms that `failure-triage` is now live-required together with the other checked-in required contexts.
+Automatic CI failure classification is a separate trusted
+`workflow_run` reporter loaded from the default branch. It reconstructs the
+exact PR HEAD from GitHub Actions metadata and bounded log inspection and
+upserts one sticky `CI Failure Classification` comment. It never checks out
+or executes PR code or downloaded artifacts; write authority is limited to the
+reporter's job-local PR-comment scope.
+
+Because GitHub loads `workflow_run` workflows from the default branch, the PR
+that first introduced the reporter (#37) could not prove that reporter against
+its own pull-request runs. Full rollout therefore requires a later PR, with the
+reporter already on `main`, whose exact final HEAD passes the ordinary required
+checks and receives exactly one sticky report for the same HEAD. With no active
+failed or pending tracked workflow, the report must reach `CLEAR`.
+
+`CANDIDATE` and `UNKNOWN` remain fail-closed and never authorize
+remediation.
 
 ### INTEGRATED / LIVE-PROVEN — dependency admission and update coverage
 
@@ -78,7 +97,7 @@ The accepted invariant is narrower and security-relevant:
 
 The Article lifecycle uses trusted base-branch workflow/tooling, rejects fork PRs from the privileged draft job, treats the exact same-repository candidate checkout as data, installs dependencies only from trusted tooling, and re-verifies the candidate head before Ghost access.
 
-`pull_request_target` remains privileged. The only allowed target-trigger workflows are the audited Article lifecycle and the metadata-only failure-triage validator; neither may execute PR-controlled code.
+`pull_request_target` remains privileged. The only allowed target-trigger workflow is the audited Article lifecycle; it may not execute PR-controlled code.
 
 ### EXCEPTION — no issue-label bot
 
@@ -115,7 +134,7 @@ The reassessment passes only when:
 
 1. exact final PR HEAD passes source validation, Workflow Security, Dependency Review, failure-triage, and applicable CodeQL analysis;
 2. malformed-workflow negative control demonstrably fails actionlint;
-3. the two audited privileged workflows either pass zizmor or carry only narrowly justified reviewed exceptions;
+3. the audited privileged Article lifecycle workflow either passes zizmor or carries only narrowly justified reviewed exceptions;
 4. live merge/ruleset settings match the checked-in policy, including the exact `failure-triage` required context;
 5. live security-feature and Dependency Graph readback is recorded;
 6. merged `main` emits and passes required validation on the exact merge SHA;
