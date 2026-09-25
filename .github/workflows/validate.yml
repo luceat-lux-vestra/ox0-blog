@@ -7,6 +7,7 @@ on:
     branches: [main]
 
 permissions:
+  checks: read
   contents: read
 
 concurrency:
@@ -21,23 +22,49 @@ jobs:
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
+      - name: Reuse exact-SHA Fast evidence
+        if: ${{ github.event_name == 'pull_request' && github.event.action == 'ready_for_review' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_CHECK: Validate source
+        run: |
+          set -euo pipefail
+          checks="$(gh api -H 'Accept: application/vnd.github+json' "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_SHA/check-runs?filter=all&per_page=100")"
+          if ! jq -e --arg name "$EXPECTED_CHECK" '
+            [.check_runs[]
+             | select(.name == $name)
+             | select(.app.slug == "github-actions")
+             | select(.status == "completed" and .conclusion == "success")]
+            | length > 0
+          ' <<<"$checks" >/dev/null; then
+            echo "::error::No successful prior '$EXPECTED_CHECK' check exists for exact HEAD $EXPECTED_SHA."
+            exit 1
+          fi
+          echo "Reused successful Fast evidence for $EXPECTED_CHECK at $EXPECTED_SHA."
+
       - name: Check out exact commit
+        if: ${{ github.event_name != 'pull_request' || github.event.action != 'ready_for_review' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           ref: ${{ env.EXPECTED_SHA }}
       - name: Verify exact checkout
+        if: ${{ github.event_name != 'pull_request' || github.event.action != 'ready_for_review' }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
       - name: Set up Node.js 24
+        if: ${{ github.event_name != 'pull_request' || github.event.action != 'ready_for_review' }}
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
           cache: npm
       - name: Install locked dependencies
+        if: ${{ github.event_name != 'pull_request' || github.event.action != 'ready_for_review' }}
         run: npm ci --ignore-scripts
       - name: Test
+        if: ${{ github.event_name != 'pull_request' || github.event.action != 'ready_for_review' }}
         run: npm test
       - name: Validate Article sources
+        if: ${{ github.event_name != 'pull_request' || github.event.action != 'ready_for_review' }}
         run: npm run validate
   preview:
     name: PR Article Preview
