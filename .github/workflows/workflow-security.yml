@@ -3,9 +3,6 @@ name: Workflow Security
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  push:
-    branches: [main]
-
 permissions:
   actions: read # Needed to inspect the canonical exact-SHA security workflow run.
   contents: read

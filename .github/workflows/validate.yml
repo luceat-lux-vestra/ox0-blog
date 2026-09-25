@@ -3,9 +3,6 @@ name: Validate blog source
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  push:
-    branches: [main]
-
 permissions:
   actions: read # Needed to inspect the canonical exact-SHA validation workflow run.
   contents: read
