@@ -2,11 +2,12 @@ name: Workflow Security
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
 
 permissions:
+  actions: read # Needed to inspect the canonical exact-SHA security workflow run.
   contents: read
 
 concurrency:
@@ -23,16 +24,76 @@ jobs:
       ACTIONLINT_VERSION: "1.7.12"
       ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
     steps:
+      - name: Reuse exact-SHA Fast evidence
+        id: fast-evidence
+        if: ${{ github.event_name == 'pull_request' && github.event.action == 'ready_for_review' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          EXPECTED_JOB: Workflow Security
+          SAME_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        run: |
+          set -euo pipefail
+          if [ "$SAME_REPOSITORY" != "true" ]; then
+            echo "reuse=false" >> "$GITHUB_OUTPUT"
+            echo "Fork PR cannot reuse base-repository security evidence; Final will execute the security audit."
+            exit 0
+          fi
+          base_workflow_sha="$(gh api "repos/$GITHUB_REPOSITORY/contents/.github/workflows/workflow-security.yml?ref=$BASE_SHA" --jq '.sha')"
+          head_workflow_sha="$(gh api "repos/$GITHUB_REPOSITORY/contents/.github/workflows/workflow-security.yml?ref=$EXPECTED_SHA" --jq '.sha')"
+          if [ "$base_workflow_sha" != "$head_workflow_sha" ]; then
+            echo "reuse=false" >> "$GITHUB_OUTPUT"
+            echo "Security producer changed on this PR; Final will execute the security audit."
+            exit 0
+          fi
+          for _ in $(seq 1 60); do
+            runs="$(gh api -H 'Accept: application/vnd.github+json' "repos/$GITHUB_REPOSITORY/actions/workflows/workflow-security.yml/runs?event=pull_request&head_sha=$EXPECTED_SHA&per_page=100")"
+            latest="$(jq -c --arg sha "$EXPECTED_SHA" --arg current "$GITHUB_RUN_ID" '
+              [.workflow_runs[]
+               | select(.head_sha == $sha and .event == "pull_request")
+               | select((.id | tostring) != $current)]
+              | if length == 0 then empty else max_by(.id) end
+            ' <<<"$runs")"
+            if [ -z "$latest" ]; then sleep 5; continue; fi
+            status="$(jq -r '.status' <<<"$latest")"
+            conclusion="$(jq -r '.conclusion // ""' <<<"$latest")"
+            if [ "$status" != "completed" ]; then sleep 5; continue; fi
+            if [ "$conclusion" != "success" ]; then
+              echo "::error::Canonical Workflow Security run for exact HEAD $EXPECTED_SHA concluded '$conclusion'."
+              exit 1
+            fi
+            run_id="$(jq -r '.id' <<<"$latest")"
+            jobs="$(gh api -H 'Accept: application/vnd.github+json' "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?filter=latest&per_page=100")"
+            matching_jobs="$(jq --arg name "$EXPECTED_JOB" '[.jobs[] | select(.name == $name)] | length' <<<"$jobs")"
+            if [ "$matching_jobs" != "1" ]; then
+              echo "::error::Canonical security run $run_id must contain exactly one '$EXPECTED_JOB' job; found $matching_jobs."
+              exit 1
+            fi
+            job_status="$(jq -r --arg name "$EXPECTED_JOB" '.jobs[] | select(.name == $name) | .status' <<<"$jobs")"
+            job_conclusion="$(jq -r --arg name "$EXPECTED_JOB" '.jobs[] | select(.name == $name) | (.conclusion // "")' <<<"$jobs")"
+            if [ "$job_status" != "completed" ] || [ "$job_conclusion" != "success" ]; then
+              echo "::error::Canonical security evidence is status=$job_status conclusion=$job_conclusion."
+              exit 1
+            fi
+            echo "reuse=true" >> "$GITHUB_OUTPUT"
+            echo "Reusing canonical successful Workflow Security evidence for exact HEAD $EXPECTED_SHA."
+            exit 0
+          done
+          echo "::error::Timed out waiting for canonical exact-SHA Workflow Security evidence at $EXPECTED_SHA."
+          exit 1
       - name: Check out exact source
+        if: ${{ github.event_name != 'pull_request' || github.event.action != 'ready_for_review' || steps.fast-evidence.outputs.reuse != 'true' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           ref: ${{ env.EXPECTED_SHA }}
 
       - name: Verify exact checkout
+        if: ${{ github.event_name != 'pull_request' || github.event.action != 'ready_for_review' || steps.fast-evidence.outputs.reuse != 'true' }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
       - name: Install checksum-pinned actionlint
+        if: ${{ github.event_name != 'pull_request' || github.event.action != 'ready_for_review' || steps.fast-evidence.outputs.reuse != 'true' }}
         run: |
           set -eu
           archive="$RUNNER_TEMP/actionlint.tar.gz"
@@ -42,9 +103,11 @@ jobs:
           "$RUNNER_TEMP/actionlint" -version
 
       - name: Lint every active workflow
+        if: ${{ github.event_name != 'pull_request' || github.event.action != 'ready_for_review' || steps.fast-evidence.outputs.reuse != 'true' }}
         run: '"$RUNNER_TEMP/actionlint" .github/workflows/*.yml'
 
       - name: Prove malformed workflow fixture is rejected
+        if: ${{ github.event_name != 'pull_request' || github.event.action != 'ready_for_review' || steps.fast-evidence.outputs.reuse != 'true' }}
         run: |
           set -eu
           if "$RUNNER_TEMP/actionlint" .github/fixtures/actionlint-invalid.yml >"$RUNNER_TEMP/invalid.out" 2>&1; then
@@ -55,11 +118,13 @@ jobs:
           cat "$RUNNER_TEMP/invalid.out"
 
       - name: Check repository-owned hardening invariants
+        if: ${{ github.event_name != 'pull_request' || github.event.action != 'ready_for_review' || steps.fast-evidence.outputs.reuse != 'true' }}
         run: |
           node scripts/check-repository-hardening.mjs --self-test
           node scripts/check-repository-hardening.mjs
 
       - name: Audit GitHub Actions trust boundaries with zizmor
+        if: ${{ github.event_name != 'pull_request' || github.event.action != 'ready_for_review' || steps.fast-evidence.outputs.reuse != 'true' }}
         uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
         with:
           version: "1.29.0"
