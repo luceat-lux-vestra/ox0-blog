@@ -7,8 +7,7 @@ on:
     branches: [main]
 
 permissions:
-  # Read prior exact-SHA check results for Fast evidence reuse.
-  checks: read
+  checks: read # Needed to inspect prior exact-SHA check results for Fast evidence reuse.
   contents: read
 
 concurrency:
