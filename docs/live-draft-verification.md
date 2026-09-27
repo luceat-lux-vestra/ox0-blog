@@ -1,6 +1,6 @@
 # Exact-candidate Article live draft verification
 
-This document defines the live-evidence path for the target Article draft synchronization semantics without requiring a separate Ghost staging environment.
+This document defines the live-evidence path for the current Article draft synchronization semantics without requiring a separate Ghost staging environment.
 
 The verifier is intentionally **draft-only**. It may use the real personal-blog Ghost instance because it never requests `published` status.
 
@@ -77,7 +77,7 @@ Ambiguous or changed ownership fails cleanup closed instead of deleting by slug 
 
 A PASS supports only these claims for the exact verified candidate SHA and the specified Ghost instance:
 
-- target Article review/checkpoint reconstruction reaches `SYNCED + READY`;
+- Article review/checkpoint reconstruction reaches `SYNCED + READY`;
 - two managed locale drafts can be created;
 - both recover as `DRAFT_CURRENT`;
 - stable ownership permits bounded cleanup without touching unrelated content;
