@@ -8,7 +8,7 @@ It is deliberately outside `DocumentCompiler`. Marked/Arkst may observe and rewr
 
 The legacy authoring path embeds local body images as `data:` URIs. That remains compatibility behavior only.
 
-The target Article model needs to preserve three separate facts:
+The current Article model preserves three separate facts:
 
 ```text
 source meaning       = authored ref + exact local bytes
@@ -153,7 +153,7 @@ Because keys are content-addressed, an idempotent overwrite of identical content
 
 ## Article-level ordering
 
-Target Article publication applies asset side effects before the first Ghost mutation.
+Current Article publication applies asset side effects before the first Ghost mutation.
 
 This avoids the failure mode:
 
