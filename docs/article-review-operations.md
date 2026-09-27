@@ -1,6 +1,6 @@
 # Article review persistence operations
 
-This document describes the target Blog operations that persist reviewed translation/readiness evidence into `article.json`.
+This document describes the current Blog operations that persist reviewed translation/readiness evidence into `article.json`.
 
 These are agent-oriented persistence primitives. They do not replace semantic review, do not authorize Git merge, and do not authorize Ghost publication.
 
