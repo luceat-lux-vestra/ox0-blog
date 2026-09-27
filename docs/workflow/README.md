@@ -109,7 +109,7 @@ A fresh session must be able to reconstruct semantic state without trusting an o
 
 `READY` is a reviewed semantic claim, so a bare persisted `state: READY` is insufficient evidence.
 
-The eventual durable Article representation must retain enough versioned evidence to establish that the current readiness-relevant source is the source that passed the current readiness-review contract, for example a reviewed source fingerprint/checkpoint plus contract version and stable provenance kind. The exact manifest syntax remains unfrozen.
+The durable Article representation retains enough versioned evidence to establish that the current readiness-relevant source is the source that passed the current readiness-review contract: a reviewed source fingerprint/checkpoint plus contract version and stable provenance kind. [`article.json` manifest v1](../article-manifest-v1.md) is the active syntax; future revisions must version the contract rather than reinterpret existing readiness evidence.
 
 Requirements:
 
