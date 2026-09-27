@@ -1,6 +1,6 @@
 # Article manifest v1
 
-This document defines the first durable on-disk representation for the target `Article + LocaleVariant` model.
+This document defines the active durable on-disk representation for the current `Article + LocaleVariant` model.
 
 It is a source-storage contract. It does **not** define Git/PR state, Ghost state, publication authorization, compiler asset-delivery policy, or RTA lifecycle state.
 
