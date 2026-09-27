@@ -1,6 +1,6 @@
-# Target Article publication orchestration
+# Article publication orchestration
 
-This document describes the target Article-level mutation library, low-level execution CLI, and guarded manual GitHub Actions control surface on the authoring branch.
+This document describes the current Article-level mutation library, low-level execution CLI, normal automatic publication lifecycle, and guarded manual recovery/operations control surface.
 
 The durable workflow policy in `docs/workflow/` remains authoritative for deciding whether a task is authorized to mutate Ghost. Low-level repository mechanics consume authorization; they do not create evidence of user intent by themselves.
 
@@ -447,4 +447,4 @@ The CLI:
 
 This CLI being executable does not mean the agent may invoke `publish` without a user's explicit publication instruction. The workflow authorization contract remains above the CLI.
 
-The target manual production workflow is `.github/workflows/article-ghost.yml`. `.github/workflows/ghost-publish.yml` remains explicitly named **Legacy Publish to Ghost (compatibility)** and must not be treated as the target Article publication surface.
+The normal automatic Article lifecycle is `.github/workflows/article-publication-lifecycle.yml`. The manual recovery/operations workflow is `.github/workflows/article-ghost.yml`. `.github/workflows/ghost-publish.yml` remains explicitly named **Legacy Publish to Ghost (compatibility)** and must not be treated as a current Article publication surface.
