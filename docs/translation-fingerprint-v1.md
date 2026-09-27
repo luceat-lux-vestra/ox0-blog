@@ -1,6 +1,6 @@
 # Translation fingerprint v1
 
-This document defines the source evidence hashed by `translationFingerprintV1(...)` for the target Article/LocaleVariant model.
+This document defines the source evidence hashed by `translationFingerprintV1(...)` for the current Article/LocaleVariant model.
 
 The fingerprint answers one narrow question: **has translation-relevant observable source for this LocaleVariant changed since the last accepted equivalence review?**
 
@@ -12,7 +12,7 @@ The contract version is `1` and is persisted in `translationCheckpoint.fingerpri
 
 Unsupported versions fail closed. A checkpoint created under another fingerprint contract must never be interpreted as current merely because its SHA-256 string is syntactically valid.
 
-PR #2 is still an unmerged architecture-development branch and there is no canonical Article corpus using this checkpoint yet; the v1 field set below is the contract that must be used before real v1 checkpoints are introduced.
+The v1 field set below is the active checkpoint contract. Unsupported or older fingerprint-contract versions fail closed; any future change to the evidence set requires an explicit versioned contract migration rather than reinterpretation of existing checkpoints.
 
 ## Included semantic source
 
@@ -78,7 +78,7 @@ sha256 = lowercase 64-hex content digest
 
 Duplicate refs and malformed digest evidence fail closed.
 
-Legacy data-URI size limits are delivery-policy constraints and are not part of the target translation fingerprint contract.
+Legacy data-URI size limits are delivery-policy constraints and are not part of the current translation fingerprint contract.
 
 ## Remote body resources
 
