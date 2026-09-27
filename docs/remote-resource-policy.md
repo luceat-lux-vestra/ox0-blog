@@ -1,8 +1,8 @@
 # Production remote-resource policy
 
-Target Article source may reference external HTTPS images, but a URL is not evidence of immutable bytes.
+Article source may reference external HTTPS images, but a URL is not evidence of immutable bytes.
 
-For that reason the target workflow distinguishes:
+For that reason the current workflow distinguishes:
 
 ```text
 draft planning/mutation
