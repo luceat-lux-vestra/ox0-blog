@@ -35,4 +35,11 @@ Third-party GitHub Actions must use immutable full commit SHAs.
 
 ## Merge
 
-Development commits may move normally. Merge judgment is exact-final-HEAD proof work. CI green is necessary but insufficient; `UNKNOWN`, `UNVERIFIED`, and `INSUFFICIENT EVIDENCE` are FAIL. Repository history is squash-only once the live hardening policy is applied.
+Development commits may move normally. Merge judgment is exact-final-HEAD proof work. CI green is necessary but insufficient; `UNKNOWN`, `UNVERIFIED`, and `INSUFFICIENT EVIDENCE` are FAIL.
+
+The live repository policy is already applied: `main` is pull-request-only,
+linear-history, and squash-only with required review-thread resolution and
+strict required contexts `Validate source`, `Workflow Security`,
+`Dependency Review`, and `failure-triage`. Final validation is a PR-path
+proof obligation; it is not repeated merely because the reviewed tree was
+squash-merged to `main`.
