@@ -194,4 +194,21 @@ If a Ghost mutation succeeds but final managed stamping fails, the projection re
 
 ## Verification status
 
-Tests and workflows existing in the tree are not proof by themselves. Merge review, when explicitly started, is exact-HEAD proof work. The repository is public and GitHub-hosted Actions can allocate runners; normal validation executes for non-draft pull requests and pushes to `main`. CI results are development evidence, while strict merge judgment still requires exact-head proof under the merge gate.
+Tests and workflows existing in the tree are not proof by themselves. Merge
+review, when explicitly started, is exact-HEAD proof work.
+
+The live merge gate is a **pull-request path**. `Protect main` requires
+`Validate source`, `Workflow Security`, `Dependency Review`, and
+`failure-triage` on the exact candidate HEAD. Draft/Ready CI may reuse prior
+successful exact-SHA Fast evidence when the producer itself is unchanged, but
+that does not weaken the final required contexts.
+
+Since PR #43, Final/exhaustive validation is intentionally **not repeated on
+the resulting `main` push**. Post-merge workflows are responsibility-specific:
+`Repository Drift` re-checks live repository policy, and the Article
+Publication Lifecycle handles relevant Article-changing `main` pushes.
+CodeQL remains advisory on eligible pull requests plus its schedule.
+
+CI green is necessary development evidence; strict merge judgment still
+requires exact-head proof, zero unresolved review threads, and fresh live
+policy/readback under the merge gate.

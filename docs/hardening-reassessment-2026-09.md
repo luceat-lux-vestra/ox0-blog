@@ -1,10 +1,14 @@
 # Hardening Reassessment — 2026-09-20
 
-Owning issue: #22
+- **Status:** Completed point-in-time reassessment
+- **Owning issue:** #22 — completed 2026-09-22
+- **Current policy authority:** `.github/repository-policy.json` plus the live
+  `Protect main` ruleset and active workflow contracts
 
-This reassessment re-evaluates the repository against current external repository-security guidance and the repository's actual role as a public source repository plus controlled Ghost publication system.
-
-It is not a versioned internal baseline.
+This document records the September hardening reassessment and its closure. It
+is historical evidence, not a live backlog or a versioned internal baseline.
+Later workflow changes are called out only where they change how the current
+policy is executed without changing the underlying hardening invariant.
 
 ## External reference points
 
@@ -41,16 +45,21 @@ Fresh ruleset readback also confirms active repository ruleset `Protect main` (i
 
 The live required-context promotion therefore matches `.github/repository-policy.json` and is no longer a blocker for PR #24.
 
-### GAP — generic workflow validation
+### INTEGRATED / LIVE-PROVEN — generic workflow validation
 
-PR #19 demonstrated that repository-specific tests did not catch malformed workflow YAML before merge.
+PR #19 demonstrated that repository-specific tests did not catch malformed
+workflow YAML before merge.
 
-The remediation adds:
+The completed remediation added:
 
 - checksum-pinned actionlint over every active workflow;
 - an intentionally malformed negative fixture that must fail;
 - repository-owned workflow-policy checks;
 - pinned zizmor analysis for GitHub Actions trust-boundary findings.
+
+`Workflow Security` is now one of the four live required PR contexts. PR #43
+later removed its redundant `main` push execution while preserving the exact
+required context on pull requests.
 
 ### INTEGRATED — centralized failure declaration and classification
 
@@ -67,12 +76,16 @@ upserts one sticky `CI Failure Classification` comment. It never checks out
 or executes PR code or downloaded artifacts; write authority is limited to the
 reporter's job-local PR-comment scope.
 
-Because GitHub loads `workflow_run` workflows from the default branch, the PR
-that first introduced the reporter (#37) could not prove that reporter against
-its own pull-request runs. Full rollout therefore requires a later PR, with the
-reporter already on `main`, whose exact final HEAD passes the ordinary required
-checks and receives exactly one sticky report for the same HEAD. With no active
-failed or pending tracked workflow, the report must reach `CLEAR`.
+Because GitHub loads `workflow_run` workflows from the default branch, PR
+#37 could not prove the newly introduced reporter against its own pull-request
+runs. That bootstrap limitation was closed by follow-up PR #38 after the
+reporter existed on `main`.
+
+PR #38 exact HEAD `a0ca607d783959ea12fffe7106e35ed26a987484`
+received exactly one sticky `CI Failure Classification` report for the same
+HEAD with state `CLEAR` and zero active classified failures, then merged as
+`b6e9255d707114ed9f3dd61831564078646dcac1`. The two-phase rollout is
+therefore complete.
 
 `CANDIDATE` and `UNKNOWN` remain fail-closed and never authorize
 remediation.
@@ -83,9 +96,17 @@ The repository has an npm lockfile and GitHub Actions dependencies but previousl
 
 Both npm and GitHub Actions are covered by the candidate. Fresh exact-candidate evidence on 2026-09-21 shows Dependency Review succeeds after the live dependency/security support was enabled. The check remains fail-closed and is part of the intended required-context set.
 
-### GAP — security analysis
+### ADVISORY / LIVE-PROVEN — security analysis
 
-CodeQL is added for `javascript-typescript` and `actions`. It is initially an analysis surface rather than a required status context; promotion to a blocking rule requires observed reliable PR/main evidence and a deliberate ruleset change.
+CodeQL covers `javascript-typescript` and `actions` as an advisory security
+analysis surface; it is intentionally not a required status context in the
+live ruleset.
+
+Current execution is pull-request plus scheduled analysis. PR #43 deliberately
+removed the redundant `main` push analysis together with the other Final
+producers. Any future promotion to a blocking context still requires a
+deliberate policy/ruleset change rather than being inferred from successful
+advisory runs.
 
 ### PASS WITH EXPLICIT EXCEPTION — Ghost authority remains shared
 
@@ -105,9 +126,18 @@ The repository does not currently declare a canonical managed issue-label taxono
 
 Issue metadata automation remains out of scope until the repository defines a useful deterministic taxonomy.
 
-### GAP — public security reporting / live security features
+### PASS — public security reporting / live security features
 
-`SECURITY.md` is added. Dependency Review success on the exact candidate establishes that the dependency graph path needed by that gate is currently operational. Repository protection is live-proven by the active `Protect main` ruleset. Private vulnerability reporting, secret scanning, and push protection remain separate live GitHub settings whose final status still requires authoritative readback and, where necessary, administrative enablement.
+`SECURITY.md` is present. Dependency Review proved the Dependency Graph path
+used by the required gate. The #22 closeout then recorded administration-backed
+evidence that private vulnerability reporting, secret scanning, and secret
+scanning push protection were enabled, and fresh ruleset readback confirmed no
+routine bypass actors.
+
+The recurring low-privilege drift audit intentionally does not pretend it can
+authoritatively read every admin-only field. Those controls remain explicit
+manual/admin readbacks in the checked-in policy when GitHub withholds them from
+the scheduled token.
 
 ### ADDED — recurring low-privilege live drift detection
 
@@ -122,22 +152,50 @@ GitHub deliberately withholds `bypass_actors` unless the caller has ruleset writ
 
 ### OWNER DECISION — licensing
 
-The public repository has no explicit root license. Tooling code and published Article content do not necessarily need the same licensing policy, so automation must not select a license on the owner's behalf. A separate owner-decision issue tracks this.
+The public repository has no explicit root license. Tooling code and published Article content do not necessarily need the same licensing policy, so automation must not select a license on the owner's behalf. Owner decision #23 remains open and separate from the completed technical
+hardening reassessment.
 
 ### N/A — artifact attestation
 
 The repository does not currently distribute a downloadable executable/build artifact as its product. Ghost publication is a controlled projection, so generic build-artifact attestation is not added merely for uniformity.
 
-## Exit criteria
+## Closure evidence and current execution model
 
-The reassessment passes only when:
+The September reassessment closed after:
 
-1. exact final PR HEAD passes source validation, Workflow Security, Dependency Review, failure-triage, and applicable CodeQL analysis;
-2. malformed-workflow negative control demonstrably fails actionlint;
-3. the audited privileged Article lifecycle workflow either passes zizmor or carries only narrowly justified reviewed exceptions;
-4. live merge/ruleset settings match the checked-in policy, including the exact `failure-triage` required context;
-5. live security-feature and Dependency Graph readback is recorded;
-6. merged `main` emits and passes required validation on the exact merge SHA;
-7. profile-dispatch observability from #22 is closed without exposing token values.
+1. the exact final hardening candidate passed `Validate source`,
+   `Workflow Security`, `Dependency Review`, `failure-triage`, and
+   applicable CodeQL analysis;
+2. the malformed-workflow negative control proved actionlint rejection;
+3. the audited privileged Article lifecycle satisfied the reviewed zizmor /
+   trust-boundary contract;
+4. live merge settings and ruleset matched checked-in policy with the exact
+   four required PR contexts and no routine bypass;
+5. Dependency Graph, private vulnerability reporting, secret scanning, and push
+   protection closeout evidence was recorded;
+6. the then-current post-merge validation and recurring drift evidence passed;
+7. profile-dispatch configuration was resolved explicitly: absence of
+   `PROFILE_REPO_DISPATCH_TOKEN` is a documented hourly-fallback state, not an
+   unknown publication failure.
+
+Failure-classification rollout proof was completed later by #38, as described
+above.
+
+### Current CI topology after #43
+
+The current merge proof remains exact-final-HEAD and pull-request scoped.
+`Validate source`, `Workflow Security`, `Dependency Review`, and
+`failure-triage` are the live required contexts. CodeQL remains advisory.
+
+PR #43 intentionally stopped repeating Final/exhaustive validation on the
+resulting `main` push. Therefore current post-merge verification must not wait
+for `Validate source`, `Workflow Security`, or CodeQL push runs that are no
+longer produced. Instead, fresh-read the resulting `main` SHA/tree/signature
+and verify the workflows that are actually applicable to that merge, such as
+`Repository Drift` and the Article Publication Lifecycle for Article-changing
+pushes.
+
+This later CI optimization changes execution cadence, not the underlying
+hardening obligations or exact-HEAD merge standard.
 
 `UNKNOWN`, `UNVERIFIED`, and `INSUFFICIENT EVIDENCE` remain FAIL for claimed controls.
