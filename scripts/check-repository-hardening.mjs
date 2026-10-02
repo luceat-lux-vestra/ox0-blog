@@ -119,6 +119,51 @@ if (JSON.stringify(prTargetFiles.sort()) !== JSON.stringify(allowed)) {
   fail(`pull_request_target ownership drifted: actual=${JSON.stringify(prTargetFiles)} expected=${JSON.stringify(allowed)}`);
 }
 
+const eventPolicyExpectations = policy.actions?.event_policy_expectations;
+if (!Array.isArray(eventPolicyExpectations)) {
+  fail('actions.event_policy_expectations must be an array');
+} else {
+  const byId = new Map();
+  for (const expectation of eventPolicyExpectations) {
+    if (!Number.isInteger(expectation.id) || expectation.id <= 0) {
+      fail(`Actions event policy id ${JSON.stringify(expectation.id)} must be a positive integer`);
+      continue;
+    }
+    if (byId.has(expectation.id)) {
+      fail(`Actions event policy id ${expectation.id} is declared more than once`);
+      continue;
+    }
+    if (!['active', 'absent'].includes(expectation.state)) {
+      fail(`Actions event policy ${expectation.id} has unsupported state ${JSON.stringify(expectation.state)}`);
+    }
+    byId.set(expectation.id, expectation);
+  }
+
+  const retiredFailureTriage = byId.get(5155);
+  if (!retiredFailureTriage ||
+      retiredFailureTriage.state !== 'absent' ||
+      retiredFailureTriage.former_workflow !== '.github/workflows/failure-triage.yml') {
+    fail('retired Actions event policy 5155 must remain explicitly absent for legacy failure-triage.yml');
+  }
+
+  const publicationPolicy = byId.get(5156);
+  if (!publicationPolicy ||
+      publicationPolicy.state !== 'active' ||
+      publicationPolicy.workflow !== '.github/workflows/article-publication-lifecycle.yml' ||
+      !sameSet(publicationPolicy.allowed_events || [], ['pull_request_target', 'push'])) {
+    fail('Actions event policy 5156 must remain active for article-publication-lifecycle.yml with pull_request_target + push only');
+  }
+
+  const activePolicyWorkflows = eventPolicyExpectations
+    .filter((entry) => entry.state === 'active')
+    .map((entry) => entry.workflow)
+    .filter(Boolean)
+    .sort();
+  if (!sameSet(activePolicyWorkflows, allowed)) {
+    fail(`active Actions event-policy workflow ownership drifted: actual=${JSON.stringify(activePolicyWorkflows)} expected=${JSON.stringify(allowed)}`);
+  }
+}
+
 const lifecycle = await readFile(path.join(root, '.github/workflows/article-publication-lifecycle.yml'), 'utf8');
 for (const invariant of [
   "github.event.pull_request.head.repo.full_name == github.repository",
@@ -134,8 +179,22 @@ for (const invariant of [
 if (lifecycle.includes('working-directory: candidate\n        run: npm ci')) {
   fail('candidate-controlled dependencies must not execute with Ghost authority');
 }
+for (const trigger of ['pull_request_target:', 'push:']) {
+  if (!lifecycle.includes(trigger)) {
+    fail(`article publication lifecycle lost event required by Actions policy 5156: ${trigger}`);
+  }
+}
 
 const drift = policy.live_drift;
+for (const control of [
+  'actions.event_policy.5155.absent',
+  'actions.event_policy.5156.article_publication_lifecycle_exact_scope'
+]) {
+  if (!(drift?.manual_readback || []).includes(control)) {
+    fail(`live_drift.manual_readback is missing ${control}`);
+  }
+}
+
 if (drift?.workflow !== '.github/workflows/repository-drift.yml') {
   fail('recurring live-drift workflow ownership is missing');
 } else {
