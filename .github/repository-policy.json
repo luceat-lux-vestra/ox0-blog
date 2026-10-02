@@ -40,6 +40,23 @@
     "persist_credentials_default": false,
     "allowed_pull_request_target_workflows": [
       ".github/workflows/article-publication-lifecycle.yml"
+    ],
+    "event_policy_expectations": [
+      {
+        "id": 5155,
+        "state": "absent",
+        "former_workflow": ".github/workflows/failure-triage.yml",
+        "reason": "PR #37 retired the legacy pull_request_target failure-triage workflow and migrated the required failure-triage context to unprivileged .github/workflows/failure-declaration.yml."
+      },
+      {
+        "id": 5156,
+        "state": "active",
+        "workflow": ".github/workflows/article-publication-lifecycle.yml",
+        "allowed_events": [
+          "pull_request_target",
+          "push"
+        ]
+      }
     ]
   },
   "security_analysis": {
@@ -72,7 +89,9 @@
     "manual_readback": [
       "main.routine_bypass_actors",
       "security.secret_scanning",
-      "security.secret_scanning_push_protection"
+      "security.secret_scanning_push_protection",
+      "actions.event_policy.5155.absent",
+      "actions.event_policy.5156.article_publication_lifecycle_exact_scope"
     ],
     "principle": "A low-privilege scheduled audit must not infer PASS from fields GitHub deliberately withholds. Privilege-limited controls remain explicit manual assertions."
   }
