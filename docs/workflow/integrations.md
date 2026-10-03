@@ -138,7 +138,7 @@ Do not persist ChatGPT conversation/session IDs as required long-lived foreign k
 Links convey provenance and review dependencies only.
 
 - RTA `VALIDATED` does not automatically publish/update a blog post.
-- Blog publication does not make an RTA item `PROMOTED` or `VALIDATED`.
+- Blog publication does not create an RTA application edge (`DISPATCHED`) and does not make an RTA item `VALIDATED`.
 - RTA `READY` does not authorize project mutation.
 - Blog edits do not automatically rewrite RTA evidence/history.
 

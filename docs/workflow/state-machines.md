@@ -349,13 +349,23 @@ A Git merge does not by itself prove `PUBLISHED_CURRENT`. Under the approved Art
 
 `research-to-action` is the canonical authority for RTA lifecycle and promotion semantics. Blog docs reference it; they do not redefine it.
 
-Its current main flow is conceptually:
+Its current knowledge-maturity flow is conceptually:
 
 ```text
-CAPTURED -> RESEARCHING -> APPLICABLE -> NEEDS_EVIDENCE -> READY -> PROMOTED
+CAPTURED -> RESEARCHING -> APPLICABLE -> NEEDS_EVIDENCE -> READY
 ```
 
 with repository-defined side/terminal states. Always load current `research-to-action/AGENTS.md`/README when RTA mutation or lifecycle interpretation is involved rather than treating this conceptual list as authority.
+
+Downstream application is orthogonal to that knowledge state:
+
+```text
+PROPOSED -> DISPATCHED -> RESULT_RECORDED
+
+side outcome: CANCELLED
+```
+
+A verified handoff records an application relation; it does not consume the RTA item or move it to a terminal knowledge state.
 
 Blog events do not automatically change RTA state. RTA state changes do not automatically change Article, Git, translation, or Ghost state.
 
