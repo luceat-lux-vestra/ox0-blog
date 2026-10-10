@@ -14,7 +14,7 @@ concurrency:
 jobs:
   review:
     name: Dependency Review
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Review dependency changes

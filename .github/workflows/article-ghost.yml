@@ -38,7 +38,7 @@ jobs:
   article:
     name: Guarded Article Ghost operation
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: ox0-blog
     env:

@@ -24,7 +24,7 @@ jobs:
       github.event_name == 'pull_request_target' &&
       github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: ox0-blog
     env:
@@ -159,7 +159,7 @@ jobs:
   main-publish:
     name: Publish exact merged Articles
     if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: ox0-blog
     env:
