@@ -115,3 +115,13 @@ The active architecture is the Article + LocaleVariant model tracked by issues #
 ## Fail closed
 
 If required workflow documents are missing, contradictory, or declare an unsupported contract version, do not guess or silently use remembered policy. Preserve durable state and surface the policy conflict before mutation.
+
+## Crash-recoverable agent work
+
+For non-trivial repository work that may span sessions, follow `docs/engineering/agent-recovery.md`.
+
+Current GitHub Issue/branch/commit/PR/check/review/merge state is authoritative for execution recovery. A durable Issue checkpoint is a compact resume hint only. At session start, fresh-read open production PRs first, reconcile the active work item against authoritative state, and derive one safe next action before mutating.
+
+After a material external mutation, verify the resulting GitHub postcondition before advancing the checkpoint. If a response or session is lost, never repeat the mutation merely because the checkpoint is behind. Re-read and classify the result as matching, stale-but-reconcilable, retryable-absent, conflicting, or `UNKNOWN`.
+
+Checkpoint updates must not move the production PR HEAD. Any actual HEAD movement invalidates prior exact-HEAD evidence under this repository's normal merge gate. Deliberately stale checkpoints are test-only; normal work updates the checkpoint after every verified durable boundary.
