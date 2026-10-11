@@ -1,8 +1,14 @@
 name: Repository Drift
 
 on:
+  # Run after a merge only when repository policy or its audit implementation changes.
+  # Scheduled and manual audits independently detect live settings drift.
   push:
     branches: [main]
+    paths:
+      - '.github/**'
+      - 'scripts/check-repository-hardening.mjs'
+      - 'SECURITY.md'
   schedule:
     - cron: '41 4 * * 2'
   workflow_dispatch:
