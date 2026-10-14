@@ -198,10 +198,10 @@ Tests and workflows existing in the tree are not proof by themselves. Merge
 review, when explicitly started, is exact-HEAD proof work.
 
 The live merge gate is a **pull-request path**. `Protect main` requires
-`Validate source`, `Workflow Security`, `Dependency Review`, and
-`failure-triage` on the exact candidate HEAD. Draft/Ready CI may reuse prior
-successful exact-SHA Fast evidence when the producer itself is unchanged, but
-that does not weaken the final required contexts.
+`Validate source`, `Workflow Security`, and `Dependency Review` on the exact
+candidate HEAD. Draft/Ready CI may reuse prior successful exact-SHA Fast evidence
+when the producer itself is unchanged, but that does not weaken the final required
+contexts.
 
 Since PR #43, Final/exhaustive validation is intentionally **not repeated on
 the resulting `main` push**. Post-merge workflows are responsibility-specific:

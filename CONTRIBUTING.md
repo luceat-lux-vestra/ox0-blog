@@ -39,7 +39,7 @@ Development commits may move normally. Merge judgment is exact-final-HEAD proof 
 
 The live repository policy is already applied: `main` is pull-request-only,
 linear-history, and squash-only with required review-thread resolution and
-strict required contexts `Validate source`, `Workflow Security`,
-`Dependency Review`, and `failure-triage`. Final validation is a PR-path
+strict required contexts `Validate source`, `Workflow Security`, and
+`Dependency Review`. Final validation is a PR-path
 proof obligation; it is not repeated merely because the reviewed tree was
 squash-merged to `main`.

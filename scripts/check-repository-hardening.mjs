@@ -81,6 +81,16 @@ if (JSON.stringify(policy.main?.allowed_merge_methods) !== JSON.stringify(['squa
 
 const workflowDir = path.join(root, '.github/workflows');
 const entries = (await readdir(workflowDir)).filter((name) => /\.ya?ml$/.test(name)).sort();
+
+for (const retiredFailureWorkflow of ['failure-classification.yml', 'failure-declaration.yml', 'failure-triage.yml']) {
+  if (entries.includes(retiredFailureWorkflow)) {
+    fail(`retired failure-triage automation must remain absent: ${retiredFailureWorkflow}`);
+  }
+}
+if ((policy.main?.required_context_targets || []).includes('failure-triage')) {
+  fail('retired failure-triage context must not return to the main merge policy');
+}
+
 const prTargetFiles = [];
 
 for (const entry of entries) {
@@ -139,13 +149,6 @@ if (!Array.isArray(eventPolicyExpectations)) {
     byId.set(expectation.id, expectation);
   }
 
-  const retiredFailureTriage = byId.get(5155);
-  if (!retiredFailureTriage ||
-      retiredFailureTriage.state !== 'absent' ||
-      retiredFailureTriage.former_workflow !== '.github/workflows/failure-triage.yml') {
-    fail('retired Actions event policy 5155 must remain explicitly absent for legacy failure-triage.yml');
-  }
-
   const publicationPolicy = byId.get(5156);
   if (!publicationPolicy ||
       publicationPolicy.state !== 'active' ||
@@ -187,7 +190,6 @@ for (const trigger of ['pull_request_target:', 'push:']) {
 
 const drift = policy.live_drift;
 for (const control of [
-  'actions.event_policy.5155.absent',
   'actions.event_policy.5156.article_publication_lifecycle_exact_scope'
 ]) {
   if (!(drift?.manual_readback || []).includes(control)) {
