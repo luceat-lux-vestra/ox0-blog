@@ -61,34 +61,31 @@ The completed remediation added:
 later removed its redundant `main` push execution while preserving the exact
 required context on pull requests.
 
-### INTEGRATED — centralized failure declaration and classification
+### INTEGRATED — centralized failure declaration; automatic reporter retired
 
-The required `failure-triage` context now comes from the unprivileged
+The required `failure-triage` context comes from the unprivileged
 `.github/workflows/failure-declaration.yml` `pull_request` adapter, pinned by
 full commit SHA to the organization-wide declaration validator. The legacy
-trusted-base `.github/workflows/failure-triage.yml` implementation has been
+trusted-base `.github/workflows/failure-triage.yml` implementation remains
 removed.
 
-Automatic CI failure classification is a separate trusted
-`workflow_run` reporter loaded from the default branch. It reconstructs the
-exact PR HEAD from GitHub Actions metadata and bounded log inspection and
-upserts one sticky `CI Failure Classification` comment. It never checks out
-or executes PR code or downloaded artifacts; write authority is limited to the
-reporter's job-local PR-comment scope.
+PR #37 introduced a separate trusted `workflow_run` reporter that rebuilt
+exact-HEAD CI state and upserted a sticky `CI Failure Classification` comment.
+PR #38 proved that reporter after the default-branch bootstrap boundary. Those
+pull requests remain valid historical rollout evidence.
 
-Because GitHub loads `workflow_run` workflows from the default branch, PR
-#37 could not prove the newly introduced reporter against its own pull-request
-runs. That bootstrap limitation was closed by follow-up PR #38 after the
-reporter existed on `main`.
+On 2026-10-15 the automatic reporter was retired by #57. A recent workflow
+census showed 48 reporter runs, including 22 cancellations, because each tracked
+upstream workflow completion could create another reporter run for the same
+HEAD. The reporter was advisory and was never part of the live required status
+set, so retaining that control-plane churn no longer justified the sticky
+comment.
 
-PR #38 exact HEAD `a0ca607d783959ea12fffe7106e35ed26a987484`
-received exactly one sticky `CI Failure Classification` report for the same
-HEAD with state `CLEAR` and zero active classified failures, then merged as
-`b6e9255d707114ed9f3dd61831564078646dcac1`. The two-phase rollout is
-therefore complete.
-
-`CANDIDATE` and `UNKNOWN` remain fail-closed and never authorize
-remediation.
+The failure-classification **obligation** remains unchanged. `AGENTS.md`
+requires an observed failure to be classified before non-trivial remediation,
+and `UNKNOWN` / insufficient evidence remain fail-closed. The required
+`failure-triage` declaration remains the durable PR evidence. What is retired
+is only the redundant automatic sticky-comment implementation.
 
 ### INTEGRATED / LIVE-PROVEN — dependency admission and update coverage
 
@@ -178,8 +175,10 @@ The September reassessment closed after:
    `PROFILE_REPO_DISPATCH_TOKEN` is a documented hourly-fallback state, not an
    unknown publication failure.
 
-Failure-classification rollout proof was completed later by #38, as described
-above.
+Failure-classification reporter rollout proof was completed by #38 and remains
+historical evidence. The advisory automatic reporter was later retired by #57;
+the required failure-triage and classification-before-remediation contracts
+remain in force.
 
 ### Current CI topology after #43
 
