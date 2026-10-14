@@ -81,6 +81,17 @@ if (JSON.stringify(policy.main?.allowed_merge_methods) !== JSON.stringify(['squa
 
 const workflowDir = path.join(root, '.github/workflows');
 const entries = (await readdir(workflowDir)).filter((name) => /\.ya?ml$/.test(name)).sort();
+
+if (entries.includes('failure-classification.yml')) {
+  fail('redundant automatic failure-classification reporter must remain retired');
+}
+if (!entries.includes('failure-declaration.yml')) {
+  fail('required unprivileged failure declaration workflow is missing');
+}
+if (!(policy.main?.required_context_targets || []).includes('failure-triage')) {
+  fail('required failure-triage context must remain in the main merge policy');
+}
+
 const prTargetFiles = [];
 
 for (const entry of entries) {
