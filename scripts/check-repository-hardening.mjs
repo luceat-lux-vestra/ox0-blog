@@ -9,6 +9,21 @@ const fail = (message) => {
   process.exitCode = 1;
 };
 
+const EPHEMERAL_WORKFLOW = /^(?:research|temporary|tmp|experiment)(?:[-_].*)?\.ya?ml$/i;
+
+function ephemeralWorkflowLifecycleViolations(source, rel) {
+  const name = path.basename(rel);
+  if (!EPHEMERAL_WORKFLOW.test(name)) return [];
+
+  const header = source.split(/\r?\n/).slice(0, 20);
+  const owner = header.some((line) => /^#\s*lifecycle-owner:[ \t]*\S[^\r\n]*$/i.test(line));
+  const retire = header.some((line) => /^#\s*lifecycle-retire:[ \t]*\S[^\r\n]*$/i.test(line));
+  const violations = [];
+  if (!owner) violations.push(`${rel} is ephemeral and lacks non-empty # lifecycle-owner: header metadata`);
+  if (!retire) violations.push(`${rel} is ephemeral and lacks non-empty # lifecycle-retire: header metadata`);
+  return violations;
+}
+
 function topLevelPermissionViolations(source, rel) {
   const lines = source.split(/\r?\n/);
   const index = lines.findIndex((line) => /^permissions:(?:\s.*)?$/.test(line));
@@ -63,8 +78,42 @@ function permissionSelfTest() {
   console.log('Workflow permission negative controls: PASS');
 }
 
+function lifecycleSelfTest() {
+  const valid = [
+    '# lifecycle-owner: issue #61',
+    '# lifecycle-retire: remove after bounded research concludes',
+    'name: Research fixture'
+  ].join('\n');
+  const missingOwner = [
+    '# lifecycle-owner: ',
+    '# lifecycle-retire: remove after bounded research concludes',
+    'name: Research fixture'
+  ].join('\n');
+  const missingRetire = [
+    '# lifecycle-owner: issue #61',
+    '# lifecycle-retire: ',
+    'name: Research fixture'
+  ].join('\n');
+
+  const cases = [
+    ['permanent workflow needs no lifecycle metadata', 'validate.yml', 'name: Validate', 0],
+    ['ephemeral workflow with lifecycle metadata', 'research-fixture.yml', valid, 0],
+    ['ephemeral workflow missing owner', 'research-fixture.yml', missingOwner, 1],
+    ['ephemeral workflow missing retirement', 'experiment-fixture.yaml', missingRetire, 1]
+  ];
+
+  for (const [name, rel, source, expectedViolations] of cases) {
+    const observed = ephemeralWorkflowLifecycleViolations(source, rel);
+    if (observed.length !== expectedViolations) {
+      throw new Error(`lifecycle self-test ${name} failed: ${JSON.stringify(observed)}`);
+    }
+  }
+  console.log('Workflow lifecycle negative controls: PASS');
+}
+
 if (process.argv.includes('--self-test')) {
   permissionSelfTest();
+  lifecycleSelfTest();
   process.exit(0);
 }
 
@@ -98,6 +147,8 @@ for (const entry of entries) {
   const source = await readFile(path.join(workflowDir, entry), 'utf8');
 
   for (const violation of topLevelPermissionViolations(source, rel)) fail(violation);
+
+  for (const violation of ephemeralWorkflowLifecycleViolations(source, rel)) fail(violation);
 
   const checkoutCount = [...source.matchAll(/uses:\s*actions\/checkout@[0-9a-f]{40}/g)].length;
   const persistFalseCount = [...source.matchAll(/persist-credentials:\s*false/g)].length;
