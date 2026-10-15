@@ -1,20 +1,23 @@
 name: CodeQL
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: "Exact current protected main SHA"
+        required: true
+        type: string
   schedule:
     - cron: "17 3 * * 3"
 
 permissions: {}
 
 concurrency:
-  group: codeql-${{ github.event.pull_request.number || github.ref }}
+  group: codeql-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
   cancel-in-progress: true
 
 jobs:
   analyze:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: CodeQL (${{ matrix.language }})
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
@@ -29,8 +32,20 @@ jobs:
           - javascript-typescript
           - actions
     env:
-      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      EXPECTED_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate_sha || github.sha }}
     steps:
+      - name: Verify current main and exact scan identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [ "$GITHUB_REF" = "refs/heads/main" ] || exit 1
+          [ "$GITHUB_SHA" = "$EXPECTED_SHA" ] || exit 1
+          remote_main="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
+          [ "$remote_main" = "$EXPECTED_SHA" ] || exit 1
+
       - name: Check out exact source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
