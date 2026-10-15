@@ -33,6 +33,9 @@ Changes under `.github/workflows/`, publication code, host-runtime boundaries, o
 
 Third-party GitHub Actions must use immutable full commit SHAs.
 
+
+Research, experiment, migration, and temporary workflows should stay off protected default branch where practical. If an exceptional ephemeral workflow must land in `.github/workflows`, filenames beginning with `research-`, `temporary-`, `tmp-`, or `experiment-` must declare non-empty `# lifecycle-owner:` and `# lifecycle-retire:` comments in the file header. The owner identifies the issue/campaign responsible for the workflow and the retirement field states the concrete deletion or consolidation condition. Historical Actions runs/artifacts are retained as evidence and are not a reason to keep or recreate obsolete workflow source.
+
 ## Merge
 
 Development commits may move normally. Merge judgment is exact-final-HEAD proof work. CI green is necessary but insufficient; `UNKNOWN`, `UNVERIFIED`, and `INSUFFICIENT EVIDENCE` are FAIL.
