@@ -26,9 +26,7 @@
       "squash"
     ],
     "required_context_targets": [
-      "Validate source",
-      "Workflow Security",
-      "Dependency Review"
+      "Merge Gate"
     ],
     "routine_bypass_actors": []
   },

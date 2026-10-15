@@ -4,7 +4,6 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 permissions:
-  actions: read # Needed to inspect the canonical exact-SHA validation workflow run.
   contents: read
 
 concurrency:
@@ -19,87 +18,23 @@ jobs:
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
-      - name: Reuse exact-SHA Fast evidence
-        id: fast-evidence
-        if: ${{ github.event_name == 'pull_request' && github.event.action == 'ready_for_review' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          EXPECTED_JOB: Validate source
-          SAME_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
-        run: |
-          set -euo pipefail
-          if [ "$SAME_REPOSITORY" != "true" ]; then
-            echo "reuse=false" >> "$GITHUB_OUTPUT"
-            echo "Fork PR cannot reuse base-repository validation evidence; Final will execute local validation."
-            exit 0
-          fi
-          base_workflow_sha="$(gh api "repos/$GITHUB_REPOSITORY/contents/.github/workflows/validate.yml?ref=$BASE_SHA" --jq '.sha')"
-          head_workflow_sha="$(gh api "repos/$GITHUB_REPOSITORY/contents/.github/workflows/validate.yml?ref=$EXPECTED_SHA" --jq '.sha')"
-          if [ "$base_workflow_sha" != "$head_workflow_sha" ]; then
-            echo "reuse=false" >> "$GITHUB_OUTPUT"
-            echo "Validation producer changed on this PR; Final will execute local validation."
-            exit 0
-          fi
-          for _ in $(seq 1 60); do
-            runs="$(gh api -H 'Accept: application/vnd.github+json' "repos/$GITHUB_REPOSITORY/actions/workflows/validate.yml/runs?event=pull_request&head_sha=$EXPECTED_SHA&per_page=100")"
-            latest="$(jq -c --arg sha "$EXPECTED_SHA" --arg current "$GITHUB_RUN_ID" '
-              [.workflow_runs[]
-               | select(.head_sha == $sha and .event == "pull_request")
-               | select((.id | tostring) != $current)]
-              | if length == 0 then empty else max_by(.id) end
-            ' <<<"$runs")"
-            if [ -z "$latest" ]; then sleep 5; continue; fi
-            status="$(jq -r '.status' <<<"$latest")"
-            conclusion="$(jq -r '.conclusion // ""' <<<"$latest")"
-            if [ "$status" != "completed" ]; then sleep 5; continue; fi
-            if [ "$conclusion" != "success" ]; then
-              echo "::error::Canonical validation workflow for exact HEAD $EXPECTED_SHA concluded '$conclusion'."
-              exit 1
-            fi
-            run_id="$(jq -r '.id' <<<"$latest")"
-            jobs="$(gh api -H 'Accept: application/vnd.github+json' "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?filter=latest&per_page=100")"
-            matching_jobs="$(jq --arg name "$EXPECTED_JOB" '[.jobs[] | select(.name == $name)] | length' <<<"$jobs")"
-            if [ "$matching_jobs" != "1" ]; then
-              echo "::error::Canonical validation run $run_id must contain exactly one '$EXPECTED_JOB' job; found $matching_jobs."
-              exit 1
-            fi
-            job_status="$(jq -r --arg name "$EXPECTED_JOB" '.jobs[] | select(.name == $name) | .status' <<<"$jobs")"
-            job_conclusion="$(jq -r --arg name "$EXPECTED_JOB" '.jobs[] | select(.name == $name) | (.conclusion // "")' <<<"$jobs")"
-            if [ "$job_status" != "completed" ] || [ "$job_conclusion" != "success" ]; then
-              echo "::error::Canonical '$EXPECTED_JOB' evidence is status=$job_status conclusion=$job_conclusion."
-              exit 1
-            fi
-            echo "reuse=true" >> "$GITHUB_OUTPUT"
-            echo "Reusing canonical successful validation evidence for exact HEAD $EXPECTED_SHA."
-            exit 0
-          done
-          echo "::error::Timed out waiting for canonical exact-SHA validation evidence at $EXPECTED_SHA."
-          exit 1
-
       - name: Check out exact commit
-        if: ${{ github.event_name != 'pull_request' || github.event.action != 'ready_for_review' || steps.fast-evidence.outputs.reuse != 'true' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           ref: ${{ env.EXPECTED_SHA }}
       - name: Verify exact checkout
-        if: ${{ github.event_name != 'pull_request' || github.event.action != 'ready_for_review' || steps.fast-evidence.outputs.reuse != 'true' }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
       - name: Set up Node.js 24
-        if: ${{ github.event_name != 'pull_request' || github.event.action != 'ready_for_review' || steps.fast-evidence.outputs.reuse != 'true' }}
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
           cache: npm
       - name: Install locked dependencies
-        if: ${{ github.event_name != 'pull_request' || github.event.action != 'ready_for_review' || steps.fast-evidence.outputs.reuse != 'true' }}
         run: npm ci --ignore-scripts
       - name: Test
-        if: ${{ github.event_name != 'pull_request' || github.event.action != 'ready_for_review' || steps.fast-evidence.outputs.reuse != 'true' }}
         run: npm test
       - name: Validate Article sources
-        if: ${{ github.event_name != 'pull_request' || github.event.action != 'ready_for_review' || steps.fast-evidence.outputs.reuse != 'true' }}
         run: npm run validate
   preview:
     name: PR Article Preview
@@ -212,3 +147,107 @@ jobs:
               echo 'No current Article manifest required preview for this pull request.'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+  security:
+    name: Workflow Security
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      ACTIONLINT_VERSION: "1.7.12"
+      ACTIONLINT_SHA256: "325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6"
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ env.EXPECTED_SHA }}
+
+      - name: Verify exact checkout
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Install checksum-pinned actionlint
+        run: |
+          set -eu
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error             "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_arm64.tar.gz"             --output "$archive"
+          echo "${ACTIONLINT_SHA256}  $archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -version
+
+      - name: Lint every active workflow
+        run: '"$RUNNER_TEMP/actionlint" .github/workflows/*.yml'
+
+      - name: Prove malformed workflow fixture is rejected
+        run: |
+          set -eu
+          if "$RUNNER_TEMP/actionlint" .github/fixtures/actionlint-invalid.yml >"$RUNNER_TEMP/invalid.out" 2>&1; then
+            echo "negative fixture unexpectedly passed actionlint" >&2
+            cat "$RUNNER_TEMP/invalid.out" >&2
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/invalid.out"
+
+      - name: Check repository-owned hardening invariants
+        run: |
+          node scripts/check-repository-hardening.mjs --self-test
+          node scripts/check-repository-hardening.mjs
+
+      - name: Audit GitHub Actions trust boundaries with zizmor
+        uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
+        with:
+          version: "1.29.0"
+          inputs: ".github/workflows/"
+          online-audits: false
+          advanced-security: false
+          min-severity: medium
+          min-confidence: medium
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    steps:
+      - name: Review dependency changes
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: moderate
+
+  merge-gate:
+    name: Merge Gate
+    if: always()
+    needs: [validate, security, dependency-review, preview]
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    steps:
+      - name: Verify direct PR DAG
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          IS_DRAFT: ${{ github.event.pull_request.draft }}
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          const needs = JSON.parse(process.env.NEEDS_JSON);
+          const required = ['validate', 'security', 'dependency-review'];
+          const expected = [...required, 'preview'].sort();
+          const actual = Object.keys(needs).sort();
+          const failures = [];
+          if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+            failures.push(`unexpected DAG members: ${JSON.stringify(actual)}`);
+          }
+          for (const job of required) {
+            if (needs[job]?.result !== 'success') {
+              failures.push(`${job}: ${needs[job]?.result ?? 'missing'}`);
+            }
+          }
+          const wantedPreview = process.env.IS_DRAFT === 'true' ? 'skipped' : 'success';
+          if (needs.preview?.result !== wantedPreview) {
+            failures.push(`preview: ${needs.preview?.result ?? 'missing'} (expected ${wantedPreview})`);
+          }
+          if (failures.length) {
+            for (const failure of failures) console.error(`::error::${failure}`);
+            process.exit(1);
+          }
+          console.log('Merge Gate: direct PR checks verified');
+          NODE

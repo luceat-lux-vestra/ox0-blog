@@ -197,17 +197,22 @@ If a Ghost mutation succeeds but final managed stamping fails, the projection re
 Tests and workflows existing in the tree are not proof by themselves. Merge
 review, when explicitly started, is exact-HEAD proof work.
 
-The live merge gate is a **pull-request path**. `Protect main` requires
-`Validate source`, `Workflow Security`, and `Dependency Review` on the exact
-candidate HEAD. Draft/Ready CI may reuse prior successful exact-SHA Fast evidence
-when the producer itself is unchanged, but that does not weaken the final required
-contexts.
+The PR merge gate is one direct DAG in `.github/workflows/validate.yml`:
+source validation/tests, Workflow Security (actionlint, zizmor, repository
+hardening), and Dependency Review retain independent semantic checks. The
+`PR Article Preview` remains the normal non-draft exact-HEAD review artifact.
+The unconditional fail-closed `Merge Gate` requires all applicable checks to
+succeed, allowing only the expected preview skip on draft PRs. `Protect main`
+requires only `Merge Gate`; no workflow-run REST polling or readiness evidence
+correlation is used.
 
-Since PR #43, Final/exhaustive validation is intentionally **not repeated on
-the resulting `main` push**. Post-merge workflows are responsibility-specific:
+Final/exhaustive validation is intentionally **not repeated on a resulting
+`main` push**. Post-merge workflows remain responsibility-specific:
 `Repository Drift` re-checks live repository policy, and the Article
 Publication Lifecycle handles relevant Article-changing `main` pushes.
-CodeQL remains advisory on eligible pull requests plus its schedule.
+CodeQL runs for JavaScript/TypeScript and Actions only on a weekly schedule or
+manual exact-current-main dispatch; it is not a routine PR or Ghost publication
+gate.
 
 CI green is necessary development evidence; strict merge judgment still
 requires exact-head proof, zero unresolved review threads, and fresh live
