@@ -61,16 +61,22 @@
   },
   "readiness": {
     "epoch": 1,
-    "checkpoint": null,
-    "invalidations": [
-      {
-        "version": 1,
-        "id": "4d23dd13-12ef-4e0e-8209-6778a0816faf",
-        "epoch": 1,
-        "reason": "SEMANTIC_REVIEW_REQUESTED",
-        "origin": "blog-audit",
-        "reference": "ox0-blog#70"
+    "checkpoint": {
+      "version": 2,
+      "sourceFingerprintVersion": 1,
+      "sourceFingerprint": "sha256:644cbc26639478debe462bad8b9d2fd774ea250a5f20de931872ec3b761d56f3",
+      "claimProofFingerprintVersion": 1,
+      "claimProofFingerprint": "sha256:ef0a97028d454ccbdfa0fadd96a275392eab72616bc0bdf6c73551a294a56d43",
+      "priorReviewedEpoch": 0,
+      "reviewedEpoch": 1,
+      "resolvedInvalidationIds": [
+        "4d23dd13-12ef-4e0e-8209-6778a0816faf"
+      ],
+      "review": {
+        "kind": "agent",
+        "contractVersion": 1
       }
-    ]
+    },
+    "invalidations": []
   }
 }
