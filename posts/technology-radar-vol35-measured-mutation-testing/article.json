@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "articleId": "technology-radar-vol35-measured-mutation-testing",
+  "requiredLocales": [
+    "ko-KR",
+    "en"
+  ],
+  "variants": [
+    {
+      "variantId": "technology-radar-vol35-measured-mutation-testing-ko",
+      "locale": "ko-KR",
+      "source": "ko-KR.md",
+      "title": "Technology Radar Vol.35가 던진 질문을 Mutation Testing으로 검증해 봤다",
+      "excerpt": "Vol.35의 ‘더 강한 검증과 통제’ 메시지를 그대로 받아들이지 않고, 공개 Rust 배치 프레임워크의 lifecycle 정책을 고정된 10개 mutant로 A/B 측정했다. 80%에서 100%로 오른 결과와 약 5%의 측정 비용 증가를 함께 본다.",
+      "slug": "technology-radar-vol35-measured-mutation-testing",
+      "publication": {
+        "tags": [
+          "Engineering",
+          "Testing",
+          "AI"
+        ],
+        "featureImage": null,
+        "featureImageAlt": null,
+        "featured": false,
+        "visibility": "public",
+        "canonicalUrl": null
+      }
+    },
+    {
+      "variantId": "technology-radar-vol35-measured-mutation-testing-en",
+      "locale": "en",
+      "source": "en.md",
+      "title": "Testing a Technology Radar Vol.35 Question with Mutation Testing",
+      "excerpt": "Instead of treating Vol.35’s call for stronger controls as a checklist, I ran a fixed-source mutation-testing A/B on a public Rust batch framework: 80% to 100%, with about 5% more measured runtime.",
+      "slug": "technology-radar-vol35-measured-mutation-testing-en",
+      "publication": {
+        "tags": [
+          "Engineering",
+          "Testing",
+          "AI"
+        ],
+        "featureImage": null,
+        "featureImageAlt": null,
+        "featured": false,
+        "visibility": "public",
+        "canonicalUrl": null
+      }
+    }
+  ],
+  "translationCheckpoint": {
+    "version": 1,
+    "fingerprintVersion": 1,
+    "accepted": {
+      "ko-KR": "sha256:a304cb226c281f21498b1618f96705cbe92227d4236be317e3d1a05e932f9b56",
+      "en": "sha256:1ba1029c129d8c2b82ce7e2b2e3aeb16900bac073d3c89f0d518ba499241efbc"
+    },
+    "review": {
+      "kind": "agent",
+      "contractVersion": 1
+    }
+  },
+  "readiness": {
+    "epoch": 1,
+    "checkpoint": {
+      "version": 2,
+      "sourceFingerprintVersion": 1,
+      "sourceFingerprint": "sha256:644cbc26639478debe462bad8b9d2fd774ea250a5f20de931872ec3b761d56f3",
+      "claimProofFingerprintVersion": 1,
+      "claimProofFingerprint": "sha256:ef0a97028d454ccbdfa0fadd96a275392eab72616bc0bdf6c73551a294a56d43",
+      "priorReviewedEpoch": 0,
+      "reviewedEpoch": 1,
+      "resolvedInvalidationIds": [
+        "4d23dd13-12ef-4e0e-8209-6778a0816faf"
+      ],
+      "review": {
+        "kind": "agent",
+        "contractVersion": 1
+      }
+    },
+    "invalidations": []
+  }
+}
