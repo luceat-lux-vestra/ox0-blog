@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "articleId": "technology-radar-vol35-measured-mutation-testing",
+  "requiredLocales": [
+    "ko-KR",
+    "en"
+  ],
+  "variants": [
+    {
+      "variantId": "technology-radar-vol35-measured-mutation-testing-ko",
+      "locale": "ko-KR",
+      "source": "ko-KR.md",
+      "title": "Technology Radar Vol.35가 던진 질문을 Mutation Testing으로 검증해 봤다",
+      "excerpt": "Vol.35의 ‘더 강한 검증과 통제’ 메시지를 그대로 받아들이지 않고, 공개 Rust 배치 프레임워크의 lifecycle 정책을 고정된 10개 mutant로 A/B 측정했다. 80%에서 100%로 오른 결과와 약 5%의 측정 비용 증가를 함께 본다.",
+      "slug": "technology-radar-vol35-measured-mutation-testing",
+      "publication": {
+        "tags": [
+          "Engineering",
+          "Testing",
+          "AI"
+        ],
+        "featureImage": null,
+        "featureImageAlt": null,
+        "featured": false,
+        "visibility": "public",
+        "canonicalUrl": null
+      }
+    },
+    {
+      "variantId": "technology-radar-vol35-measured-mutation-testing-en",
+      "locale": "en",
+      "source": "en.md",
+      "title": "Testing a Technology Radar Vol.35 Question with Mutation Testing",
+      "excerpt": "Instead of treating Vol.35’s call for stronger controls as a checklist, I ran a fixed-source mutation-testing A/B on a public Rust batch framework: 80% to 100%, with about 5% more measured runtime.",
+      "slug": "technology-radar-vol35-measured-mutation-testing-en",
+      "publication": {
+        "tags": [
+          "Engineering",
+          "Testing",
+          "AI"
+        ],
+        "featureImage": null,
+        "featureImageAlt": null,
+        "featured": false,
+        "visibility": "public",
+        "canonicalUrl": null
+      }
+    }
+  ],
+  "translationCheckpoint": null,
+  "readiness": {
+    "epoch": 0,
+    "checkpoint": null,
+    "invalidations": []
+  }
+}
