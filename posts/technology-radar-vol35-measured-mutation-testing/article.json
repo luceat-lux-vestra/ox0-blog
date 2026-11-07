@@ -47,7 +47,18 @@
       }
     }
   ],
-  "translationCheckpoint": null,
+  "translationCheckpoint": {
+    "version": 1,
+    "fingerprintVersion": 1,
+    "accepted": {
+      "ko-KR": "sha256:a304cb226c281f21498b1618f96705cbe92227d4236be317e3d1a05e932f9b56",
+      "en": "sha256:1ba1029c129d8c2b82ce7e2b2e3aeb16900bac073d3c89f0d518ba499241efbc"
+    },
+    "review": {
+      "kind": "agent",
+      "contractVersion": 1
+    }
+  },
   "readiness": {
     "epoch": 0,
     "checkpoint": null,
