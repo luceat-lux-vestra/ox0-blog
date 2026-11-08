@@ -1,0 +1,256 @@
+{
+  "version": 1,
+  "coveredTranslationFingerprints": {
+    "ko-KR": "sha256:a304cb226c281f21498b1618f96705cbe92227d4236be317e3d1a05e932f9b56",
+    "en": "sha256:1ba1029c129d8c2b82ce7e2b2e3aeb16900bac073d3c89f0d518ba499241efbc"
+  },
+  "claims": [
+    {
+      "id": "vol35-stronger-controls-context",
+      "kind": "fact",
+      "statement": "Thoughtworks released Technology Radar Vol.35 in November 2026 with themes emphasizing engineering controls around scaling AI agents, including meaningful oversight, access and environment controls, cost and reliability.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://www.thoughtworks.com/en-gb/about-us/news/2026/thoughtworks-technology-radar-highlights-stronger-controls",
+          "relevance": "Thoughtworks' Vol.35 release announcement dates the edition and describes stronger controls, meaningful oversight, cost and reliability as central concerns."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://www.thoughtworks.com/radar/techniques/human-in-the-loop-theater",
+          "relevance": "The Vol.35 technique entry warns against empty approval rituals and names stronger steering mechanisms."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed the current Vol.35 release announcement and the cited Vol.35 technique entry; no conflicting official framing was found for this bounded context claim.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "radar-ring-semantics",
+      "kind": "classification",
+      "statement": "Thoughtworks defines Trial as ready for project use but less proven than Adopt, and explicitly says even Adopt does not mean a technology or technique should be used on every project.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://www.thoughtworks.com/radar/faq",
+          "relevance": "The Radar FAQ defines the rings and explicitly limits Adopt recommendations to appropriate project context."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed the current Thoughtworks Radar FAQ; the article preserves the contextual rather than universal meaning of the rings.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "mutation-testing-radar-attribution",
+      "kind": "fact",
+      "statement": "Thoughtworks lists Mutation testing as a Trial technique in Technology Radar Vol.34; in Vol.35, Human-in-the-loop theater references mutation testing among stronger steering and verification mechanisms rather than presenting it as a new Vol.35 Adopt blip.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://www.thoughtworks.com/radar/techniques/mutation-testing",
+          "relevance": "The official archived Mutation testing blip is dated April 2026 and classified Trial."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://www.thoughtworks.com/radar/techniques/human-in-the-loop-theater",
+          "relevance": "The November 2026 Vol.35 technique entry references mutation testing as one alternative to ceremonial human approval."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Checked both official technique pages to separate the Vol.34 ring classification from the Vol.35 cross-reference; no official source supporting a Vol.35 Adopt claim was found.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "mutation-testing-mechanics-cost",
+      "kind": "fact",
+      "statement": "Code coverage shows what code executes but not whether tests assert its behavior; cargo-mutants deliberately changes code and reruns tests, which can reveal missed behavioral checks but can also be slow because tests are executed across mutants.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://mutants.rs/vs-coverage.html",
+          "relevance": "cargo-mutants explains the coverage-versus-mutation distinction and the repeated-test runtime cost."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://mutants.rs/how-it-works.html",
+          "relevance": "The tool documentation describes applying each mutation and building/testing the mutated tree."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed cargo-mutants' mechanics, result interpretation and limitations; the statement is limited to what the official tool documentation claims.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "oxidebatch-fixed-source-result",
+      "kind": "fact",
+      "statement": "In the public OxideBatch bounded lifecycle experiment, an identical fixed-source population of 10 viable mutants changed from 8 caught and 2 missed before the test-only intervention to 10 caught and 0 missed after it, with production source unchanged.",
+      "evidence": [
+        {
+          "role": "experiment",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch/issues/628#issuecomment-6667730546",
+          "relevance": "The public experiment record documents fixed-source comparability, clean-oracle results and the exact Before/After mutation counts."
+        },
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch/pull/629",
+          "relevance": "The public draft research PR contains the fixed-source experiment harness and test-only intervention history."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Cross-checked the public experiment record, draft PR and successful exact-head runs; no contradictory public repository result was found.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "oxidebatch-measured-runtime",
+      "kind": "fact",
+      "statement": "For the comparable OxideBatch Before/After pair, mutation wall time increased from 13:41.16 to 14:18.60, about 4.6%, while the combined clean-oracle plus mutation interval increased by about 5.0%.",
+      "evidence": [
+        {
+          "role": "experiment",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch/issues/628#issuecomment-6667730546",
+          "relevance": "The public AFTER evidence records both Before and After wall times and the calculated deltas."
+        },
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch/actions/runs/42093990117",
+          "relevance": "The exact-head AFTER mutation workflow run completed successfully for the candidate intervention."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed the public measurement record and exact-head run; the article also states that this is one pair rather than a variance study.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "targeted-manual-use-recommendation",
+      "kind": "recommendation",
+      "statement": "Given this evidence, mutation testing should be used as a targeted manual diagnostic for selected high-risk deterministic policy or lifecycle logic rather than being promoted from this pilot to a required PR gate or framework-wide mutation-score target.",
+      "evidence": [
+        {
+          "role": "experiment",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch/issues/628#issuecomment-6667763586",
+          "relevance": "The public experiment decision records the measured benefit, cost, single-slice limitation and targeted-manual disposition."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://www.thoughtworks.com/radar/faq",
+          "relevance": "Thoughtworks' ring semantics emphasize contextual project judgment rather than universal use."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://mutants.rs/vs-coverage.html",
+          "relevance": "cargo-mutants documents the repeated-test cost that makes broad critical-path use a nontrivial operational choice."
+        }
+      ],
+      "counterEvidence": [
+        {
+          "role": "official_reference",
+          "url": "https://mutants.rs/limitations.html",
+          "relevance": "cargo-mutants requires reliable hermetic tests and documents unviable mutants and tooling limitations, constraining generalization."
+        }
+      ],
+      "counterEvidenceStatus": "PRESENT",
+      "counterEvidenceReview": "Reviewed cargo-mutants limitations and the narrow experimental scope. These constraints argue against universal CI adoption from one result and are reflected in the recommendation.",
+      "recommendationBasis": {
+        "kind": "bounded_judgment",
+        "conditions": [
+          "The target is a narrow, high-risk deterministic policy or state-transition slice.",
+          "The test suite is reliable and hermetic enough for mutant outcomes to be meaningful.",
+          "Surviving mutants can be manually classified as equivalent, unsupported or genuine contract gaps.",
+          "The added runtime can remain outside the normal pull-request critical path unless separately justified."
+        ],
+        "alternatives": [
+          "Continue relying on deterministic unit, property, conformance and failure tests as primary behavioral evidence.",
+          "Run mutation testing only for selected files or investigation sessions rather than every pull request.",
+          "Require another materially different experiment before considering a periodic audit or CI gate."
+        ]
+      },
+      "verdict": "PASS"
+    }
+  ],
+  "claimCoverage": {
+    "verdict": "PASS",
+    "summary": "Scanned both complete locale drafts for material factual claims, Radar ring/classification language, recommendation wording, the public OxideBatch example and explicit non-claims.",
+    "checks": [
+      {
+        "id": "material_claims_extracted",
+        "result": "PASS"
+      },
+      {
+        "id": "recommendation_language_scanned",
+        "result": "PASS"
+      },
+      {
+        "id": "responsibility_classifications_scanned",
+        "result": "PASS"
+      },
+      {
+        "id": "examples_and_tutorials_scanned",
+        "result": "PASS"
+      }
+    ]
+  },
+  "crossClaimConsistency": {
+    "verdict": "PASS",
+    "summary": "Verified that the Vol.34 Trial attribution is not rewritten as a Vol.35 Adopt claim, the measured OxideBatch result is not generalized into a safety or productivity claim, and the recommendation preserves the article's stated limits.",
+    "checks": [
+      {
+        "id": "examples_follow_rules",
+        "result": "PASS"
+      },
+      {
+        "id": "descriptive_normative_separation",
+        "result": "PASS"
+      },
+      {
+        "id": "responsibility_consistency",
+        "result": "PASS"
+      },
+      {
+        "id": "dedicated_abstraction_boundary",
+        "result": "PASS"
+      },
+      {
+        "id": "exceptions_not_defaults",
+        "result": "PASS"
+      }
+    ]
+  },
+  "adversarialReview": {
+    "verdict": "PASS",
+    "summary": "A fresh adversarial pass challenged the strongest 80%-to-100% claim, the Radar attribution, the recommendation-source fit, runtime generalization and the risk of treating mutation score as a safety badge; the final drafts retain explicit boundaries for each.",
+    "checks": [
+      {
+        "id": "strongest_claim_challenged",
+        "result": "PASS"
+      },
+      {
+        "id": "recommendation_source_role_checked",
+        "result": "PASS"
+      },
+      {
+        "id": "source_overreach_checked",
+        "result": "PASS"
+      },
+      {
+        "id": "alternatives_checked",
+        "result": "PASS"
+      },
+      {
+        "id": "expert_challenge_checked",
+        "result": "PASS"
+      }
+    ]
+  }
+}
