@@ -57,7 +57,17 @@
     ],
     "codeql_required": false,
     "workflow_static_analysis_required": true,
-    "dependency_review_required": true
+    "dependency_review_required": true,
+    "codeql_pr_runtime": {
+      "workflow": ".github/workflows/validate.yml",
+      "job": "codeql-runtime",
+      "language": "actions",
+      "build_mode": "none",
+      "upload": "never",
+      "production_evidence": false,
+      "production_authority": ".github/workflows/codeql.yml",
+      "trust_domain": "untrusted-pr-codeql-runtime"
+    }
   },
   "issue_metadata": {
     "disposition": "EXCEPTION",

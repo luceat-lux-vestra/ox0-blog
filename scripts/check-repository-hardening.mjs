@@ -141,10 +141,12 @@ if ((policy.main?.required_context_targets || []).includes('failure-triage')) {
 }
 
 const prTargetFiles = [];
+const workflowSources = new Map();
 
 for (const entry of entries) {
   const rel = `.github/workflows/${entry}`;
   const source = await readFile(path.join(workflowDir, entry), 'utf8');
+  workflowSources.set(entry, source);
 
   for (const violation of topLevelPermissionViolations(source, rel)) fail(violation);
 
@@ -173,6 +175,147 @@ for (const entry of entries) {
   }
 
   if (/^\s{2}pull_request_target:/m.test(source)) prTargetFiles.push(rel);
+}
+
+
+function codeqlPins(source) {
+  const found = { init: [], analyze: [] };
+  for (const match of source.matchAll(/github\/codeql-action\/(init|analyze)@([0-9a-f]{40})(?:\s+#.*)?/g)) {
+    found[match[1]].push(match[2]);
+  }
+  return found;
+}
+
+function workflowJobBlock(source, job) {
+  const header = '  ' + job + ':\n';
+  const start = source.indexOf(header);
+  if (start < 0) return null;
+  const tailStart = start + header.length;
+  const tail = source.slice(tailStart);
+  const next = tail.search(/^  [A-Za-z0-9_-]+:\n/m);
+  return next < 0 ? source.slice(start) : source.slice(start, tailStart + next);
+}
+
+const codeqlConsumers = [...workflowSources.entries()]
+  .filter(([, source]) => source.includes('github/codeql-action/'))
+  .map(([name]) => name)
+  .sort();
+if (JSON.stringify(codeqlConsumers) !== JSON.stringify(['codeql.yml', 'validate.yml'])) {
+  fail('CodeQL action consumers must be exactly codeql.yml and validate.yml; actual=' + JSON.stringify(codeqlConsumers));
+}
+
+const productionCodeql = workflowSources.get('codeql.yml') || '';
+if (/^  (?:pull_request|pull_request_target|push):/m.test(productionCodeql)) {
+  fail('production CodeQL must remain schedule/manual only');
+}
+for (const fragment of [
+  'workflow_dispatch:',
+  'schedule:',
+  '- javascript-typescript',
+  '- actions',
+  'build-mode: none',
+  'security-events: write',
+  'remote_main=',
+  'persist-credentials: false'
+]) {
+  if (!productionCodeql.includes(fragment)) fail('production CodeQL contract missing: ' + fragment);
+}
+const productionPins = codeqlPins(productionCodeql);
+if (productionPins.init.length !== 1 ||
+    productionPins.analyze.length !== 1 ||
+    productionPins.init[0] !== productionPins.analyze[0]) {
+  fail('production CodeQL init/analyze immutable pin contract drifted');
+}
+
+const validateWorkflow = workflowSources.get('validate.yml') || '';
+const runtime = workflowJobBlock(validateWorkflow, 'codeql-runtime');
+if (!runtime) {
+  fail('canonical validate.yml CodeQL runtime adapter is missing');
+} else {
+  for (const fragment of [
+    'name: CodeQL Runtime',
+    'timeout-minutes: 12',
+    'permissions:',
+    'contents: read',
+    'pull-requests: read',
+    'trusted-codeql-runtime-validation.py?ref=$BASE_SHA',
+    'files?per_page=100&page=$page',
+    'trusted-codeql-runtime-validation.py self-test',
+    'trusted-codeql-runtime-validation.py check-contract',
+    'languages: actions',
+    'build-mode: none',
+    'category: "/language:actions"',
+    'upload: never',
+    'runner.temp',
+    'trusted-codeql-runtime-validation.py verify'
+  ]) {
+    if (!runtime.includes(fragment)) fail('PR CodeQL runtime adapter missing contract fragment: ' + fragment);
+  }
+
+  if (/^    if:/m.test(runtime)) {
+    fail('PR CodeQL runtime adapter must remain an always-present Merge Gate member');
+  }
+
+  const checkoutName = '      - name: Check out exact PR head for CodeQL runtime\n';
+  const checkoutStart = runtime.indexOf(checkoutName);
+  const checkoutTail = checkoutStart < 0 ? '' : runtime.slice(checkoutStart + checkoutName.length);
+  const nextStep = checkoutTail.search(/^      - name:/m);
+  const checkout = checkoutStart < 0
+    ? ''
+    : checkoutName + (nextStep < 0 ? checkoutTail : checkoutTail.slice(0, nextStep));
+  for (const fragment of [
+    'repository: ${{ github.event.pull_request.head.repo.full_name }}',
+    'ref: ${{ github.event.pull_request.head.sha }}',
+    'persist-credentials: false'
+  ]) {
+    if (!checkout.includes(fragment)) fail('PR CodeQL runtime exact-head checkout missing: ' + fragment);
+  }
+
+  for (const forbidden of [
+    'security-events: write',
+    'actions: write',
+    'id-token: write',
+    'packages: write',
+    'GHOST_ADMIN_API_KEY',
+    'upload-artifact@',
+    'upload: always'
+  ]) {
+    if (runtime.includes(forbidden)) fail('PR CodeQL runtime gained forbidden authority: ' + forbidden);
+  }
+
+  const runtimePins = codeqlPins(runtime);
+  if (runtimePins.init.length !== 1 ||
+      runtimePins.analyze.length !== 1 ||
+      runtimePins.init[0] !== runtimePins.analyze[0] ||
+      productionPins.init.length !== 1 ||
+      runtimePins.init[0] !== productionPins.init[0]) {
+    fail('PR CodeQL runtime immutable pin does not match production');
+  }
+}
+
+if (!validateWorkflow.includes('needs: [validate, security, dependency-review, preview, codeql-runtime]') ||
+    !validateWorkflow.includes("const required = ['validate', 'security', 'dependency-review', 'codeql-runtime'];")) {
+  fail('Merge Gate exact five-member CodeQL runtime topology drifted');
+}
+
+const runtimePolicy = policy.security_analysis?.codeql_pr_runtime;
+if (!runtimePolicy ||
+    runtimePolicy.workflow !== '.github/workflows/validate.yml' ||
+    runtimePolicy.job !== 'codeql-runtime' ||
+    runtimePolicy.language !== 'actions' ||
+    runtimePolicy.build_mode !== 'none' ||
+    runtimePolicy.upload !== 'never' ||
+    runtimePolicy.production_evidence !== false ||
+    runtimePolicy.production_authority !== '.github/workflows/codeql.yml' ||
+    runtimePolicy.trust_domain !== 'untrusted-pr-codeql-runtime') {
+  fail('repository policy CodeQL PR runtime contract drifted');
+}
+
+for (const publicationWorkflow of ['article-publication-lifecycle.yml', 'article-ghost.yml']) {
+  const source = workflowSources.get(publicationWorkflow) || '';
+  if (/CodeQL|codeql/.test(source)) {
+    fail(publicationWorkflow + ' must remain outside CodeQL execution and evidence authority');
+  }
 }
 
 const allowed = [...policy.actions.allowed_pull_request_target_workflows].sort();
