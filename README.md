@@ -217,3 +217,5 @@ gate.
 CI green is necessary development evidence; strict merge judgment still
 requires exact-head proof, zero unresolved review threads, and fresh live
 policy/readback under the merge gate.
+
+<!-- codeql-runtime steady-state smoke: non-applicable PR path -->
