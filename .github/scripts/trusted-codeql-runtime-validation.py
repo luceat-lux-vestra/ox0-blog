@@ -347,12 +347,66 @@ def verify_runtime(directory: Path, head: str, root: Path = ROOT) -> dict:
     if not isinstance(automation_id, str) or "language:actions" not in automation_id:
         reject(f"local SARIF Actions category is missing: {automation_id!r}")
 
+    invocations = run.get("invocations")
+    if not isinstance(invocations, list) or not invocations:
+        reject("local SARIF lacks CodeQL invocation metadata")
+    if any(
+        not isinstance(invocation, dict) or invocation.get("executionSuccessful") is not True
+        for invocation in invocations
+    ):
+        reject("local SARIF reports an unsuccessful CodeQL invocation")
+
+    expected: set[str] = set()
+    extracted: set[str] = set()
+    for invocation in invocations:
+        for bucket in ("toolExecutionNotifications", "configurationNotifications"):
+            notifications = invocation.get(bucket, [])
+            if not isinstance(notifications, list):
+                reject("local SARIF extraction notifications are malformed")
+            for note in notifications:
+                if not isinstance(note, dict):
+                    reject("local SARIF extraction notification is malformed")
+                level = note.get("level", "none")
+                if level in {"warning", "error"}:
+                    marker = note.get("descriptor", {}).get("id")
+                    reject(f"CodeQL extraction/tool warning or error: {marker}")
+                descriptor = note.get("descriptor", {})
+                marker = descriptor.get("id") if isinstance(descriptor, dict) else None
+                locations = note.get("locations", [])
+                if not isinstance(locations, list):
+                    reject("local SARIF extraction notification locations are malformed")
+
+                uris: set[str] = set()
+                for location in locations:
+                    if not isinstance(location, dict):
+                        reject("local SARIF extraction location is malformed")
+                    uri = (
+                        location.get("physicalLocation", {})
+                        .get("artifactLocation", {})
+                        .get("uri")
+                    )
+                    if isinstance(uri, str) and uri:
+                        uris.add(uri)
+
+                if marker == "cli/expected-extracted-files/actions":
+                    expected.update(uris)
+                if marker == "actions/diagnostics/successfully-extracted-files":
+                    extracted.update(uris)
+
+    if not expected or not extracted:
+        reject("local SARIF is missing real GitHub Actions source extraction diagnostics")
+    missing = sorted(expected - extracted)
+    if missing:
+        reject(
+            f"local SARIF has insufficient GitHub Actions extraction coverage: "
+            f"{len(missing)} expected source(s) missing, e.g. {missing[:3]}"
+        )
+
     rules = rule_index(run)
     results = run.get("results")
     if not isinstance(results, list):
         reject("local SARIF results are malformed")
 
-    extracted: set[str] = set()
     high_or_critical = 0
     for result in results:
         if not isinstance(result, dict):
@@ -363,22 +417,9 @@ def verify_runtime(directory: Path, head: str, root: Path = ROOT) -> dict:
         rule = rules.get(rule_id)
         if rules and rule is None:
             reject(f"local SARIF result references unknown rule {rule_id!r}")
-
-        if rule_id == "actions/diagnostics/successfully-extracted-files":
-            for location in result.get("locations", []) or []:
-                uri = (
-                    location.get("physicalLocation", {})
-                    .get("artifactLocation", {})
-                    .get("uri")
-                )
-                if isinstance(uri, str) and uri:
-                    extracted.add(uri)
-
         if security_score(result, rule) >= 7.0:
             high_or_critical += 1
 
-    if not extracted:
-        reject("local SARIF contains no successfully extracted GitHub Actions source")
     if high_or_critical:
         reject(f"local SARIF contains {high_or_critical} High/Critical result(s)")
 
@@ -390,6 +431,7 @@ def verify_runtime(directory: Path, head: str, root: Path = ROOT) -> dict:
         "sarif_file": files[0].name,
         "rules": len(rules),
         "results": len(results),
+        "expected_sources": len(expected),
         "extracted_sources": len(extracted),
         "high_or_critical": high_or_critical,
         "trust_domain": "untrusted-pr-codeql-runtime",
@@ -494,13 +536,71 @@ def self_test(root: Path = ROOT) -> None:
         text=True,
     ).strip()
     with tempfile.TemporaryDirectory() as tmp:
+        directory = Path(tmp)
         try:
-            verify_runtime(Path(tmp), current_head, root)
+            verify_runtime(directory, current_head, root)
         except ValueError as exc:
             if "expected exactly one SARIF file" not in str(exc):
                 raise
         else:
             raise AssertionError("missing SARIF was accepted")
+
+        locations = [
+            {
+                "physicalLocation": {
+                    "artifactLocation": {"uri": ".github/workflows/validate.yml"}
+                }
+            },
+            {
+                "physicalLocation": {
+                    "artifactLocation": {"uri": ".github/workflows/codeql.yml"}
+                }
+            },
+        ]
+        fixture = {
+            "version": "2.1.0",
+            "runs": [{
+                "tool": {"driver": {"name": "CodeQL"}},
+                "automationDetails": {"id": "/language:actions/"},
+                "invocations": [{
+                    "executionSuccessful": True,
+                    "toolExecutionNotifications": [
+                        {
+                            "level": "none",
+                            "descriptor": {"id": "cli/expected-extracted-files/actions"},
+                            "locations": locations,
+                        },
+                        {
+                            "level": "none",
+                            "descriptor": {
+                                "id": "actions/diagnostics/successfully-extracted-files"
+                            },
+                            "locations": locations,
+                        },
+                    ],
+                }],
+                "results": [],
+            }],
+        }
+        path = directory / "actions.sarif"
+        path.write_text(json.dumps(fixture), encoding="utf-8")
+        verdict = verify_runtime(directory, current_head, root)
+        assert verdict["expected_sources"] == 2
+        assert verdict["extracted_sources"] == 2
+        assert verdict["production_evidence"] is False
+
+        broken = json.loads(json.dumps(fixture))
+        broken["runs"][0]["invocations"][0]["toolExecutionNotifications"] = [
+            broken["runs"][0]["invocations"][0]["toolExecutionNotifications"][0]
+        ]
+        path.write_text(json.dumps(broken), encoding="utf-8")
+        try:
+            verify_runtime(directory, current_head, root)
+        except ValueError as exc:
+            if "missing real GitHub Actions source extraction diagnostics" not in str(exc):
+                raise
+        else:
+            raise AssertionError("missing extracted-source notification was accepted")
 
     check_contract(root)
     print("trusted CodeQL PR runtime adapter self-tests passed")
