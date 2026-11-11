@@ -25,6 +25,7 @@ test('direct PR DAG retains all semantic checks and no remote polling', async ()
     assert.ok(!yaml.includes(removed), `retired control reappeared: ${removed}`);
   }
   assert.deepEqual(JSON.parse(policy).main.required_context_targets, ['Merge Gate']);
+  assert.equal(JSON.parse(policy).main.strict_required_status_checks, false);
 });
 
 test('CodeQL remains weekly and manual exact-main only, not on PR or Ghost publication', async () => {
