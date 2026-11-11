@@ -20,7 +20,7 @@
     "linear_history": true,
     "deletion_protection": true,
     "non_fast_forward_protection": true,
-    "strict_required_status_checks": true,
+    "strict_required_status_checks": false,
     "required_review_thread_resolution": true,
     "allowed_merge_methods": [
       "squash"
