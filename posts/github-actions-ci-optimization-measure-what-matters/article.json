@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "articleId": "github-actions-ci-optimization-measure-what-matters",
+  "requiredLocales": [
+    "ko-KR",
+    "en"
+  ],
+  "variants": [
+    {
+      "variantId": "github-actions-ci-optimization-measure-what-matters-ko",
+      "locale": "ko-KR",
+      "source": "ko-KR.md",
+      "title": "GitHub Actions CI 최적화 — 더 빠르게가 아니라 무엇을 줄였는가",
+      "excerpt": "여러 공개 프로젝트의 CI를 실측하면서 wall-clock latency, critical path, aggregate runner work를 분리해 봤다. 병렬화의 비용과, 한 번 기각했던 mold가 ARM64 + warm sccache에서 다시 유효해진 과정을 정리한다.",
+      "slug": "github-actions-ci-optimization-measure-what-matters",
+      "publication": {
+        "tags": [
+          "Engineering",
+          "CI",
+          "GitHub Actions"
+        ],
+        "featureImage": null,
+        "featureImageAlt": null,
+        "featured": false,
+        "visibility": "public",
+        "canonicalUrl": null
+      }
+    },
+    {
+      "variantId": "github-actions-ci-optimization-measure-what-matters-en",
+      "locale": "en",
+      "source": "en.md",
+      "title": "GitHub Actions CI Optimization — Measure What You Actually Reduce",
+      "excerpt": "I separated wall-clock latency, critical path, and aggregate runner work while measuring CI across several public projects. The early results include the cost of sharding and a linker decision that reversed after ARM64 and warm sccache changed the topology.",
+      "slug": "github-actions-ci-optimization-measure-what-matters-en",
+      "publication": {
+        "tags": [
+          "Engineering",
+          "CI",
+          "GitHub Actions"
+        ],
+        "featureImage": null,
+        "featureImageAlt": null,
+        "featured": false,
+        "visibility": "public",
+        "canonicalUrl": null
+      }
+    }
+  ],
+  "translationCheckpoint": null,
+  "readiness": {
+    "epoch": 0,
+    "checkpoint": null,
+    "invalidations": []
+  }
+}
