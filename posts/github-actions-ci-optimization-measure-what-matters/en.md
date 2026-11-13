@@ -174,4 +174,51 @@ A previous NO-GO can deserve a new measurement when the bottleneck structure cha
 
 And a strong win in one environment is not evidence to roll the same optimization out everywhere.
 
-The next question is whether these wins survive **real pull-request traffic after adoption**, rather than only controlled experiments.
+## Did the benchmark result survive real pull-request traffic?
+
+This no longer needs to remain a future question.
+
+After the mold adoption and compiler-cache publication path were stabilized in oxide-batch, several real development pull requests went through the production workflow.
+
+I re-read the quality-fast jobs for [PR #642](https://github.com/luceat-lux-vestra/oxide-batch/pull/642), [#649](https://github.com/luceat-lux-vestra/oxide-batch/pull/649), [#651](https://github.com/luceat-lux-vestra/oxide-batch/pull/651), and [#652](https://github.com/luceat-lux-vestra/oxide-batch/pull/652).
+
+| PR | quality-fast job wall | Rust cache hit / miss |
+| --- | ---: | ---: |
+| #642 | 76s | 443 / 2 |
+| #649 | 77s | 443 / 2 |
+| #651 | 78s | 445 / 0 |
+| #652 | 72s | 444 / 1 |
+
+All four runs actually selected mold 3.0.0 on ARM64, restored a protected-main-compatible sccache, and completed successfully.
+
+So the configuration that had shown about a 7% controlled improvement did not immediately collapse once it entered the production workflow. Across different real source changes, the compiler cache remained almost entirely reusable and quality-fast stayed in a **72–78 second** range.
+
+That still does not justify a new causal percentage.
+
+These pull requests do not have same-PR controls without mold. I cannot use them to claim that production became another 7.32% faster.
+
+What they do establish is operational:
+
+- the adopted ARM64 + mold topology keeps executing in normal pull-request workflows;
+- real development changes continue to consume the protected-main compiler cache at a very high hit rate;
+- the result is not limited to the synthetic benchmark that justified adoption;
+- one or two new Rust misses do not collapse the overall cache topology.
+
+Arkst is different.
+
+There have been pull requests after [PR #760](https://github.com/luceat-lux-vestra/arkst/pull/760), including #761 through #764, but they have mostly been Quarkdown clean-room probes. Their general Ubuntu ARM64 test jobs took the path/scope fast path and finished as short placeholders rather than executing the Rust-heavy workload that mold was adopted for.
+
+The pull-request count increased, but the number of **natural production samples that actually exercise the optimized Rust path did not**.
+
+That distinction matters:
+
+> Do not count pull requests. Count executions of the path you optimized.
+
+I therefore record the production evidence at two different strengths:
+
+- **oxide-batch ARM64 + mold:** controlled A/B plus real post-adoption producer/consumer operation and subsequent development traffic.
+- **Arkst ARM64 + mold:** controlled evidence and production adoption are proven, but natural Rust-heavy post-adoption traffic is still sparse.
+
+Deploying a performance change does not finish its validation. But neither does the mere passage of time create operational evidence.
+
+Keeping controlled experiments separate from production observations is what lets “the benchmark was faster” and “the topology survived real development” remain two different claims.

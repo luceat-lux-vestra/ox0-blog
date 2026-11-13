@@ -178,4 +178,51 @@ x86_64에서는 다시 REJECT였다.
 
 그리고 반대로, 한 환경에서 크게 이겼다고 다른 환경으로 확산할 근거가 생기는 것도 아니다.
 
-다음으로 봐야 할 것은 이런 최적화가 **실험에서만 빨랐는지, 실제 개발 PR에서도 살아남았는지**다.
+## 실험에서 빨랐던 결과가 실제 PR에서도 살아남았나?
+
+이 질문은 더 이상 미래형으로 남겨둘 필요가 없었다.
+
+oxide-batch에서는 mold 적용과 compiler-cache publication 경로를 정리한 뒤 실제 개발 PR이 연속해서 들어왔다.
+
+[PR #642](https://github.com/luceat-lux-vestra/oxide-batch/pull/642), [#649](https://github.com/luceat-lux-vestra/oxide-batch/pull/649), [#651](https://github.com/luceat-lux-vestra/oxide-batch/pull/651), [#652](https://github.com/luceat-lux-vestra/oxide-batch/pull/652)의 quality-fast job을 다시 확인했다.
+
+| PR | quality-fast job wall | Rust cache hit / miss |
+| --- | ---: | ---: |
+| #642 | 76s | 443 / 2 |
+| #649 | 77s | 443 / 2 |
+| #651 | 78s | 445 / 0 |
+| #652 | 72s | 444 / 1 |
+
+네 run 모두 ARM64에서 mold 3.0.0을 실제로 선택했고 protected-main 계열 sccache를 restore한 뒤 성공했다.
+
+즉 controlled benchmark에서만 7% 정도 빨랐던 구성이 production workflow에 들어간 뒤 바로 무너진 것은 아니었다. 서로 다른 실제 변경을 담은 후속 PR에서도 compiler cache는 거의 전부 재사용됐고 quality-fast job은 **72~78초** 범위에서 안정적으로 끝났다.
+
+여기서도 과장하면 안 된다.
+
+이 표는 mold가 없었을 때의 동일 PR control을 갖고 있지 않다. 따라서 이 네 PR을 이용해 “production에서 추가로 7.32% 빨라졌다”는 새 causal percentage를 계산할 수는 없다.
+
+대신 확인할 수 있는 것은 더 운영적인 사실이다.
+
+- 실험에서 채택한 ARM64 + mold topology가 실제 PR workflow에서도 계속 실행된다.
+- protected-main compiler cache가 실제 개발 변경에서도 높은 hit rate로 소비된다.
+- 적용 직후에만 성립한 synthetic benchmark가 아니라 후속 개발 과정에서도 같은 구조가 유지된다.
+- 새 source 변경으로 1~2개의 Rust miss가 발생해도 전체 cache topology가 붕괴하지 않는다.
+
+반면 Arkst는 아직 같은 수준으로 말하기 어렵다.
+
+[PR #760](https://github.com/luceat-lux-vestra/arkst/pull/760) 이후 #761~#764 같은 PR이 생겼지만 대부분 Quarkdown clean-room probe였다. 이 PR들의 일반 Ubuntu ARM64 test job은 path/scope 판단에 따라 본체 검증을 실행하지 않고 몇 초 만에 placeholder로 끝났다.
+
+PR 개수는 늘었지만 **mold가 실제 Rust workload를 처리한 natural production sample이 늘어난 것은 아니다.**
+
+이 차이도 꽤 중요하다.
+
+> “적용 이후 PR이 몇 개 있었는가?”가 아니라 “그 PR에서 최적화한 경로가 실제로 실행됐는가?”를 봐야 한다.
+
+따라서 현재 운영 증거의 강도도 나눠서 기록한다.
+
+- **oxide-batch ARM64 + mold:** controlled A/B뿐 아니라 실제 후속 개발 PR의 producer/consumer 경로까지 운영 증거가 쌓였다.
+- **Arkst ARM64 + mold:** controlled evidence와 production 적용 자체는 확인됐지만, 적용 이후의 natural Rust-heavy PR 표본은 아직 부족하다.
+
+성능 실험을 production에 넣었다고 검증이 끝나는 것도 아니고, 단순히 시간이 흘렀다고 운영 증거가 생기는 것도 아니다.
+
+실험의 결과와 실제 workflow의 결과를 분리해서 기록해야 “벤치마크에서는 빨랐다”와 “실제 개발에서도 그 구조가 유지됐다”를 구분할 수 있다.
