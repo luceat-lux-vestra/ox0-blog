@@ -20,6 +20,13 @@ Some changes made individual jobs much faster but barely moved merge-ready laten
 
 The most interesting case was an optimization that had already been rejected on performance grounds, then became worthwhile after the CI topology changed.
 
+I am not going to turn every change above into its own case study. Two cases expose the decision model most clearly:
+
+- **integration-test sharding** — reducing wall-clock latency while increasing aggregate runner work;
+- **re-evaluating the mold linker** — a previous REJECT becoming an ADOPT in some environments after runner architecture and compiler-cache topology changed.
+
+ARM64 runners and sccache therefore appear mainly as conditions that changed the second decision, not as separate success stories. Gradle caching and workflow simplification also influenced the broader optimization campaign, but expanding each of them into a tip would make this article less precise.
+
 This article is less a list of GitHub Actions tips and more a record of the **measurement model and decision process** behind those experiments.
 
 ## “CI time” is not one number
@@ -243,3 +250,28 @@ The operational evidence proves something narrower:
 **the topology selected by the experiment continued to work under real development.**
 
 Keeping controlled experiments separate from production observations is what lets “the benchmark was faster” and “the topology survived real development” remain two different claims.
+
+## Start by stating what you are trying to reduce
+
+The two cases can look like opposite decisions.
+
+With sharding, I accepted more runner work to preserve latency. With mold, changing the linker became worthwhile only after the remaining bottleneck shifted toward linking.
+
+The decision process was the same.
+
+1. **Choose the target metric first.** Separate developer-visible wall-clock latency, the critical path, aggregate runner work, and job-local latency.
+2. **Hold the validation denominator still.** Do not mix “the same validation executed more efficiently” with a change to validation scope or scheduling.
+3. **Record the comparison conditions.** Source SHA, runner architecture, toolchain, cache state and key, and workload all matter. Cold and warm cache measurements are not interchangeable.
+4. **Keep NO-GO results.** If mold is neutral on x86_64, do not adopt it there. Negative experiments also tell you what deserves re-measurement when the topology changes.
+5. **Revisit old verdicts when the topology changes.** A compiler cache can remove compilation cost and expose linking as the next dominant work. An ADOPT on one architecture still does not imply an ADOPT elsewhere.
+6. **Separate controlled experiments from production observations.** A/B evidence supports causal performance claims. Subsequent real pull requests show whether the selected topology survives normal development. Neither substitutes for the other.
+
+I also excluded several things from the performance-win bucket.
+
+Removing a stricter policy that I had imposed myself is not a CI performance optimization. Moving or reducing validation scope belongs on a separate axis from making the same validation faster. Fewer workflow files or fewer cards in the Actions UI do not, by themselves, prove lower CI latency.
+
+The final question is therefore not “which GitHub Actions tip is fast?”
+
+> **What is on the critical path now, which cost are you trying to reduce, and has the topology changed enough to invalidate the old decision?**
+
+CI optimization turned out to be less about choosing one fast tool and more about using measurements to decide which cost to pay across **latency, aggregate work, and validation scope**.

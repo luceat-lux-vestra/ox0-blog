@@ -20,6 +20,13 @@ GitHub Actions를 오래 쓰다 보면 어느 순간 “CI가 느리다”는 �
 
 가장 흥미로운 경우는 한 번 성능상 가치가 없다고 기각했던 최적화가 CI topology가 바뀐 뒤 다시 유효해진 것이었다.
 
+다만 이 글에서 위 변경을 전부 사례별로 나열하지는 않는다. 판단 기준의 차이가 가장 선명했던 두 가지에 집중한다.
+
+- **integration test sharding** — wall-clock latency를 줄이는 대신 aggregate runner work가 늘어나는 경우
+- **mold linker 재평가** — runner architecture와 compiler-cache topology가 바뀌자 과거 REJECT가 일부 환경에서 ADOPT로 뒤집힌 경우
+
+ARM64 runner와 sccache는 별도의 “성공 사례”라기보다 두 번째 판단이 달라진 조건으로 다룬다. Gradle cache나 workflow 정리 같은 다른 변경도 이번 글의 측정 프레임을 만드는 데 영향을 줬지만, 여기서 각각의 팁으로 확장하지 않는다.
+
 이 글은 GitHub Actions 팁을 나열하기보다, 그 과정에서 사용한 **측정 기준과 의사결정 방식**을 정리하려고 한다.
 
 ## “CI 시간”은 하나의 숫자가 아니다
@@ -247,3 +254,28 @@ oxide-batch는 여러 독립 PR에서 같은 topology가 반복된 반면, Arkst
 **실험에서 채택한 topology가 실제 개발 과정에서도 깨지지 않고 계속 작동했다.**
 
 실험의 결과와 실제 workflow의 결과를 분리해서 기록해야 “벤치마크에서는 빨랐다”와 “실제 개발에서도 그 구조가 유지됐다”를 구분할 수 있다.
+
+## 결국 무엇을 줄였는지부터 적어야 한다
+
+두 사례의 결론은 서로 반대처럼 보인다.
+
+sharding에서는 더 많은 runner work를 감수하고 latency를 지켰다. mold에서는 같은 검증 경로 안에서 남은 병목이 linking으로 이동한 뒤에야 linker 교체가 가치가 생겼다.
+
+하지만 의사결정 방식은 같았다.
+
+1. **목표 지표를 먼저 정한다.** 개발자가 기다리는 wall-clock인지, critical path인지, aggregate runner work인지, 특정 job의 local latency인지 구분한다.
+2. **validation denominator를 고정한다.** 같은 테스트와 검증을 더 효율적으로 실행한 것인지, 검증 범위나 실행 시점 자체를 바꾼 것인지 섞지 않는다.
+3. **비교 조건을 기록한다.** source SHA, runner architecture, toolchain, cache 상태와 key, workload를 남긴다. 특히 cold cache와 warm cache를 같은 숫자로 취급하지 않는다.
+4. **NO-GO도 결과로 남긴다.** x86_64의 mold처럼 개선이 없으면 채택하지 않는다. 실패한 실험을 지우면 나중에 topology가 변했을 때 무엇을 다시 측정해야 하는지도 알 수 없다.
+5. **topology가 바뀌면 오래된 verdict를 다시 의심한다.** compiler cache가 compile cost를 제거하면 linker가 새 critical work가 될 수 있다. 반대로 한 환경의 ADOPT가 다른 architecture의 ADOPT를 의미하지 않는다.
+6. **controlled experiment와 production observation을 분리한다.** A/B는 인과적 성능 차이를 보여주고, 후속 실제 PR은 그 구조가 운영에서도 유지되는지를 보여준다. 둘 중 하나가 다른 하나를 대신하지 않는다.
+
+반대로 이번 정리에서 **성능 개선으로 세지 않은 것**도 있다.
+
+자체적으로 더 엄격하게 올렸던 정책을 원래 수준으로 되돌린 것은 성능 최적화가 아니다. validation scope나 실행 시점을 바꾼 일은 동일 검증의 성능 개선과 별도 축으로 기록해야 한다. workflow 수나 Actions 화면의 카드 수가 줄었다는 사실만으로 CI가 빨라졌다고 볼 수도 없다.
+
+그래서 최종적으로 남은 질문은 “어떤 GitHub Actions 팁이 빠른가?”가 아니다.
+
+> **무엇이 현재 critical path이고, 어떤 비용을 줄이려 하며, 그 판단을 뒤집을 만큼 topology가 바뀌었는가?**
+
+CI 최적화는 빠른 도구 하나를 고르는 일이 아니라, **latency·aggregate work·validation scope 사이에서 어떤 비용을 지불할지 측정으로 결정하는 일**에 더 가까웠다.
