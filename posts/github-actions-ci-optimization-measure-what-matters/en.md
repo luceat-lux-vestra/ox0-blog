@@ -204,21 +204,42 @@ What they do establish is operational:
 - the result is not limited to the synthetic benchmark that justified adoption;
 - one or two new Rust misses do not collapse the overall cache topology.
 
-Arkst is different.
+Arkst initially did not have the same level of operational evidence.
 
-There have been pull requests after [PR #760](https://github.com/luceat-lux-vestra/arkst/pull/760), including #761 through #764, but they have mostly been Quarkdown clean-room probes. Their general Ubuntu ARM64 test jobs took the path/scope fast path and finished as short placeholders rather than executing the Rust-heavy workload that mold was adopted for.
+Most pull requests immediately after [PR #760](https://github.com/luceat-lux-vestra/arkst/pull/760), including #761 through #768, were Quarkdown clean-room probes. Their general Ubuntu ARM64 test jobs often took the path/scope fast path and finished as short placeholders. A growing pull-request count alone was not evidence that the mold path was being exercised.
 
-The pull-request count increased, but the number of **natural production samples that actually exercise the optimized Rust path did not**.
+The long-running development [PR #746](https://github.com/luceat-lux-vestra/arkst/pull/746) changed that. After #760 merged, the branch continued to accumulate Rust differential tests and related source changes, causing the full production Ubuntu ARM64 path to run repeatedly across evolving heads.
 
-That distinction matters:
+I re-read a sample of the ten most recent successful full CI runs:
 
-> Do not count pull requests. Count executions of the path you optimized.
+- Ubuntu ARM64 job wall: **137–161 seconds**;
+- median: **144 seconds**;
+- **10/10** selected mold 3.0.0;
+- **10/10** restored the protected-main sccache;
+- **10/10** reported **386 Rust hits / 0 misses**;
+- **10/10** reported zero cache read/write errors.
 
-I therefore record the production evidence at two different strengths:
+For example, [run 43363230122](https://github.com/luceat-lux-vestra/arkst/actions/runs/43363230122), [43477887955](https://github.com/luceat-lux-vestra/arkst/actions/runs/43477887955), and [43541989460](https://github.com/luceat-lux-vestra/arkst/actions/runs/43541989460) exercised the same ARM64 + mold + protected-main cache path to completion on different #746 heads.
 
-- **oxide-batch ARM64 + mold:** controlled A/B plus real post-adoption producer/consumer operation and subsequent development traffic.
-- **Arkst ARM64 + mold:** controlled evidence and production adoption are proven, but natural Rust-heavy post-adoption traffic is still sparse.
+So it is no longer accurate to describe Arkst as having only controlled benchmark and production-merge evidence.
 
-Deploying a performance change does not finish its validation. But neither does the mere passage of time create operational evidence.
+The shape of the evidence is still different from oxide-batch.
+
+oxide-batch repeats the topology across several independent pull requests. Arkst currently has **one long-running pull request exercising full CI across many evolving heads**. That is not as broad as a multi-PR population, but it is enough to show that the topology survives real source evolution outside the synthetic benchmark.
+
+The same rule still applies:
+
+> Do not count pull requests. Count executions of the optimized path under real source changes.
+
+Both projects now have controlled experiments and operational evidence:
+
+- **oxide-batch ARM64 + mold:** controlled A/B, production producer/consumer proof, and several subsequent development pull requests.
+- **Arkst ARM64 + mold:** controlled A/B, production adoption, and repeated full Rust CI across evolving heads of a long-running development pull request.
+
+These observations still do not causally re-prove the 33.60% or 7.32% improvements. Those percentages belong to the controlled experiments.
+
+The operational evidence proves something narrower:
+
+**the topology selected by the experiment continued to work under real development.**
 
 Keeping controlled experiments separate from production observations is what lets “the benchmark was faster” and “the topology survived real development” remain two different claims.

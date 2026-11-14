@@ -208,21 +208,42 @@ oxide-batch에서는 mold 적용과 compiler-cache publication 경로를 정리�
 - 적용 직후에만 성립한 synthetic benchmark가 아니라 후속 개발 과정에서도 같은 구조가 유지된다.
 - 새 source 변경으로 1~2개의 Rust miss가 발생해도 전체 cache topology가 붕괴하지 않는다.
 
-반면 Arkst는 아직 같은 수준으로 말하기 어렵다.
+Arkst도 처음에는 같은 수준의 운영 증거가 없었다.
 
-[PR #760](https://github.com/luceat-lux-vestra/arkst/pull/760) 이후 #761~#764 같은 PR이 생겼지만 대부분 Quarkdown clean-room probe였다. 이 PR들의 일반 Ubuntu ARM64 test job은 path/scope 판단에 따라 본체 검증을 실행하지 않고 몇 초 만에 placeholder로 끝났다.
+[PR #760](https://github.com/luceat-lux-vestra/arkst/pull/760) 직후의 #761~#768은 대부분 Quarkdown clean-room probe라 일반 Ubuntu ARM64 test job이 path/scope fast path로 몇 초 만에 끝났다. 단순히 “PR이 많이 생겼다”는 이유만으로 mold 운영 검증이 쌓였다고 볼 수는 없었다.
 
-PR 개수는 늘었지만 **mold가 실제 Rust workload를 처리한 natural production sample이 늘어난 것은 아니다.**
+하지만 장기 작업 PR인 [#746](https://github.com/luceat-lux-vestra/arkst/pull/746)은 달랐다. #760 병합 이후에도 Rust differential test와 관련 source가 계속 추가되면서 같은 production CI의 full Ubuntu ARM64 경로가 반복해서 실행됐다.
 
-이 차이도 꽤 중요하다.
+최근 성공한 full CI 10개를 표본으로 다시 확인했다.
 
-> “적용 이후 PR이 몇 개 있었는가?”가 아니라 “그 PR에서 최적화한 경로가 실제로 실행됐는가?”를 봐야 한다.
+- Ubuntu ARM64 job wall: **137~161초**
+- 중앙값: **144초**
+- 10/10 run에서 **mold 3.0.0** 선택 확인
+- 10/10 run에서 protected-main sccache restore 확인
+- 10/10 run에서 **386 Rust hits / 0 misses**
+- 10/10 run에서 cache read/write error **0**
 
-따라서 현재 운영 증거의 강도도 나눠서 기록한다.
+예를 들어 [run 43363230122](https://github.com/luceat-lux-vestra/arkst/actions/runs/43363230122), [43477887955](https://github.com/luceat-lux-vestra/arkst/actions/runs/43477887955), [43541989460](https://github.com/luceat-lux-vestra/arkst/actions/runs/43541989460)은 서로 다른 시점의 #746 HEAD에서 같은 ARM64 + mold + protected-main cache 경로를 실제로 끝까지 통과했다.
 
-- **oxide-batch ARM64 + mold:** controlled A/B뿐 아니라 실제 후속 개발 PR의 producer/consumer 경로까지 운영 증거가 쌓였다.
-- **Arkst ARM64 + mold:** controlled evidence와 production 적용 자체는 확인됐지만, 적용 이후의 natural Rust-heavy PR 표본은 아직 부족하다.
+따라서 Arkst도 이제 “controlled benchmark와 production merge까지만 확인됐다”고 쓰는 것은 맞지 않는다.
 
-성능 실험을 production에 넣었다고 검증이 끝나는 것도 아니고, 단순히 시간이 흘렀다고 운영 증거가 생기는 것도 아니다.
+다만 oxide-batch와 증거의 모양은 조금 다르다.
+
+oxide-batch는 여러 독립 PR에서 같은 topology가 반복된 반면, Arkst는 **하나의 장기 PR이 여러 evolving HEAD를 거치며 full CI를 반복한 표본**이다. 서로 다른 PR population만큼 넓은 증거는 아니지만, synthetic benchmark를 벗어나 실제 개발 source 변화 아래에서도 topology가 유지되는지는 충분히 확인할 수 있다.
+
+여기서도 같은 원칙이 남는다.
+
+> “적용 이후 PR이 몇 개 있었는가?”가 아니라 “최적화한 경로가 실제 source 변화와 함께 몇 번 실행됐는가?”를 봐야 한다.
+
+현재는 두 프로젝트 모두 controlled experiment와 운영 증거를 함께 갖는다.
+
+- **oxide-batch ARM64 + mold:** controlled A/B + production producer/consumer 검증 + 여러 후속 개발 PR.
+- **Arkst ARM64 + mold:** controlled A/B + production 적용 + 장기 개발 PR의 여러 evolving HEAD에서 반복된 full Rust CI.
+
+이 운영 데이터 역시 mold의 33.60%나 7.32%를 다시 인과적으로 증명하는 A/B는 아니다. 그 percentage는 controlled experiment의 결과다.
+
+운영 데이터가 추가로 증명하는 것은 더 좁다.
+
+**실험에서 채택한 topology가 실제 개발 과정에서도 깨지지 않고 계속 작동했다.**
 
 실험의 결과와 실제 workflow의 결과를 분리해서 기록해야 “벤치마크에서는 빨랐다”와 “실제 개발에서도 그 구조가 유지됐다”를 구분할 수 있다.
