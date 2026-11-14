@@ -1,0 +1,339 @@
+{
+  "version": 1,
+  "coveredTranslationFingerprints": {
+    "ko-KR": "sha256:eca8b94050a42dbfc9672d9daad32c0393884e04e09eb90c4fd1a01ad7169851",
+    "en": "sha256:4f72ad22b7ab3982dc4341ef7673efbf7a0b6ba93ff29befb86ff7a4485352a3"
+  },
+  "claims": [
+    {
+      "id": "runner-work-not-billing",
+      "kind": "classification",
+      "statement": "The article's aggregate runner work metric is an execution-work comparison, not a billed-minutes or cost claim; GitHub exposes billing/usage under separate rules and public standard GitHub-hosted repository usage is not billed like private-repository minutes.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://docs.github.com/en/actions/how-tos/monitor-workflows/view-job-execution-time",
+          "relevance": "GitHub documents job execution time separately from billable job execution minutes and states where billable-minute details are exposed."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://docs.github.com/en/actions/concepts/billing-and-usage",
+          "relevance": "GitHub documents Actions billing/usage as a separate accounting surface and distinguishes public standard-hosted usage from billed private-repository usage."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed current GitHub Actions execution-time and billing/usage documentation; no basis was found for equating the article's summed observed job elapsed time with billed minutes or cost.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "sharding-four-vs-one",
+      "kind": "fact",
+      "statement": "In oxide-batch's controlled four-way-versus-one-runner integration experiment, four-way execution reduced critical integration wall time by 56.73–62.48% with a 61.21% median while increasing aggregate integration work by 24.94–51.37% with a 41.45% median, under the same source SHA, target denominator, toolchain, runner architecture and protected-main read-only cache policy.",
+      "evidence": [
+        {
+          "role": "experiment",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch/issues/626#issuecomment-6546039760",
+          "relevance": "The final public checkpoint records the completed 2x A-to-B plus 2x B-to-A evidence, exact comparison controls, wall-time reduction range/median and aggregate-work overhead range/median."
+        },
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch/issues/626",
+          "relevance": "The public measurement owner defines the exact-cover, same-toolchain, same-runner, same-cache proof obligations and explicitly excludes billing claims or production topology changes."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed the final measurement checkpoint and experiment contract, including invalid/non-authoritative boundaries; no contradictory authoritative pair was found.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "sharding-three-vs-four",
+      "kind": "fact",
+      "statement": "In oxide-batch's controlled three-lane-versus-current-four-lane crossover, the three-lane candidate reduced summed core execution by a median 10.94% and summed lane-job elapsed by 12.41%, but increased core critical latency by 18.89% and lane-job critical latency by 16.61%; all four valid pairs agreed in direction and the repository kept the current four-way topology.",
+      "evidence": [
+        {
+          "role": "experiment",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch/issues/627#issuecomment-6718180462",
+          "relevance": "The final topology disposition records the 2x A4-to-C3 plus 2x C3-to-A4 crossover, all four paired deltas, medians and KEEP CURRENT 4-WAY / C3 NO-GO decision."
+        },
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch/issues/627#issuecomment-6718372275",
+          "relevance": "The closure checkpoint confirms the research-complete KEEP_CURRENT_4_WAY disposition and that no production shard-count/cache-policy mutation was made by the research closeout."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed the final crossover evidence and closure record as well as earlier reuse candidates; none met both latency and aggregate-work objectives, and no contrary authoritative C3 pair was found.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "mold-verdict-is-topology-specific",
+      "kind": "example_interpretation",
+      "statement": "The mold results are topology-specific rather than repository-wide: oxide-batch's October x86_64 cold experiment had only +0.09% paired-mean saving and was rejected; ARM64 plus steady-state sccache later measured 56.331s system versus 52.207s mold, a 7.32% mean-of-times saving with mold faster in 4/4 pairs and scoped adoption; current x86_64 plus warm sccache measured 64.283s versus 64.266s, about 0.028% with mold faster in only 1/4 pairs and remained rejected. Arkst similarly moved from an October x86_64 cold result where mold was 1.38% slower to an ARM64 steady-state result of 175.514s versus 116.546s, a 33.60% job-local saving in 4/4 pairs, while explicitly not claiming a 33.6% repository-wide Merge Gate improvement.",
+      "evidence": [
+        {
+          "role": "experiment",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch/issues/405",
+          "relevance": "The public issue body records the authoritative October x86_64 paired experiment, +0.09% paired-mean saving and REJECT decision."
+        },
+        {
+          "role": "experiment",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch/issues/405#issuecomment-6821405055",
+          "relevance": "The ARM64 steady-state checkpoint records 56.331s versus 52.207s, 7.32% mean-of-times saving, 4/4 directional consistency and scoped ARM64 adoption."
+        },
+        {
+          "role": "experiment",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch/issues/405#issuecomment-6824675615",
+          "relevance": "The current x86_64 warm-sccache checkpoint records 64.283s versus 64.266s, +0.028% mean-of-times saving, mold faster in 1/4 pairs and REJECT."
+        },
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch/pull/636",
+          "relevance": "The merged production PR scopes mold adoption to ARM64 compiler-cache consumers rather than making a repository-wide linker change."
+        },
+        {
+          "role": "experiment",
+          "url": "https://github.com/luceat-lux-vestra/arkst/issues/524",
+          "relevance": "The public issue body records the October x86_64 Linux paired result with mold 1.38% slower on paired mean and the original REJECT."
+        },
+        {
+          "role": "experiment",
+          "url": "https://github.com/luceat-lux-vestra/arkst/issues/524#issuecomment-6813916580",
+          "relevance": "The ARM64 steady-state checkpoint records 175.514s versus 116.546s, 33.60% saving, 386/0 cache parity, 4/4 direction, 81.27% workspace-plus-Typst linker occupancy and the 1/6 recent-critical-path caveat."
+        },
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/arkst/pull/760",
+          "relevance": "The merged production PR adopts mold narrowly for Ubuntu ARM64 Rust linking."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed the old x86_64 experiments, both ARM64 re-evaluations, current oxide-batch x86_64 re-evaluation and scoped production PRs. Divergent architecture results are incorporated into the claim rather than hidden as exceptions; no evidence supports a global mold-is-faster conclusion.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "oxide-post-adoption-operation",
+      "kind": "fact",
+      "statement": "After oxide-batch adopted ARM64 mold, four reviewed real follow-up PR CI runs continued to select mold 3.0.0 and restore the protected-main-compatible compiler cache; quality-fast job wall times were 76s, 77s, 78s and 72s, with Rust hit/miss counts 443/2, 443/2, 445/0 and 444/1 respectively.",
+      "evidence": [
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch/actions/runs/43240425381",
+          "relevance": "PR #642 production CI run contains the ARM64 quality-fast job with mold 3.0.0, protected-main cache restore, 76s job wall and 443 Rust hits / 2 misses."
+        },
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch/actions/runs/43332538221",
+          "relevance": "PR #649 production CI run contains the ARM64 quality-fast job with mold 3.0.0, protected-main-compatible restore, 77s job wall and 443 Rust hits / 2 misses."
+        },
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch/actions/runs/43238520844",
+          "relevance": "PR #651 production CI run contains the ARM64 quality-fast job with mold 3.0.0, protected-main-compatible restore, 78s job wall and 445 Rust hits / 0 misses."
+        },
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch/actions/runs/43359104650",
+          "relevance": "PR #652 production CI run contains the ARM64 quality-fast job with mold 3.0.0, protected-main cache restore, 72s job wall and 444 Rust hits / 1 miss."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed the four post-adoption production PR runs and their quality-fast logs. The article does not turn these uncontrolled observations into a new causal percentage; no reviewed run showed the adopted topology failing to restore or execute.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "arkst-post-adoption-operation",
+      "kind": "fact",
+      "statement": "On Arkst's long-running development PR #746 after mold adoption, a reviewed sample of ten successful full Ubuntu ARM64 CI runs had job wall times from 137s to 161s with a 144s median; all ten selected mold 3.0.0, restored the protected-main sccache, reported 386 Rust hits / 0 misses and reported zero cache read/write errors.",
+      "evidence": [
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/arkst/pull/746",
+          "relevance": "The long-running development PR accumulated real Rust differential-test/source changes across evolving heads after #760 and is the production-traffic source for the reviewed sample."
+        },
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/arkst/actions/runs/43363230122",
+          "relevance": "Successful full CI sample run with Ubuntu ARM64 mold selection, protected-main cache restore and 386 Rust hits / 0 misses."
+        },
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/arkst/actions/runs/43430559795",
+          "relevance": "Successful full CI sample run with Ubuntu ARM64 mold selection, protected-main cache restore and 386 Rust hits / 0 misses."
+        },
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/arkst/actions/runs/43432723393",
+          "relevance": "Successful full CI sample run with Ubuntu ARM64 mold selection, protected-main cache restore and 386 Rust hits / 0 misses."
+        },
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/arkst/actions/runs/43438060599",
+          "relevance": "Successful full CI sample run with Ubuntu ARM64 mold selection, protected-main cache restore and 386 Rust hits / 0 misses."
+        },
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/arkst/actions/runs/43457067076",
+          "relevance": "Successful full CI sample run with Ubuntu ARM64 mold selection, protected-main cache restore and 386 Rust hits / 0 misses."
+        },
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/arkst/actions/runs/43477887955",
+          "relevance": "Successful full CI sample run with Ubuntu ARM64 mold selection, protected-main cache restore and 386 Rust hits / 0 misses."
+        },
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/arkst/actions/runs/43527505734",
+          "relevance": "Successful full CI sample run with Ubuntu ARM64 mold selection, protected-main cache restore and 386 Rust hits / 0 misses."
+        },
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/arkst/actions/runs/43528790105",
+          "relevance": "Successful full CI sample run with Ubuntu ARM64 mold selection, protected-main cache restore and 386 Rust hits / 0 misses."
+        },
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/arkst/actions/runs/43537654137",
+          "relevance": "Successful full CI sample run with Ubuntu ARM64 mold selection, protected-main cache restore and 386 Rust hits / 0 misses."
+        },
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/arkst/actions/runs/43541989460",
+          "relevance": "Successful full CI sample run with Ubuntu ARM64 mold selection, protected-main cache restore and 386 Rust hits / 0 misses."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed the ten successful full Ubuntu ARM64 jobs selected from post-adoption #746 heads and distinguished them from #761-#768 clean-room probe PRs whose general Ubuntu jobs often took a short path/scope placeholder. No sampled full job contradicted the cache/linker operation claim.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "ci-optimization-decision-model",
+      "kind": "recommendation",
+      "statement": "For CI optimization decisions like those in this article, choose the target metric before optimizing, hold the validation denominator and comparison conditions explicit, retain NO-GO evidence, re-measure when runner/cache/workload topology materially changes, and keep controlled causal A/B evidence separate from post-adoption operational observations; policy relaxation or validation-scope changes should be classified separately from making the same validation faster.",
+      "evidence": [
+        {
+          "role": "experiment",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch/issues/626#issuecomment-6546039760",
+          "relevance": "The four-way experiment demonstrates a measured latency-versus-aggregate-work trade-off under a fixed validation denominator and explicitly avoids billing/generalization claims."
+        },
+        {
+          "role": "experiment",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch/issues/627#issuecomment-6718180462",
+          "relevance": "The three-lane follow-up shows why reducing aggregate work alone was insufficient when critical latency regressed consistently."
+        },
+        {
+          "role": "experiment",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch/issues/405#issuecomment-6824675615",
+          "relevance": "The current x86_64 re-evaluation preserves a NO-GO despite ARM64 adoption, demonstrating architecture/topology-specific decisions."
+        },
+        {
+          "role": "experiment",
+          "url": "https://github.com/luceat-lux-vestra/arkst/issues/524#issuecomment-6813916580",
+          "relevance": "The Arkst ARM64 re-evaluation documents why a changed high-hit cache topology justified re-measuring an old reject and explicitly limits the result to job-local scope."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Adversarially reviewed the experiments for cases where one metric could substitute for another or where a production observation could be mistaken for causal A/B evidence. The public records instead reinforce the bounded, topology-specific decision model and contain explicit non-generalization clauses.",
+      "recommendationBasis": {
+        "kind": "bounded_judgment",
+        "conditions": [
+          "The optimization is being evaluated against an explicit CI objective such as developer-visible latency, critical-path latency, aggregate runner work or a bounded job-local metric.",
+          "Validation scope, source/toolchain identity and runner/cache conditions can be held constant or their differences can be explicitly classified.",
+          "Production observations are used to validate operational survival, not to manufacture an uncontrolled causal percentage."
+        ],
+        "alternatives": [
+          "Optimize only one explicitly declared local metric and avoid making repository-wide claims when critical-path or aggregate-work evidence is unavailable.",
+          "Treat validation-scope, security-policy or scheduling changes as separate engineering decisions rather than counting them as same-scope performance wins.",
+          "Keep the current topology when controlled evidence does not show a worthwhile trade-off, and re-open the decision only after a material topology change."
+        ]
+      },
+      "verdict": "PASS"
+    }
+  ],
+  "claimCoverage": {
+    "verdict": "PASS",
+    "summary": "Scanned both complete locale drafts after the final narrative close for material numeric claims, topology/adoption classifications, billing non-claims, recommendation language, policy/scope exclusions and the post-adoption production examples.",
+    "checks": [
+      {
+        "id": "material_claims_extracted",
+        "result": "PASS"
+      },
+      {
+        "id": "recommendation_language_scanned",
+        "result": "PASS"
+      },
+      {
+        "id": "responsibility_classifications_scanned",
+        "result": "PASS"
+      },
+      {
+        "id": "examples_and_tutorials_scanned",
+        "result": "PASS"
+      }
+    ]
+  },
+  "crossClaimConsistency": {
+    "verdict": "PASS",
+    "summary": "Verified that job-local mold gains are not rewritten as repository-wide Merge Gate gains, aggregate runner work is not rewritten as billing cost, sharding keeps the same validation denominator, x86_64 negative evidence remains visible beside ARM64 adoption, and production observations do not replace controlled A/B claims.",
+    "checks": [
+      {
+        "id": "examples_follow_rules",
+        "result": "PASS"
+      },
+      {
+        "id": "descriptive_normative_separation",
+        "result": "PASS"
+      },
+      {
+        "id": "responsibility_consistency",
+        "result": "PASS"
+      },
+      {
+        "id": "dedicated_abstraction_boundary",
+        "result": "PASS"
+      },
+      {
+        "id": "exceptions_not_defaults",
+        "result": "PASS"
+      }
+    ]
+  },
+  "adversarialReview": {
+    "verdict": "PASS",
+    "summary": "A fresh adversarial pass challenged the 61.21% sharding latency result, the 33.60% Arkst mold result, the claim that four-way remains justified, the production follow-up samples and the final decision model. The final text preserves the aggregate-work cost, critical-path caveat, architecture-specific rejects, uncontrolled-production limitation and validation-scope boundary.",
+    "checks": [
+      {
+        "id": "strongest_claim_challenged",
+        "result": "PASS"
+      },
+      {
+        "id": "recommendation_source_role_checked",
+        "result": "PASS"
+      },
+      {
+        "id": "source_overreach_checked",
+        "result": "PASS"
+      },
+      {
+        "id": "alternatives_checked",
+        "result": "PASS"
+      },
+      {
+        "id": "expert_challenge_checked",
+        "result": "PASS"
+      }
+    ]
+  }
+}
