@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "articleId": "github-actions-ci-optimization-measure-what-matters",
+  "requiredLocales": [
+    "ko-KR",
+    "en"
+  ],
+  "variants": [
+    {
+      "variantId": "github-actions-ci-optimization-measure-what-matters-ko",
+      "locale": "ko-KR",
+      "source": "ko-KR.md",
+      "title": "GitHub Actions CI 최적화 — 더 빠르게가 아니라 무엇을 줄였는가",
+      "excerpt": "여러 공개 프로젝트의 CI를 실측하면서 wall-clock latency, critical path, aggregate runner work를 분리해 봤다. 병렬화의 비용과, 한 번 기각했던 mold가 ARM64 + warm sccache에서 다시 유효해진 과정을 정리한다.",
+      "slug": "github-actions-ci-optimization-measure-what-matters",
+      "publication": {
+        "tags": [
+          "Engineering",
+          "CI",
+          "GitHub Actions"
+        ],
+        "featureImage": null,
+        "featureImageAlt": null,
+        "featured": false,
+        "visibility": "public",
+        "canonicalUrl": null
+      }
+    },
+    {
+      "variantId": "github-actions-ci-optimization-measure-what-matters-en",
+      "locale": "en",
+      "source": "en.md",
+      "title": "GitHub Actions CI Optimization — Measure What You Actually Reduce",
+      "excerpt": "I separated wall-clock latency, critical path, and aggregate runner work while measuring CI across several public projects. The early results include the cost of sharding and a linker decision that reversed after ARM64 and warm sccache changed the topology.",
+      "slug": "github-actions-ci-optimization-measure-what-matters-en",
+      "publication": {
+        "tags": [
+          "Engineering",
+          "CI",
+          "GitHub Actions"
+        ],
+        "featureImage": null,
+        "featureImageAlt": null,
+        "featured": false,
+        "visibility": "public",
+        "canonicalUrl": null
+      }
+    }
+  ],
+  "translationCheckpoint": {
+    "version": 1,
+    "fingerprintVersion": 1,
+    "accepted": {
+      "ko-KR": "sha256:eca8b94050a42dbfc9672d9daad32c0393884e04e09eb90c4fd1a01ad7169851",
+      "en": "sha256:4f72ad22b7ab3982dc4341ef7673efbf7a0b6ba93ff29befb86ff7a4485352a3"
+    },
+    "review": {
+      "kind": "agent",
+      "contractVersion": 1
+    }
+  },
+  "readiness": {
+    "epoch": 1,
+    "checkpoint": {
+      "version": 2,
+      "sourceFingerprintVersion": 1,
+      "sourceFingerprint": "sha256:a3b132bd3265fe2a191ca358564a2dd12cddbf19f2b644d9b26bf7635c9ca5ce",
+      "claimProofFingerprintVersion": 1,
+      "claimProofFingerprint": "sha256:4443627ba963ccc87f03e0e6178b99ad242f3ea35ec102ba6638b195d6f65bb8",
+      "priorReviewedEpoch": 0,
+      "reviewedEpoch": 1,
+      "resolvedInvalidationIds": [
+        "b7f3f2d4-6c9a-4c51-8d2e-7f4a91b2c603"
+      ],
+      "review": {
+        "kind": "agent",
+        "contractVersion": 1
+      }
+    },
+    "invalidations": []
+  }
+}
