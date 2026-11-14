@@ -60,8 +60,17 @@
     }
   },
   "readiness": {
-    "epoch": 0,
+    "epoch": 1,
     "checkpoint": null,
-    "invalidations": []
+    "invalidations": [
+      {
+        "version": 1,
+        "id": "b7f3f2d4-6c9a-4c51-8d2e-7f4a91b2c603",
+        "epoch": 1,
+        "reason": "SEMANTIC_REVIEW_REQUESTED",
+        "origin": "blog-audit",
+        "reference": null
+      }
+    ]
   }
 }
