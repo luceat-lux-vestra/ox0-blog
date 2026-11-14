@@ -61,16 +61,22 @@
   },
   "readiness": {
     "epoch": 1,
-    "checkpoint": null,
-    "invalidations": [
-      {
-        "version": 1,
-        "id": "b7f3f2d4-6c9a-4c51-8d2e-7f4a91b2c603",
-        "epoch": 1,
-        "reason": "SEMANTIC_REVIEW_REQUESTED",
-        "origin": "blog-audit",
-        "reference": null
+    "checkpoint": {
+      "version": 2,
+      "sourceFingerprintVersion": 1,
+      "sourceFingerprint": "sha256:a3b132bd3265fe2a191ca358564a2dd12cddbf19f2b644d9b26bf7635c9ca5ce",
+      "claimProofFingerprintVersion": 1,
+      "claimProofFingerprint": "sha256:4443627ba963ccc87f03e0e6178b99ad242f3ea35ec102ba6638b195d6f65bb8",
+      "priorReviewedEpoch": 0,
+      "reviewedEpoch": 1,
+      "resolvedInvalidationIds": [
+        "b7f3f2d4-6c9a-4c51-8d2e-7f4a91b2c603"
+      ],
+      "review": {
+        "kind": "agent",
+        "contractVersion": 1
       }
-    ]
+    },
+    "invalidations": []
   }
 }
