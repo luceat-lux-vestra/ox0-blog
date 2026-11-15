@@ -157,10 +157,12 @@ test('PR CodeQL runtime negative controls reject checkout, upload and pin drift'
   const uploaded = validate.replace('          upload: never', '          upload: always');
   assert.ok(runtimeProblems(uploaded, production).some((problem) => problem.includes('upload')));
 
+  const runtimeInitPins = codeqlPins(jobBlock(validate, 'codeql-runtime')).init;
+  assert.equal(runtimeInitPins.length, 1);
   const drifted = validate.replace(
-    'github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370',
+    `github/codeql-action/init@${runtimeInitPins[0]}`,
     'github/codeql-action/init@ffffffffffffffffffffffffffffffffffffffff'
   );
+  assert.notEqual(drifted, validate, 'negative control must mutate the current runtime init pin');
   assert.ok(runtimeProblems(drifted, production).includes('runtime pin parity'));
 });
-
