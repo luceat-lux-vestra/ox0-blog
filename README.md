@@ -1,5 +1,7 @@
 # ox0-blog
 
+[![GitHub Stars](https://img.shields.io/github/stars/luceat-lux-vestra/ox0-blog?style=flat&label=Stars)](https://www.star-history.com/?repos=luceat-lux-vestra%2Fox0-blog&type=date)
+
 Canonical Git-backed Article source and controlled Ghost projection workflow for <https://blog.ox0.uk/>.
 
 ## Source contract
