@@ -171,6 +171,178 @@ The results therefore do not mean “snmalloc is two percent faster for all Rust
 
 But an allocator torture suite is also not the primary evidence needed to choose OxideBatch's default. A default should be justified by representative workload evidence.
 
+## Why did “custom allocator must be better” feel so plausible?
+
+I expected a custom allocator to win somehow too. That intuition is especially natural if you have worked in game development, where custom memory systems are common and sometimes absolutely necessary.
+
+There is real history behind the intuition.
+
+In 2011 Facebook described jemalloc as a response to concrete production problems in large multithreaded server workloads: allocation/deallocation throughput, predictable fragmentation, and heap profiling all mattered operationally.
+
+- [Meta/Facebook: Scalable memory allocation using jemalloc (2011)](https://engineering.fb.com/2011/01/03/core-infra/scalable-memory-allocation-using-jemalloc/)
+
+Rust itself used jemalloc as the default allocator on several major platforms for years because it often performed better than the system allocator.
+
+Then Rust 1.32 switched back to the system allocator. The release notes are revealing: jemalloc usually performed well, **but not always**, while also carrying binary-size, platform, and maintenance costs.
+
+- [Rust 1.32: jemalloc is removed by default (2019)](https://blog.rust-lang.org/2019/01/17/Rust-1.32.0/)
+
+That history alone argues against a universal allocator winner.
+
+The other important change is that **system allocators did not stand still.**
+
+glibc 2.26 added a per-thread malloc cache. Small allocation/free fast paths can be served without locks, and the glibc change explicitly reported meaningful gains across captured workloads.
+
+- [glibc 2.26: Add per-thread cache to malloc (2017)](https://sourceware.org/pipermail/glibc-cvs/2017q3/062648.html)
+- [Current glibc malloc tunables](https://sourceware.org/glibc/manual/latest/html_node/Memory-Allocation-Tunables.html)
+
+So it is misleading to compare a 2026 glibc baseline with a mental model of “slow system malloc” formed in the 2000s or early 2010s.
+
+The system baseline in this experiment is not a naïve allocator. It already has arenas, per-thread caching, fast paths, mmap/trim behavior, and decades of engineering behind it.
+
+## “Custom allocator” in game development can mean a different thing
+
+This is the most important bridge between the OxideBatch result and prior game-industry experience.
+
+The phrase “custom allocator” often conflates two different categories.
+
+![Two different meanings of custom allocator](../../assets/articles/rust-custom-allocators-oxidebatch-benchmark/allocator-two-worlds.svg)
+
+### 1. Replacing the general-purpose allocator
+
+This is what the OxideBatch campaign compared:
+
+- system/glibc malloc
+- jemalloc
+- mimalloc
+- snmalloc
+- tcmalloc
+
+These are **general-purpose allocators**. They must accept diverse sizes, lifetimes, and free orders, so they cannot assume much about the application.
+
+TCMalloc reduces contention through per-CPU/per-thread caches. snmalloc specifically targets difficult cross-thread frees and batched remote deallocation with a message-passing design. mimalloc describes itself as a general-purpose allocator and explicitly notes that no allocation algorithm is optimal for every possible workload.
+
+- [Google TCMalloc design](https://google.github.io/tcmalloc/design.html)
+- [Microsoft snmalloc](https://github.com/microsoft/snmalloc)
+- [Microsoft mimalloc](https://github.com/microsoft/mimalloc)
+- [jemalloc](https://jemalloc.net/)
+
+### 2. A workload-aware specialized allocator
+
+This is much closer to what game engines often mean.
+
+Unity's current native memory system does not pick one universal allocator. It routes allocations by **lifetime and use case**.
+
+- persistent allocations: dynamic heap / bucket allocators
+- small allocations: fixed-size lock-free buckets
+- temporary allocations: TLS stack allocators
+- short-lived job buffers: threadsafe linear allocators
+
+Unity's own documentation frames allocator configuration as a speed-versus-memory trade: memory-rich applications may favor faster, more memory-hungry configurations while memory-constrained applications may prefer efficiency.
+
+- [Unity Native Allocators](https://docs.unity3d.com/Manual/performance-native-allocators.html)
+
+Unreal Engine exposes allocators such as `FMallocBinned2`, documented as an optimized virtual-memory allocator. EA's EASTL made allocator control an explicit part of its game-development design, and its fixed-size containers can use contiguous fixed pools to avoid fragmentation and make allocation cheap.
+
+- [Unreal Engine FMallocBinned2](https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Runtime/Core/FMallocBinned2)
+- [EASTL Design](https://github.com/electronicarts/EASTL/blob/master/doc/Design.md)
+
+CryEngine globally remaps `new/delete` to its heap allocator and connects allocation discipline with module-level memory budgets and tracking.
+
+- [CRYENGINE C++ Coding Standard — Memory allocation](https://www.cryengine.com/docs/static/engines/cryengine-5/categories/23756813/pages/25530454)
+
+Those systems are not merely chasing a better malloc benchmark. They can optimize around information that a general-purpose allocator does not have:
+
+- “all of this temporary memory dies at the end of the frame”
+- “all objects in this pool are the same size”
+- “this level arena can be discarded as a unit”
+- “this subsystem owns a fixed memory budget”
+- “a console build must make worst-case memory behavior predictable”
+- “the render frame must not unexpectedly enter a slow general-heap path”
+
+Older Molecule Engine articles make the same point with linear and LIFO allocators for known lifetimes such as level loading. The allocator supports fewer operations, and **that restriction is exactly what makes it simpler and faster.**
+
+- [Molecular Musings: linear allocator](https://blog.molecular-matters.com/2012/08/14/memory-allocation-strategies-a-linear-allocator/)
+- [Molecular Musings: growing LIFO allocator](https://blog.molecular-matters.com/2013/01/29/memory-allocation-strategies-a-growing-stack-like-lifo-allocator/)
+
+There are also concrete production stories where fragmentation, not raw malloc throughput, was the problem. Insomniac publicly described a case where many hours of play fragmented a heap enough that full-screen movie playback could no longer reliably obtain the large contiguous block it needed.
+
+- [Game Developer: The Dalton Allocator — Insomniac Games](https://www.gamedeveloper.com/programming/dirty-game-development-tricks)
+
+Naughty Dog's GDC session on getting The Last of Us Remastered to 60 FPS on PlayStation 4 likewise treated memory allocation patterns alongside the job system and lock strategy.
+
+- [GDC: Parallelizing the Naughty Dog Engine Using Fibers](https://www.gdcvault.com/play/1022186/)
+
+So “we used custom allocators in games and they mattered” is entirely compatible with the result here.
+
+**A game engine can exploit lifetime and structure information that a general-purpose malloc replacement does not have.**
+
+A frame allocator that accepts a bulk reset can obviously beat a general-purpose allocator on that specific problem because it gives up arbitrary free order and generality.
+
+## Why allocator anecdotes contradict each other so dramatically
+
+Allocator discussions in developer communities can look almost absurdly inconsistent.
+
+One developer reports that swapping the allocator stopped an OOM pattern and dramatically reduced CPU usage. A 2026 r/rust thread describes a long-running Ubuntu service whose memory behavior stabilized after switching away from the system allocator.
+
+- [r/rust: Allocator has a high impact on your Rust programs](https://www.reddit.com/r/rust/comments/1riwbqv/perf_allocator_has_a_high_impact_on_your_rust/)
+
+But when mimalloc was discussed on Hacker News in 2019, a ClickHouse developer reported that mimalloc was initially around twice as slow as jemalloc for their common workload. After work with the allocator developer, the gap improved substantially.
+
+- [Hacker News: Mimalloc — ClickHouse workload discussion](https://news.ycombinator.com/item?id=20249743)
+
+These reports do not have to contradict each other.
+
+Allocator behavior is unusually sensitive to:
+
+- single-threaded vs highly parallel execution
+- whether objects are freed by the allocating thread or another thread
+- object-size distribution
+- lifetime distribution
+- burst allocation/free behavior
+- thread and CPU counts
+- page size, huge pages, and NUMA
+- how aggressively freed pages need to return to the OS
+- whether throughput, tail latency, or peak RSS is the real objective
+
+The mimalloc project itself explicitly warns that no general-purpose allocation algorithm is optimal for every possible workload and that synthetic benchmarks may not represent real applications.
+
+TCMalloc's tuning guidance exposes the same trade directly: larger caches reduce trips to central structures and can improve performance, but naturally allow more memory to remain cached.
+
+That is almost exactly what the OxideBatch result looked like.
+
+`snmalloc` spent more memory for a modest timing improvement, while `system` delivered a smaller footprint with already-good performance.
+
+## Misconceptions and what the evidence actually says
+
+| Common belief | Better interpretation |
+| --- | --- |
+| A custom allocator is faster than the system allocator | **It depends on the workload.** Rust itself stopped forcing jemalloc as the default. |
+| A custom allocator also uses less memory | Fast caching/reservation policies can increase RSS. |
+| System malloc is old and simplistic | Modern glibc has arenas, tcache, fast paths, and mmap/trim policies. |
+| Games use custom allocators because generic allocators are simply bad | Game engines often rely on **lifetime-aware pool/linear/stack allocators**, which solve a different problem. |
+| RSS that does not fall immediately after free means a leak | Allocator caches, fragmentation, resident pages, and purge policy can all retain RSS without a live-object leak. |
+| The microbenchmark winner will win in my application | Size, lifetime, thread, and page patterns can completely reorder the result. |
+| Specialized allocators are obsolete | They can be extremely effective when the application can impose strong lifetime/size restrictions. |
+| Global allocator replacement is pointless | It can be a huge win when fragmentation or allocation contention is a real bottleneck — but only measurement can establish that. |
+
+This table is the right lens for the OxideBatch result.
+
+The system allocator winning the balanced decision does not mean custom allocator engineering is obsolete.
+
+**It means that, for this workload, replacing one general-purpose allocator with another did not buy enough to justify a new default.**
+
+There is one more useful scope boundary. This workload ran on four ARM64 OCPUs and a PostgreSQL-backed batch path. The campaign did not separately instrument how often allocations were freed by another thread or how strongly the workload exercised thousands of remote frees, nor did it create a large-core contention scenario specifically for TCMalloc.
+
+That matters because those are exactly the kinds of patterns some alternative allocators are designed to excel at.
+
+So the most precise interpretation is:
+
+> This benchmark was not designed to find a pathological workload where each allocator shines. It was designed to ask whether OxideBatch's representative workload actually needs one of them.
+
+The answer was: not enough to change the default.
+
+
 ## So why do custom allocators exist?
 
 The result initially felt strange.
