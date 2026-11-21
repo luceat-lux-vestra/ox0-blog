@@ -47,10 +47,36 @@
       }
     }
   ],
-  "translationCheckpoint": null,
+  "translationCheckpoint": {
+    "version": 1,
+    "fingerprintVersion": 1,
+    "accepted": {
+      "ko-KR": "sha256:bd65921049991d608b5f05f2f5e536ef7f1d17089edd9bf8b402d878b892cce2",
+      "en": "sha256:4d6a9e1c7fb0f83883c7a93e8ccadbf8bbad4f8eecb831a09dda54a2aa4f41f2"
+    },
+    "review": {
+      "kind": "agent",
+      "contractVersion": 1
+    }
+  },
   "readiness": {
-    "epoch": 0,
-    "checkpoint": null,
+    "epoch": 1,
+    "checkpoint": {
+      "version": 2,
+      "sourceFingerprintVersion": 1,
+      "sourceFingerprint": "sha256:031bef8a7831c8ebaa1dbb41c846875697d77ea0c3a240c68a0077237bebede2",
+      "claimProofFingerprintVersion": 1,
+      "claimProofFingerprint": "sha256:7bfc777c24815803a2c9ab37ab425f33c614d236dca3705d978ca20e8bea3804",
+      "priorReviewedEpoch": 0,
+      "reviewedEpoch": 1,
+      "resolvedInvalidationIds": [
+        "675eb410-c929-40e1-a74d-c5e39caf4673"
+      ],
+      "review": {
+        "kind": "agent",
+        "contractVersion": 1
+      }
+    },
     "invalidations": []
   }
 }

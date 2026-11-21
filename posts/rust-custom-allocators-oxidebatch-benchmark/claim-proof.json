@@ -1,0 +1,380 @@
+{
+  "version": 1,
+  "coveredTranslationFingerprints": {
+    "ko-KR": "sha256:bd65921049991d608b5f05f2f5e536ef7f1d17089edd9bf8b402d878b892cce2",
+    "en": "sha256:4d6a9e1c7fb0f83883c7a93e8ccadbf8bbad4f8eecb831a09dda54a2aa4f41f2"
+  },
+  "claims": [
+    {
+      "id": "campaign-phase4-results",
+      "kind": "fact",
+      "statement": "For OxideBatch 0.7.0 on the accepted ARM64 OCI postgres-postgres benchmark, snmalloc was about 2.43% faster for cursor and 2.20% faster for paging than system median while using about 13.2% and 9.2% more median max RSS respectively; no tested allocator improved both elapsed time and RSS over system.",
+      "evidence": [
+        {
+          "role": "experiment",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch-workloads/issues/323#issuecomment-7042916850",
+          "relevance": "Accepted Phase 4 record contains the exact source/analyzer/summary identities, sample counts, elapsed medians, relative timing, RSS deltas, and explicit interpretation."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed the accepted Phase 4 campaign record and the later final decision that consumes the same retained evidence; no contradictory authoritative campaign result was found.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "campaign-phase5-retention",
+      "kind": "fact",
+      "statement": "In the accepted 20-cycle same-process real-workload churn, system and snmalloc post-idle PSS were effectively stable, snmalloc native current/peak median drift was zero, and no tested allocator was proven to leak; jemalloc and mimalloc retained cautionary OS-footprint drift without a leak verdict.",
+      "evidence": [
+        {
+          "role": "experiment",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch-workloads/issues/323#issuecomment-7058282776",
+          "relevance": "Accepted Phase 5 audit records stable-PID cycle counts, PSS medians/slopes, native telemetry, artifact integrity, and the explicit no-proven-leak boundary."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed the accepted retained-evidence audit and its explicit distinction between live allocation, OS-visible footprint, and leak conclusions; no later campaign evidence reverses it.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "campaign-final-policy",
+      "kind": "classification",
+      "statement": "The completed campaign decision keeps system as the balanced default and classifies snmalloc as the preferred qualified performance opt-in for the tested ARM64 GNU/Linux workload, with jemalloc, mimalloc, and tcmalloc not justified as defaults by the current evidence.",
+      "evidence": [
+        {
+          "role": "experiment",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch-workloads/issues/323#issuecomment-7058948106",
+          "relevance": "Final campaign decision reconciles Phase 4 timing/RSS with Phase 5 retention and records KEEP SYSTEM DEFAULT plus snmalloc opt-in."
+        },
+        {
+          "role": "repository_evidence",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch-workloads/issues/323#issuecomment-7063963640",
+          "relevance": "Final lifecycle checkpoint confirms campaign and durable allocator-policy documentation completion."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed the final decision and campaign closure records; no subsequent repository decision supersedes the bounded policy.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "rust-jemalloc-default-history",
+      "kind": "fact",
+      "statement": "Rust 1.32 changed the default allocator to the system allocator; the Rust release team stated that jemalloc often improved performance but was not always faster and also imposed binary-size and other costs.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://blog.rust-lang.org/2019/01/17/Rust-1.32.0/",
+          "relevance": "Official Rust 1.32 release announcement explains removal of jemalloc as the default and the performance/binary-size/platform rationale."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed the official Rust release announcement; the article preserves its scoped wording rather than claiming jemalloc became generally inferior.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "glibc-tcache-evolution",
+      "kind": "fact",
+      "statement": "glibc 2.26 added a per-thread malloc cache whose fast path avoids locks for small allocations/frees, and GNU's release summary reported significant gains across captured user workloads.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://sourceware.org/pipermail/binutils/2017-October/100218.html",
+          "relevance": "GNU Toolchain update for glibc 2.26 describes the per-thread malloc cache, lock-free fast path, and measured workload gains."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://sourceware.org/glibc/manual/latest/html_node/Memory-Allocation-Tunables.html",
+          "relevance": "Current glibc manual documents active malloc/tcache tuning controls and memory-release behavior."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed the historical release summary and current glibc manual; no basis was found for portraying the modern system allocator as a trivial unchanged baseline.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "game-specialized-allocator-pattern",
+      "kind": "classification",
+      "statement": "Game-engine memory systems commonly include workload-specialized allocators in addition to or instead of a single global malloc replacement: Unity routes allocations by lifetime/use case, Unreal exposes binned virtual-memory allocators, CryEngine remaps allocation into its managed heap/budget system, and EASTL explicitly supports custom pools and fixed-size containers.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://docs.unity3d.com/Manual/performance-native-allocators.html",
+          "relevance": "Unity documents dynamic heap, bucket, TLS stack, and threadsafe linear allocators selected according to allocation lifetime and use."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Runtime/Core/FMallocBinned2",
+          "relevance": "Epic documents FMallocBinned2 as an optimized virtual-memory allocator with cache/stat/trim behavior."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://www.cryengine.com/docs/static/engines/cryengine-5/categories/23756813/pages/25530454",
+          "relevance": "CryEngine coding standard documents global new/delete remapping, custom heap allocation, and module memory-budget tracking."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://github.com/electronicarts/EASTL/blob/master/doc/Design.md",
+          "relevance": "EA's EASTL design documents flexible allocator control and fixed-size pools intended to reduce fragmentation and make allocation fast."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed current engine/library documentation and limited the claim to documented examples rather than asserting that every game engine uses the same allocator architecture.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "game-fragmentation-production-example",
+      "kind": "example_interpretation",
+      "statement": "Public game-development examples show why allocator engineering can target predictability and fragmentation rather than only average malloc throughput: Insomniac described a long-play fragmentation failure that prevented large movie-buffer allocation, while Naughty Dog's 60-FPS engine talk explicitly included memory-allocation patterns alongside jobs and locks.",
+      "evidence": [
+        {
+          "role": "incident",
+          "url": "https://www.gamedeveloper.com/programming/dirty-game-development-tricks",
+          "relevance": "Insomniac's Dalton Allocator account describes heap fragmentation preventing reliable large contiguous allocation after long play sessions."
+        },
+        {
+          "role": "public_example",
+          "url": "https://www.gdcvault.com/play/1022186/",
+          "relevance": "Naughty Dog GDC session overview explicitly lists memory allocation patterns, frame-centric design, jobs, and lock strategy for The Last of Us Remastered."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed the public production accounts and uses them only as bounded examples of game-specific allocator concerns, not as proof that a particular global allocator is universally faster.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "general-allocator-tradeoffs",
+      "kind": "fact",
+      "statement": "General-purpose allocators expose workload-dependent trade-offs rather than a universal winner: TCMalloc documents cache-size and page-size performance/memory trade-offs, mimalloc states that no allocation algorithm is optimal for every workload, and snmalloc targets same-thread and cross-thread deallocation with a message-passing design.",
+      "evidence": [
+        {
+          "role": "official_reference",
+          "url": "https://google.github.io/tcmalloc/tuning.html",
+          "relevance": "TCMalloc tuning guide explicitly says its tuning knobs are not clear wins and explains cache-size performance versus memory costs."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://github.com/microsoft/mimalloc",
+          "relevance": "mimalloc performance documentation explicitly states that no general allocation algorithm is optimal for every workload and warns about synthetic benchmark relevance."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://github.com/microsoft/snmalloc",
+          "relevance": "snmalloc project documentation describes lock-free same-thread frees and message-passing remote deallocation designed to scale with core count."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://engineering.fb.com/2011/01/03/core-infra/scalable-memory-allocation-using-jemalloc/",
+          "relevance": "Meta/Facebook's jemalloc engineering account frames allocator design around throughput, fragmentation bounds, profiling, and workload-specific production evidence."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed vendor/maintainer documentation across multiple allocator families; their differing goals reinforce rather than contradict the workload-dependent framing.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "community-anecdotes-diverge",
+      "kind": "example_interpretation",
+      "statement": "Developer-community reports plausibly point in opposite directions: a 2026 Rust practitioner reported major memory/CPU improvement after replacing glibc malloc, while a 2019 ClickHouse report initially found mimalloc roughly twice as slow as jemalloc before later improvements; these are anecdotes demonstrating workload sensitivity, not universal rankings.",
+      "evidence": [
+        {
+          "role": "practitioner_commentary",
+          "url": "https://www.reddit.com/r/rust/comments/1riwbqv/perf_allocator_has_a_high_impact_on_your_rust/",
+          "relevance": "Practitioner thread reports an allocator-sensitive long-running Rust service and also contains conflicting allocator experiences in replies."
+        },
+        {
+          "role": "practitioner_commentary",
+          "url": "https://news.ycombinator.com/item?id=20249743",
+          "relevance": "Hacker News discussion records a ClickHouse developer's initial two-times-slower mimalloc result and later report that allocator changes narrowed the gap."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed both discussions as practitioner anecdotes only; neither is promoted to authoritative benchmark evidence or default guidance.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "rss-not-leak-proof",
+      "kind": "classification",
+      "statement": "RSS or PSS that remains elevated after frees is not sufficient by itself to prove an application leak; in the campaign, jemalloc live allocated bytes were essentially flat while OS-visible footprint drifted, so the retained audit explicitly classified the result as allocator footprint/cache/fragmentation caution rather than a leak.",
+      "evidence": [
+        {
+          "role": "experiment",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch-workloads/issues/323#issuecomment-7058282776",
+          "relevance": "Phase 5 audit explicitly distinguishes native live allocation from resident/mapped/retained footprint and refuses a leak verdict from rising RSS/PSS alone."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://google.github.io/tcmalloc/design.html",
+          "relevance": "TCMalloc design documents allocator caches, metadata, reserved address space, and the distinction between virtual/resident memory behavior."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed allocator-cache documentation and campaign-native telemetry; the article avoids claiming that elevated RSS can never indicate a leak and only rejects RSS-alone proof.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "campaign-bottleneck-interpretation",
+      "kind": "example_interpretation",
+      "statement": "For this representative OxideBatch workload, the best global allocator swap improved median elapsed time by only about 2.2–2.4%, so the evidence supports treating further allocator swapping as a lower-priority optimization lever than profiling larger execution-path costs; it does not establish an exact allocator share of total runtime.",
+      "evidence": [
+        {
+          "role": "experiment",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch-workloads/issues/323#issuecomment-7042916850",
+          "relevance": "Phase 4 gives the bounded best observed timing improvement and RSS trade-off."
+        },
+        {
+          "role": "experiment",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch-workloads/issues/323#issuecomment-7058948106",
+          "relevance": "Final decision explicitly calls the snmalloc gain real but modest and rejects a global default change."
+        }
+      ],
+      "counterEvidence": [],
+      "counterEvidenceStatus": "REVIEWED_NONE_FOUND",
+      "counterEvidenceReview": "Reviewed the campaign for any larger accepted global-allocator gain; none exists. The article explicitly avoids converting the 2% end-to-end delta into a precise allocator CPU-time fraction.",
+      "recommendationBasis": null,
+      "verdict": "PASS"
+    },
+    {
+      "id": "measure-before-default-switch",
+      "kind": "recommendation",
+      "statement": "Choose a production/global allocator from representative workload evidence and explicit objectives such as elapsed time, tail behavior, fragmentation, or memory footprint; keep the system allocator when no alternative clears the desired trade-off, and use specialized allocators when stronger lifetime/size knowledge justifies a different problem-specific design.",
+      "evidence": [
+        {
+          "role": "experiment",
+          "url": "https://github.com/luceat-lux-vestra/oxide-batch-workloads/issues/323#issuecomment-7058948106",
+          "relevance": "The completed campaign demonstrates a bounded decision that keeps system while preserving snmalloc as an opt-in because the measured gain trades against memory and narrow evidence scope."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://github.com/microsoft/mimalloc",
+          "relevance": "mimalloc documentation states that no general-purpose allocation algorithm is optimal and warns that benchmark relevance depends on workload."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://google.github.io/tcmalloc/tuning.html",
+          "relevance": "TCMalloc documents that tuning knobs are trade-offs rather than clear wins."
+        },
+        {
+          "role": "official_reference",
+          "url": "https://docs.unity3d.com/Manual/performance-native-allocators.html",
+          "relevance": "Unity demonstrates selecting allocator strategies according to allocation lifetime/use case rather than treating one allocator as universally best."
+        }
+      ],
+      "counterEvidence": [
+        {
+          "role": "practitioner_commentary",
+          "url": "https://www.reddit.com/r/rust/comments/1riwbqv/perf_allocator_has_a_high_impact_on_your_rust/",
+          "relevance": "A practitioner reports a dramatic allocator swap improvement, showing that large wins are possible when fragmentation is genuinely material."
+        }
+      ],
+      "counterEvidenceStatus": "PRESENT",
+      "counterEvidenceReview": "Large allocator wins do occur in other workloads, including the reviewed practitioner report and historical Meta production evidence. The recommendation therefore does not say 'never switch'; it says measure the actual workload and objective before making a default choice.",
+      "recommendationBasis": {
+        "kind": "bounded_judgment",
+        "conditions": [
+          "A global/default allocator choice is being made for a production application or framework rather than a synthetic allocator contest.",
+          "Representative workload measurements can compare at least the resource objectives that matter to the decision, such as elapsed time and memory footprint.",
+          "The evidence scope is kept explicit across architecture, libc, allocator version, thread topology, and workload."
+        ],
+        "alternatives": [
+          "Keep the system allocator when alternatives do not provide a worthwhile measured trade-off.",
+          "Offer a measured alternative such as snmalloc as an opt-in for a narrower target where its trade-off is beneficial.",
+          "Use workload-specialized pools, arenas, stack/linear allocators, or other domain-aware strategies when allocation lifetime/size invariants justify them."
+        ]
+      },
+      "verdict": "PASS"
+    }
+  ],
+  "claimCoverage": {
+    "verdict": "PASS",
+    "checks": [
+      {
+        "id": "material_claims_extracted",
+        "result": "PASS"
+      },
+      {
+        "id": "recommendation_language_scanned",
+        "result": "PASS"
+      },
+      {
+        "id": "responsibility_classifications_scanned",
+        "result": "PASS"
+      },
+      {
+        "id": "examples_and_tutorials_scanned",
+        "result": "PASS"
+      }
+    ],
+    "summary": "Reviewed both final locale drafts after allocator-history/game-engine augmentation. Extracted campaign measurements and decision claims, allocator-history/design facts, game-engine examples, community anecdotes, leak/RSS interpretation, and the final bounded recommendation."
+  },
+  "crossClaimConsistency": {
+    "verdict": "PASS",
+    "checks": [
+      {
+        "id": "examples_follow_rules",
+        "result": "PASS"
+      },
+      {
+        "id": "descriptive_normative_separation",
+        "result": "PASS"
+      },
+      {
+        "id": "responsibility_consistency",
+        "result": "PASS"
+      },
+      {
+        "id": "dedicated_abstraction_boundary",
+        "result": "PASS"
+      },
+      {
+        "id": "exceptions_not_defaults",
+        "result": "PASS"
+      }
+    ],
+    "summary": "Verified that game-engine specialized allocators are not conflated with global malloc replacements; community anecdotes remain anecdotal; OxideBatch numbers remain scoped to the accepted ARM64 campaign; elevated RSS is not rewritten as a leak; and snmalloc opt-in evidence is not generalized into a universal default."
+  },
+  "adversarialReview": {
+    "verdict": "PASS",
+    "checks": [
+      {
+        "id": "strongest_claim_challenged",
+        "result": "PASS"
+      },
+      {
+        "id": "recommendation_source_role_checked",
+        "result": "PASS"
+      },
+      {
+        "id": "source_overreach_checked",
+        "result": "PASS"
+      },
+      {
+        "id": "alternatives_checked",
+        "result": "PASS"
+      },
+      {
+        "id": "expert_challenge_checked",
+        "result": "PASS"
+      }
+    ],
+    "summary": "Challenged the strongest narrative that the system allocator is the right default by checking historical Meta jemalloc wins, a recent Rust fragmentation anecdote, allocator-maintainer claims, and game-engine specialization. The article survives only with its narrow conclusion: system is the balanced default for this tested workload, while custom/specialized allocators can be materially better elsewhere."
+  }
+}
