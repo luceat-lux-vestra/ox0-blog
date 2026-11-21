@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="680" viewBox="0 0 1200 680" role="img" aria-labelledby="title desc">
+  <title id="title">Post-idle PSS after twenty same-process workload cycles</title>
+  <desc id="desc">Horizontal bars show the last-five-cycle median PSS. Labels also show the change from the first-five median to the last-five median.</desc>
+  <rect width="1200" height="680" fill="#ffffff"/>
+  <text x="70" y="62" font-family="system-ui,sans-serif" font-size="30" font-weight="700" fill="#111827">Same-process retention: system and snmalloc stabilized</text>
+  <text x="70" y="96" font-family="system-ui,sans-serif" font-size="17" fill="#4b5563">20 real one-million-row cycles · last-five median post-idle PSS</text>
+
+  <g font-family="system-ui,sans-serif" font-size="18" fill="#111827">
+    <text x="70" y="176" font-weight="700">system</text>
+    <text x="70" y="266" font-weight="700">snmalloc</text>
+    <text x="70" y="356" font-weight="700">jemalloc</text>
+    <text x="70" y="446" font-weight="700">tcmalloc</text>
+    <text x="70" y="536" font-weight="700">mimalloc</text>
+  </g>
+
+  <g fill="#f3f4f6">
+    <rect x="190" y="145" width="810" height="42" rx="9"/>
+    <rect x="190" y="235" width="810" height="42" rx="9"/>
+    <rect x="190" y="325" width="810" height="42" rx="9"/>
+    <rect x="190" y="415" width="810" height="42" rx="9"/>
+    <rect x="190" y="505" width="810" height="42" rx="9"/>
+  </g>
+
+  <rect x="190" y="145" width="514" height="42" rx="9" fill="#2563eb"/>
+  <rect x="190" y="235" width="555" height="42" rx="9" fill="#059669"/>
+  <rect x="190" y="325" width="615" height="42" rx="9" fill="#7c3aed"/>
+  <rect x="190" y="415" width="769" height="42" rx="9" fill="#dc2626"/>
+  <rect x="190" y="505" width="810" height="42" rx="9" fill="#d97706"/>
+
+  <g font-family="system-ui,sans-serif" font-size="17" fill="#111827">
+    <text x="1020" y="174">16.58 MiB</text>
+    <text x="1020" y="264">17.92 MiB</text>
+    <text x="1020" y="354">19.84 MiB</text>
+    <text x="1020" y="444">24.83 MiB</text>
+    <text x="1020" y="534">26.14 MiB</text>
+  </g>
+  <g font-family="system-ui,sans-serif" font-size="15" fill="#6b7280">
+    <text x="1020" y="194">drift +0.02</text>
+    <text x="1020" y="284">drift +0.12</text>
+    <text x="1020" y="374">drift +1.08</text>
+    <text x="1020" y="464">drift +0.07</text>
+    <text x="1020" y="554">drift +0.80</text>
+  </g>
+
+  <line x1="190" y1="590" x2="1000" y2="590" stroke="#374151" stroke-width="2"/>
+  <g font-family="system-ui,sans-serif" font-size="14" fill="#6b7280">
+    <text x="190" y="618" text-anchor="middle">0</text>
+    <text x="460" y="618" text-anchor="middle">10 MiB</text>
+    <text x="730" y="618" text-anchor="middle">20 MiB</text>
+    <text x="1000" y="618" text-anchor="middle">30 MiB</text>
+  </g>
+  <text x="1130" y="654" text-anchor="end" font-family="system-ui,sans-serif" font-size="13" fill="#9ca3af">first-5 → last-5 median drift shown at right</text>
+</svg>

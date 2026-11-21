@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560" role="img" aria-labelledby="title desc">
+  <title id="title">OxideBatch allocator campaign phases</title>
+  <desc id="desc">The experiment separates canonical timing, process-restart quiescence, and same-process churn into three independent evidence lanes.</desc>
+  <rect width="1200" height="560" fill="#ffffff"/>
+  <text x="70" y="62" font-family="system-ui,sans-serif" font-size="30" font-weight="700" fill="#111827">One allocator question, three evidence lanes</text>
+  <text x="70" y="96" font-family="system-ui,sans-serif" font-size="17" fill="#4b5563">Timing and retention were deliberately separated instead of mixing profiler overhead into the benchmark.</text>
+
+  <g font-family="system-ui,sans-serif">
+    <rect x="70" y="145" width="315" height="310" rx="18" fill="#eff6ff" stroke="#93c5fd" stroke-width="2"/>
+    <text x="100" y="190" font-size="16" font-weight="700" fill="#2563eb">PHASE 4</text>
+    <text x="100" y="225" font-size="24" font-weight="700" fill="#111827">Canonical benchmark</text>
+    <text x="100" y="268" font-size="17" fill="#374151">1,000,000 source rows</text>
+    <text x="100" y="300" font-size="17" fill="#374151">5 allocators × 2 readers</text>
+    <text x="100" y="332" font-size="17" fill="#374151">2 warmups + 7 measured</text>
+    <text x="100" y="364" font-size="17" fill="#374151">Correctness on every sample</text>
+    <text x="100" y="412" font-size="16" font-weight="700" fill="#1d4ed8">Answers: “which is faster?”</text>
+
+    <rect x="443" y="145" width="315" height="310" rx="18" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="2"/>
+    <text x="473" y="190" font-size="16" font-weight="700" fill="#7c3aed">PHASE 5A</text>
+    <text x="473" y="225" font-size="24" font-weight="700" fill="#111827">Restart / quiescence</text>
+    <text x="473" y="268" font-size="17" fill="#374151">10 fresh processes each</text>
+    <text x="473" y="300" font-size="17" fill="#374151">cursor / paging = 5 / 5</text>
+    <text x="473" y="332" font-size="17" fill="#374151">post-terminal idle sampling</text>
+    <text x="473" y="364" font-size="17" fill="#374151">native telemetry where wired</text>
+    <text x="473" y="412" font-size="16" font-weight="700" fill="#6d28d9">Answers: “what survives restart?”</text>
+
+    <rect x="816" y="145" width="315" height="310" rx="18" fill="#ecfdf5" stroke="#6ee7b7" stroke-width="2"/>
+    <text x="846" y="190" font-size="16" font-weight="700" fill="#059669">PHASE 5B</text>
+    <text x="846" y="225" font-size="24" font-weight="700" fill="#111827">Same-process churn</text>
+    <text x="846" y="268" font-size="17" fill="#374151">1,000,000 rows × 20 cycles</text>
+    <text x="846" y="300" font-size="17" fill="#374151">one stable PID per allocator</text>
+    <text x="846" y="332" font-size="17" fill="#374151">project → cleanup → idle</text>
+    <text x="846" y="364" font-size="17" fill="#374151">cursor / paging = 10 / 10</text>
+    <text x="846" y="412" font-size="16" font-weight="700" fill="#047857">Answers: “does baseline drift?”</text>
+  </g>
+
+  <path d="M385 300 H443" stroke="#9ca3af" stroke-width="3"/>
+  <path d="M425 288 L443 300 L425 312" fill="none" stroke="#9ca3af" stroke-width="3"/>
+  <path d="M758 300 H816" stroke="#9ca3af" stroke-width="3"/>
+  <path d="M798 288 L816 300 L798 312" fill="none" stroke="#9ca3af" stroke-width="3"/>
+
+  <text x="600" y="515" text-anchor="middle" font-family="system-ui,sans-serif" font-size="17" font-weight="700" fill="#111827">Decision = timing + peak RSS + restart control + same-process retention</text>
+</svg>

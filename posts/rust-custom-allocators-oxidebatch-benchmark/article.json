@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "articleId": "rust-custom-allocators-oxidebatch-benchmark",
+  "requiredLocales": [
+    "ko-KR",
+    "en"
+  ],
+  "variants": [
+    {
+      "variantId": "rust-custom-allocators-oxidebatch-benchmark-ko",
+      "locale": "ko-KR",
+      "source": "ko-KR.md",
+      "title": "Rust에서 커스텀 Allocator는 정말 더 빠를까? — OxideBatch 실전 벤치마크",
+      "excerpt": "system, jemalloc, mimalloc, snmalloc, tcmalloc을 동일한 ARM64 환경과 100만-row Rust 배치 workload에서 비교했다. 속도와 RSS를 동시에 이긴 allocator는 없었고, system과 snmalloc만 서로 다른 trade-off로 남았다.",
+      "slug": "rust-custom-allocators-oxidebatch-benchmark",
+      "publication": {
+        "tags": [
+          "Rust",
+          "Performance",
+          "Engineering"
+        ],
+        "featureImage": null,
+        "featureImageAlt": null,
+        "featured": false,
+        "visibility": "public",
+        "canonicalUrl": null
+      }
+    },
+    {
+      "variantId": "rust-custom-allocators-oxidebatch-benchmark-en",
+      "locale": "en",
+      "source": "en.md",
+      "title": "Are Custom Rust Allocators Actually Faster? — An OxideBatch Workload Benchmark",
+      "excerpt": "I compared system, jemalloc, mimalloc, snmalloc, and tcmalloc on the same ARM64 host and one-million-row Rust batch workload. No allocator improved both elapsed time and RSS; system and snmalloc survived as different trade-offs.",
+      "slug": "rust-custom-allocators-oxidebatch-benchmark-en",
+      "publication": {
+        "tags": [
+          "Rust",
+          "Performance",
+          "Engineering"
+        ],
+        "featureImage": null,
+        "featureImageAlt": null,
+        "featured": false,
+        "visibility": "public",
+        "canonicalUrl": null
+      }
+    }
+  ],
+  "translationCheckpoint": null,
+  "readiness": {
+    "epoch": 0,
+    "checkpoint": null,
+    "invalidations": []
+  }
+}
