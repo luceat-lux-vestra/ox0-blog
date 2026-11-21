@@ -37,6 +37,8 @@ concurrency:
 jobs:
   article:
     name: Guarded Article Ghost operation
+    permissions:
+      contents: write
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
@@ -46,6 +48,7 @@ jobs:
       OX0_ARTICLE_SOURCE_SHA: ${{ inputs.source_sha }}
       OX0_ARTICLE_OPERATION: ${{ inputs.operation }}
       OX0_ARTICLE_PUBLISH_CONFIRMATION: ${{ inputs.publish_confirmation }}
+      OX0_HOST_RUNTIME_MODULE: ${{ vars.OX0_HOST_RUNTIME_MODULE }}
     steps:
       - name: Verify dispatch source binding before checkout
         env:
@@ -100,6 +103,17 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Configure trusted host runtime
+        run: |
+          set -eu
+          runtime="$OX0_HOST_RUNTIME_MODULE"
+          if [ -z "$runtime" ]; then
+            runtime="$(node scripts/configured-host-runtime.mjs)"
+          fi
+          if [ -n "$runtime" ]; then
+            echo "OX0_HOST_RUNTIME_MODULE=$runtime" >> "$GITHUB_ENV"
+          fi
+
       - name: Validate repository and selected Article
         run: |
           set -eu
@@ -130,9 +144,9 @@ jobs:
 
       - name: Execute guarded Article operation
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           GHOST_ADMIN_URL: ${{ vars.GHOST_ADMIN_URL || secrets.GHOST_ADMIN_URL }}
           GHOST_ADMIN_API_KEY: ${{ secrets.GHOST_ADMIN_API_KEY }}
-          OX0_HOST_RUNTIME_MODULE: ${{ vars.OX0_HOST_RUNTIME_MODULE }}
         run: node scripts/workflow-dispatch-article.mjs "$MANIFEST_PATH"
 
       - name: Trigger profile Publications refresh

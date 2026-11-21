@@ -183,3 +183,28 @@ Ghost feature images remain a separate Ghost Image API concern. They are not rou
 - It is not publication authorization.
 - It does not authorize Ghost mutation.
 - It does not make remote third-party HTTP images repository-owned assets.
+
+
+## ox0-blog GitHub Release Assets deployment
+
+The production host runtime binds the vendor-neutral Article contract to GitHub Release Assets.
+
+This adapter is intentionally deployment-specific and lives under `host/`, not under `DocumentCompiler`. It derives the backing release tag from the stable GitHub repository ID plus the AssetPublisher contract version, so no branch/SHA/release ID is embedded in Article source.
+
+Each object name is:
+
+```text
+<full-sha256><normalized-image-extension>
+```
+
+The planned public URL is the GitHub release download URL for that content address. Planning is read-only even when the backing release does not yet exist. The first mutating draft synchronization lazily creates the non-latest prerelease and uploads exact bytes.
+
+Reuse is accepted only when GitHub's release-asset metadata reports the exact source byte size and SHA-256 `digest`. Upload responses and a post-upload read are verified with the same evidence.
+
+The workflow supplies GitHub repository identity/API bases from Actions' runtime environment and supplies the job token explicitly. The trusted host-runtime module path comes from versioned `package.json -> ox0.hostRuntimeModule` unless an operator repository variable explicitly overrides it.
+
+This keeps:
+- Article source independent of storage identity;
+- target URLs stable across PR draft staging and the later merge publication;
+- storage keys content-addressed rather than source-path-addressed;
+- candidate PR code out of the credentialed runtime, because `pull_request_target` copies `host/` from the trusted base checkout.

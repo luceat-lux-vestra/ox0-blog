@@ -67,7 +67,7 @@ A `publish` plan additionally requires `SYNCED + READY` and current remote-resou
 
 ## Host runtime
 
-An optional operator-controlled host module may export:
+A deployment-controlled host module may export:
 
 ```js
 export const assetPublisher = ...;
@@ -76,6 +76,10 @@ export async function remoteResourcePolicy(resource) { ... }
 ```
 
 The module path must be an exact unaliased repository-relative `.mjs` path under `host/`. Article source cannot select it.
+
+For the production deployment, the default module ref is versioned in `package.json -> ox0.hostRuntimeModule`. An explicit `OX0_HOST_RUNTIME_MODULE` repository variable remains an operator override. The PR lifecycle resolves that setting from the trusted base checkout and copies only trusted `host/` code into the candidate tree before any credentialed planning.
+
+The current deployment adapter uses content-addressed GitHub Release Assets. It requires the standard Actions repository identity/API environment plus an explicitly supplied `GITHUB_TOKEN`; no Article source value selects a repository, release ID, tag, or target URL.
 
 - `assetPublisher` binds exact repository body assets to stable HTTPS delivery.
 - `projectContext` supplies compiler/VirtualProject context.
