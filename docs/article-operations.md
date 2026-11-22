@@ -79,7 +79,7 @@ The module path must be an exact unaliased repository-relative `.mjs` path under
 
 For the production deployment, the default module ref is versioned in `package.json -> ox0.hostRuntimeModule`. An explicit `OX0_HOST_RUNTIME_MODULE` repository variable remains an operator override. The PR lifecycle resolves that setting from the trusted base checkout and copies only trusted `host/` code into the candidate tree before any credentialed planning.
 
-The current deployment adapter uses content-addressed GitHub Release Assets. It requires the standard Actions repository identity/API environment plus an explicitly supplied `GITHUB_TOKEN`; no Article source value selects a repository, release ID, tag, or target URL.
+The current deployment adapter resolves repository body assets through GitHub's Contents API at the exact `OX0_ARTICLE_SOURCE_SHA` and uses GitHub's returned immutable Raw `download_url`. It requires the standard Actions repository identity/API environment plus an explicitly supplied `GITHUB_TOKEN`; no Article source value selects a repository, branch, Raw hostname, release ID, or target URL.
 
 - `assetPublisher` binds exact repository body assets to stable HTTPS delivery.
 - `projectContext` supplies compiler/VirtualProject context.
@@ -131,10 +131,10 @@ Existing published Article revisions are not converted back to drafts; their PR 
 
 ### Main merge publication
 
-For a `main` push that changes `posts/**`:
+For a `main` push that changes `posts/**` or the trusted `host/**` runtime:
 
 1. the exact pushed source is checked out;
-2. every currently existing Article affected by that push is selected;
+2. every currently existing Article affected by a `posts/**` change is selected; when trusted `host/**` delivery code changes, all current Article manifests are selected so delivery-dependent projections are re-evaluated;
 3. tests, repository validation, and `SYNCED + READY` checks rerun;
 4. the pushed source must remain an ancestor of current `main`;
 5. each selected Article directory must be unchanged between the pushed source and current `main`, so unrelated later pushes do not block publication while later Article changes do;

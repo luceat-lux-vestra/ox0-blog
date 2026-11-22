@@ -1,3 +1,3 @@
-import { createGitHubReleaseAssetPublisherFromEnvironment } from './github-release-asset-publisher.mjs';
+import { createGitHubRawAssetPublisherFromEnvironment } from './github-raw-asset-publisher.mjs';
 
-export const assetPublisher = createGitHubReleaseAssetPublisherFromEnvironment();
+export const assetPublisher = createGitHubRawAssetPublisherFromEnvironment();
