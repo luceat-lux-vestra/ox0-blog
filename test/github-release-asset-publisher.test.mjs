@@ -165,6 +165,38 @@ test('GitHub Release reuse fails closed when stored digest metadata does not mat
   await assert.rejects(planAssetDelivery(publisher, asset), /metadata mismatch/);
 });
 
+
+test('GitHub base URL composition preserves root/subpath bases without duplicate slashes', async () => {
+  const requests = [];
+  const publisher = createGitHubReleaseAssetPublisher({
+    repository: 'owner/blog',
+    repositoryId: '12345',
+    token: 'token',
+    apiBaseUrl: 'https://api.github.example/api/v3/',
+    serverBaseUrl: 'https://github.example/root/',
+    async fetchImpl(input, options = {}) {
+      requests.push({ url: new URL(input).href, method: options.method ?? 'GET' });
+      return response(404, { message: 'Not Found' });
+    }
+  });
+  const bytes = Buffer.from('<svg>v1</svg>');
+  const asset = descriptor(bytes);
+  const digest = asset.fingerprint.slice('sha256:'.length);
+
+  const plan = (await planAssetDelivery(publisher, asset)).plan;
+
+  assert.deepEqual(requests, [{
+    url: 'https://api.github.example/api/v3/repos/owner/blog/releases/tags/ox0-article-assets-v1-12345',
+    method: 'GET'
+  }]);
+  assert.equal(
+    plan.url,
+    `https://github.example/root/owner/blog/releases/download/ox0-article-assets-v1-12345/${digest}.svg`
+  );
+  assert.equal(new URL(requests[0].url).pathname.includes('//'), false);
+  assert.equal(new URL(plan.url).pathname.includes('//'), false);
+});
+
 test('GitHub Release publisher requires deployment identity and credential inputs instead of embedding repository-specific values', () => {
   assert.throws(
     () => createGitHubReleaseAssetPublisher({

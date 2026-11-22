@@ -78,10 +78,17 @@ function releaseTag(repositoryId) {
   return `ox0-article-assets-v${RELEASE_CONTRACT_VERSION}-${repositoryId}`;
 }
 
+function appendBasePath(base, suffix) {
+  const url = new URL(base.href);
+  const root = url.pathname.replace(/\/+$/, '');
+  url.pathname = `${root}/${suffix.replace(/^\/+/, '')}`;
+  return url;
+}
+
 function releaseAssetUrl(serverBase, repository, tag, objectName) {
-  return new URL(
-    `${repository}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(objectName)}`,
-    `${serverBase.href}/`
+  return appendBasePath(
+    serverBase,
+    `${repository}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(objectName)}`
   ).href;
 }
 
@@ -104,7 +111,7 @@ async function jsonResponse(response, label) {
 }
 
 function releaseApiUrl(apiBase, repository, suffix) {
-  return new URL(`repos/${repository}/releases${suffix}`, `${apiBase.href}/`).href;
+  return appendBasePath(apiBase, `repos/${repository}/releases${suffix}`).href;
 }
 
 function validateRelease(raw, tag) {
