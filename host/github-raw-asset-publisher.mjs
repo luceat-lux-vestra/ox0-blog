@@ -1,6 +1,13 @@
 import path from 'node:path';
 
-const IMAGE_EXTENSIONS = new Set(['.webp', '.jpg', '.jpeg', '.gif', '.png', '.svg']);
+const CONTENT_TYPES = new Map([
+  ['.webp', 'image/webp'],
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.gif', 'image/gif'],
+  ['.png', 'image/png'],
+  ['.svg', 'image/svg+xml']
+]);
 const FINGERPRINT_RE = /^sha256:[a-f0-9]{64}$/;
 const REPOSITORY_RE = /^[^/\s]+\/[^/\s]+$/;
 const SOURCE_SHA_RE = /^[a-f0-9]{40}$/;
@@ -53,9 +60,10 @@ function normalizeAsset(raw) {
   if (!FINGERPRINT_RE.test(fingerprint)) throw new Error('asset.fingerprint must be sha256:<64 lowercase hex>');
   const filename = requireString(raw.filename, 'asset.filename');
   const extension = path.extname(filename).toLowerCase();
-  if (!IMAGE_EXTENSIONS.has(extension)) throw new Error(`unsupported raw image extension: ${filename}`);
+  const contentType = CONTENT_TYPES.get(extension);
+  if (!contentType) throw new Error(`unsupported raw image extension: ${filename}`);
   if (!Number.isSafeInteger(raw.size) || raw.size < 0) throw new Error('asset.size must be a non-negative safe integer');
-  return { ref, fingerprint, filename, size: raw.size };
+  return { ref, fingerprint, filename, size: raw.size, contentType };
 }
 
 function appendBasePath(base, suffix) {
@@ -110,6 +118,27 @@ function requireImmutableDownloadUrl(value, { sourceSha, ref }) {
   return parsed.href;
 }
 
+async function validateBrowserDelivery(request, url, asset) {
+  let response;
+  try {
+    response = await request(url, { method: 'HEAD', headers: { Accept: '*/*' } });
+  } catch (error) {
+    const wrapped = new Error(`GitHub Raw delivery probe failed for ${asset.ref}`);
+    wrapped.cause = error;
+    throw wrapped;
+  }
+  if (!response.ok) {
+    throw new Error(`GitHub Raw delivery probe failed with HTTP ${response.status} for ${asset.ref}`);
+  }
+  const rawContentType = response.headers.get('content-type') ?? '';
+  const contentType = rawContentType.split(';', 1)[0].trim().toLowerCase();
+  if (contentType !== asset.contentType) {
+    throw new Error(
+      `GitHub Raw delivery content-type mismatch for ${asset.ref}: expected ${asset.contentType}, got ${contentType || '<missing>'}`
+    );
+  }
+}
+
 function validateRepositoryFile(raw, asset, sourceSha) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new Error(`GitHub repository content response is invalid for ${asset.ref}`);
@@ -145,6 +174,7 @@ export function createGitHubRawAssetPublisher({
       const response = await request(url, { headers: apiHeaders(auth) });
       const content = await jsonResponse(response, `read exact GitHub repository asset ${asset.ref}`);
       const downloadUrl = validateRepositoryFile(content, asset, exactSourceSha);
+      await validateBrowserDelivery(request, downloadUrl, asset);
       return {
         action: 'reuse',
         url: downloadUrl,

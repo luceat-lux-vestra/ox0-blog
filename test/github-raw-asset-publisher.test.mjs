@@ -20,49 +20,66 @@ function descriptor(bytes, overrides = {}) {
   };
 }
 
-function response(status, body) {
+function response(status, body, headers = {}) {
   return new Response(body == null ? null : JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' }
+    headers: { 'Content-Type': 'application/json', ...headers }
   });
 }
 
-function githubFixture(overrides = {}) {
+function githubFixture({
+  contentOverrides = {},
+  rawContentType = 'image/svg+xml',
+  rawStatus = 200
+} = {}) {
   const repository = 'owner/blog';
   const api = 'https://api.github.example/api/v3';
   const raw = 'https://raw.github.example';
   const requests = [];
   const bytes = Buffer.from('<svg>v1</svg>');
   const asset = descriptor(bytes);
+  const rawUrl = `${raw}/${repository}/${SOURCE_SHA}/${asset.ref}`;
 
   async function fetchImpl(input, options = {}) {
     const url = new URL(input);
+    const method = options.method ?? 'GET';
     requests.push({
       url: url.href,
-      method: options.method ?? 'GET',
+      method,
       authorization: options.headers?.Authorization ?? null
     });
-    const expectedPath = `/api/v3/repos/${repository}/contents/${asset.ref}`;
-    if (url.origin !== 'https://api.github.example' || url.pathname !== expectedPath || url.searchParams.get('ref') !== SOURCE_SHA) {
-      throw new Error(`unexpected GitHub request: ${url.href}`);
+
+    const expectedApiPath = `/api/v3/repos/${repository}/contents/${asset.ref}`;
+    if (url.origin === 'https://api.github.example' && url.pathname === expectedApiPath && method === 'GET') {
+      if (url.searchParams.get('ref') !== SOURCE_SHA) {
+        throw new Error(`unexpected GitHub ref: ${url.href}`);
+      }
+      const body = {
+        type: 'file',
+        path: asset.ref,
+        name: 'diagram.svg',
+        size: asset.size,
+        sha: 'git-blob-sha',
+        download_url: rawUrl,
+        ...contentOverrides
+      };
+      return response(200, body);
     }
 
-    const body = {
-      type: 'file',
-      path: asset.ref,
-      name: 'diagram.svg',
-      size: asset.size,
-      sha: 'git-blob-sha',
-      download_url: `${raw}/${repository}/${SOURCE_SHA}/${asset.ref}`,
-      ...overrides
-    };
-    return response(200, body);
+    if (url.href === rawUrl && method === 'HEAD') {
+      return new Response(null, {
+        status: rawStatus,
+        headers: { 'Content-Type': rawContentType }
+      });
+    }
+
+    throw new Error(`unexpected GitHub request: ${method} ${url.href}`);
   }
 
-  return { repository, api, raw, requests, bytes, asset, fetchImpl };
+  return { repository, api, raw, rawUrl, requests, bytes, asset, fetchImpl };
 }
 
-test('GitHub Raw planning resolves the exact commit-backed repository download URL without storage mutation', async () => {
+test('GitHub Raw planning resolves the exact commit-backed repository download URL and validates browser delivery', async () => {
   const gh = githubFixture();
   const publisher = createGitHubRawAssetPublisher({
     repository: gh.repository,
@@ -76,24 +93,31 @@ test('GitHub Raw planning resolves the exact commit-backed repository download U
 
   assert.deepEqual(plan, {
     action: 'reuse',
-    url: `${gh.raw}/${gh.repository}/${SOURCE_SHA}/${gh.asset.ref}`,
+    url: gh.rawUrl,
     ref: gh.asset.ref,
     fingerprint: gh.asset.fingerprint
   });
   assert.equal(publisher.publishAsset, undefined);
-  assert.deepEqual(gh.requests, [{
-    url: `${gh.api}/repos/${gh.repository}/contents/${gh.asset.ref}?ref=${SOURCE_SHA}`,
-    method: 'GET',
-    authorization: 'Bearer token'
-  }]);
+  assert.deepEqual(gh.requests, [
+    {
+      url: `${gh.api}/repos/${gh.repository}/contents/${gh.asset.ref}?ref=${SOURCE_SHA}`,
+      method: 'GET',
+      authorization: 'Bearer token'
+    },
+    {
+      url: gh.rawUrl,
+      method: 'HEAD',
+      authorization: null
+    }
+  ]);
 });
 
-test('GitHub Raw planning rejects a mutable or wrong-commit download URL', async () => {
+test('GitHub Raw planning rejects a mutable or wrong-commit download URL before browser probing', async () => {
   for (const download_url of [
     'https://raw.github.example/owner/blog/main/assets/article/diagram.svg',
     `https://raw.github.example/owner/blog/${'b'.repeat(40)}/assets/article/diagram.svg`
   ]) {
-    const gh = githubFixture({ download_url });
+    const gh = githubFixture({ contentOverrides: { download_url } });
     const publisher = createGitHubRawAssetPublisher({
       repository: gh.repository,
       sourceSha: SOURCE_SHA,
@@ -102,12 +126,13 @@ test('GitHub Raw planning rejects a mutable or wrong-commit download URL', async
       fetchImpl: gh.fetchImpl
     });
     await assert.rejects(planAssetDelivery(publisher, gh.asset), /exact source SHA/);
+    assert.equal(gh.requests.length, 1);
   }
 });
 
 test('GitHub Raw planning rejects repository path or size drift', async () => {
   {
-    const gh = githubFixture({ path: 'assets/article/other.svg' });
+    const gh = githubFixture({ contentOverrides: { path: 'assets/article/other.svg' } });
     const publisher = createGitHubRawAssetPublisher({
       repository: gh.repository,
       sourceSha: SOURCE_SHA,
@@ -118,7 +143,7 @@ test('GitHub Raw planning rejects repository path or size drift', async () => {
     await assert.rejects(planAssetDelivery(publisher, gh.asset), /path mismatch/);
   }
   {
-    const gh = githubFixture({ size: 999 });
+    const gh = githubFixture({ contentOverrides: { size: 999 } });
     const publisher = createGitHubRawAssetPublisher({
       repository: gh.repository,
       sourceSha: SOURCE_SHA,
@@ -127,6 +152,26 @@ test('GitHub Raw planning rejects repository path or size drift', async () => {
       fetchImpl: gh.fetchImpl
     });
     await assert.rejects(planAssetDelivery(publisher, gh.asset), /size mismatch/);
+  }
+});
+
+test('GitHub Raw planning fails closed when the public asset is not browser-delivered as the expected image MIME', async () => {
+  for (const fixture of [
+    githubFixture({ rawContentType: 'application/octet-stream' }),
+    githubFixture({ rawContentType: 'text/plain' }),
+    githubFixture({ rawStatus: 404 })
+  ]) {
+    const publisher = createGitHubRawAssetPublisher({
+      repository: fixture.repository,
+      sourceSha: SOURCE_SHA,
+      token: 'token',
+      apiBaseUrl: fixture.api,
+      fetchImpl: fixture.fetchImpl
+    });
+    await assert.rejects(
+      planAssetDelivery(publisher, fixture.asset),
+      /content-type mismatch|failed with HTTP 404/
+    );
   }
 });
 
