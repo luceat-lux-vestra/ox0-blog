@@ -5,11 +5,11 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'posts/**'
-      - 'host/**'
   push:
     branches: [main]
     paths:
       - 'posts/**'
+      - 'host/**'
 
 permissions:
   contents: read

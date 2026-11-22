@@ -11,7 +11,7 @@ test('publication lifecycle separates trusted PR draft staging from main product
   assert.ok(source.includes('  pull_request_target:'));
   assert.ok(source.includes('  push:'));
   assert.ok(source.includes('    branches: [main]'));
-  assert.ok(source.includes("      - 'host/**'"));
+  assert.ok(source.includes("  push:\n    branches: [main]\n    paths:\n      - 'posts/**'\n      - 'host/**'"));
   assert.ok(source.includes("github.event.pull_request.head.repo.full_name == github.repository"));
   assert.ok(source.includes('  group: ox0-blog-ghost-control'));
   assert.ok(source.includes('  cancel-in-progress: false'));
