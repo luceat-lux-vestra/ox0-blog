@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths:
       - 'posts/**'
+      - 'host/**'
 
 permissions:
   contents: read
@@ -21,7 +22,7 @@ jobs:
   pr-drafts:
     name: Stage new Article candidates as Ghost drafts
     permissions:
-      contents: write
+      contents: read
     if: >-
       github.event_name == 'pull_request_target' &&
       github.event.pull_request.draft == false &&
@@ -32,6 +33,7 @@ jobs:
     env:
       BASE_SHA: ${{ github.event.pull_request.base.sha }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      OX0_ARTICLE_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
       OX0_HOST_RUNTIME_MODULE: ${{ vars.OX0_HOST_RUNTIME_MODULE }}
     steps:
@@ -168,7 +170,7 @@ jobs:
   main-publish:
     name: Publish exact merged Articles
     permissions:
-      contents: write
+      contents: read
     if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
@@ -214,12 +216,16 @@ jobs:
         run: |
           set -eu
           output="$RUNNER_TEMP/publish-article-manifests.txt"
-          git diff --name-only --find-renames "$BEFORE_SHA" "$SOURCE_SHA" -- posts/ \
-            | awk -F/ '$1 == "posts" && NF >= 3 { print $1 "/" $2 "/article.json" }' \
-            | sort -u \
-            | while IFS= read -r manifest; do
-                [ -f "$manifest" ] && printf '%s\n' "$manifest"
-              done > "$output"
+          if git diff --quiet "$BEFORE_SHA" "$SOURCE_SHA" -- host/; then
+            git diff --name-only --find-renames "$BEFORE_SHA" "$SOURCE_SHA" -- posts/ \
+              | awk -F/ '$1 == "posts" && NF >= 3 { print $1 "/" $2 "/article.json" }' \
+              | sort -u \
+              | while IFS= read -r manifest; do
+                  [ -f "$manifest" ] && printf '%s\n' "$manifest"
+                done > "$output"
+          else
+            find posts -mindepth 2 -maxdepth 2 -type f -name article.json -print | sort -u > "$output"
+          fi
           if [ -s "$output" ]; then
             echo 'has_articles=true' >> "$GITHUB_OUTPUT"
             cat "$output"

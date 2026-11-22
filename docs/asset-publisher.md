@@ -185,26 +185,39 @@ Ghost feature images remain a separate Ghost Image API concern. They are not rou
 - It does not make remote third-party HTTP images repository-owned assets.
 
 
-## ox0-blog GitHub Release Assets deployment
+## ox0-blog exact-commit GitHub Raw deployment
 
-The production host runtime binds the vendor-neutral Article contract to GitHub Release Assets.
+The production host runtime binds repository-owned body assets directly to the exact Git commit being projected.
 
-This adapter is intentionally deployment-specific and lives under `host/`, not under `DocumentCompiler`. It derives the backing release tag from the stable GitHub repository ID plus the AssetPublisher contract version, so no branch/SHA/release ID is embedded in Article source.
-
-Each object name is:
+The deployment adapter does not create a second storage object. Instead it queries GitHub's Contents API for the exact pair:
 
 ```text
-<full-sha256><normalized-image-extension>
+GITHUB_REPOSITORY + OX0_ARTICLE_SOURCE_SHA + assets/... ref
 ```
 
-The planned public URL is the GitHub release download URL for that content address. Planning is read-only even when the backing release does not yet exist. The first mutating draft synchronization lazily creates the non-latest prerelease and uploads exact bytes.
+and uses GitHub's returned `download_url` only after verifying:
 
-Reuse is accepted only when GitHub's release-asset metadata reports the exact source byte size and SHA-256 `digest`. Upload responses and a post-upload read are verified with the same evidence.
+- the response is a regular file at the exact requested repository path;
+- the byte size matches the already-confined local source snapshot;
+- the public URL is credential-free HTTPS;
+- the public URL path is pinned to the exact 40-character source commit SHA;
+- the public URL resolves the exact requested `assets/...` path;
+- a credential-free `HEAD` probe of that final public URL succeeds;
+- the final response `Content-Type` exactly matches the expected image MIME for the source extension (including `image/svg+xml` for SVG).
 
-The workflow supplies GitHub repository identity/API bases from Actions' runtime environment and supplies the job token explicitly. The trusted host-runtime module path comes from versioned `package.json -> ox0.hostRuntimeModule` unless an operator repository variable explicitly overrides it.
+The Raw delivery probe deliberately carries no GitHub authorization header. Storage/API authorization and anonymous browser delivery are separate trust boundaries.
+
+Every plan is therefore `action=reuse`: the immutable Git commit is already the backing storage identity, so Article publication performs no duplicate release/object-store mutation.
+
+The workflow supplies `GITHUB_REPOSITORY`, `GITHUB_API_URL`, `GITHUB_TOKEN`, and the exact `OX0_ARTICLE_SOURCE_SHA`. The adapter obtains the browser-facing Raw URL from GitHub itself rather than embedding a repository, branch, Raw hostname, release ID, or asset CDN URL in Article source or deployment code.
 
 This keeps:
-- Article source independent of storage identity;
-- target URLs stable across PR draft staging and the later merge publication;
-- storage keys content-addressed rather than source-path-addressed;
-- candidate PR code out of the credentialed runtime, because `pull_request_target` copies `host/` from the trusted base checkout.
+
+- Article source independent of deployment identity;
+- PR draft staging pinned to the exact candidate commit;
+- production publication pinned to the exact reviewed merge commit;
+- body assets immutable without a duplicate publication/storage lifecycle;
+- SVG delivery on GitHub's Raw endpoint with its native image MIME semantics;
+- candidate PR code out of the credentialed runtime, because `pull_request_target` continues to copy trusted `host/` code from the base checkout.
+
+Because a trusted host-runtime change can alter browser-facing projection URLs without changing Article Markdown, the automatic main lifecycle treats `host/**` changes as publication-relevant and re-evaluates all current Article manifests. Unaffected projections converge to no-op; projections whose delivery URL changed are updated in place.
