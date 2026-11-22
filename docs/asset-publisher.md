@@ -201,7 +201,11 @@ and uses GitHub's returned `download_url` only after verifying:
 - the byte size matches the already-confined local source snapshot;
 - the public URL is credential-free HTTPS;
 - the public URL path is pinned to the exact 40-character source commit SHA;
-- the public URL resolves the exact requested `assets/...` path.
+- the public URL resolves the exact requested `assets/...` path;
+- a credential-free `HEAD` probe of that final public URL succeeds;
+- the final response `Content-Type` exactly matches the expected image MIME for the source extension (including `image/svg+xml` for SVG).
+
+The Raw delivery probe deliberately carries no GitHub authorization header. Storage/API authorization and anonymous browser delivery are separate trust boundaries.
 
 Every plan is therefore `action=reuse`: the immutable Git commit is already the backing storage identity, so Article publication performs no duplicate release/object-store mutation.
 
