@@ -18,5 +18,8 @@
   },
   "dependencies": {
     "marked": "18.1.3"
+  },
+  "ox0": {
+    "hostRuntimeModule": "host/runtime.mjs"
   }
 }
