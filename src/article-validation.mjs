@@ -1,6 +1,7 @@
 import { lstat, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { evaluateArticleBundle } from './article-evaluation.mjs';
+import { validateArticleLinks } from './article-links.mjs';
 import { loadArticleManifest } from './article-manifest.mjs';
 import { MarkedCompiler } from './compiler/marked-compiler.mjs';
 
@@ -178,6 +179,8 @@ export async function validateArticleRepository(
       }
     }
   }
+
+  validateArticleLinks(articles);
 
   const wanted = normalizeRequested(requested);
   if (wanted.length === 0) return articles;
