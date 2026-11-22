@@ -47,6 +47,39 @@ DocumentCompiler.compile(LocaleVariant, ProjectContext)
 
 The current backend is `MarkedCompiler`. Raw HTML and unsafe/ambiguous active URLs are rejected. Compiler output is derived state and is not stored as canonical Article source.
 
+## Internal Article links
+
+Managed Blog Articles use normal Markdown links in canonical source. Ghost remains a projection target; do not create relationship truth only in the Ghost editor.
+
+A link to another managed Article variant uses that target variant's public slug as a root-relative route:
+
+```markdown
+Retry behavior also depends on [idempotency](/idempotency-and-retry/).
+```
+
+Rules:
+
+- the root single-slug namespace `/<slug>/` is reserved for managed Article links;
+- the slug must exist in the current repository Article corpus;
+- the target must use the same locale as the source variant;
+- the canonical form includes the trailing slash;
+- prefer contextual links in the paragraph that explains why two Articles are related;
+- do not add links merely to increase graph density and do not require a minimum link count;
+- `/` and multi-segment Ghost routes such as `/tag/engineering/` are outside this managed Article-link namespace.
+
+An optional `## Related Articles` section may provide secondary navigation. When present, it contains Markdown bullet links to managed same-locale Article routes. It must not contain plain-text pseudo-links, external links, or a self-link.
+
+```markdown
+## Related Articles
+
+- [Payment Retry](/payment-retry/)
+- [Idempotency](/idempotency/)
+```
+
+Repository validation derives the target set from Article manifests and fails closed on broken, non-canonical, cross-locale, or malformed managed Article links. No Ghost core or theme mutation is required for these links: the compiled HTML contains ordinary anchors.
+
+Automatic backlinks and a graph view are a separate derived-index concern. If added later, their source must be this canonical Article link graph rather than Ghost editor state.
+
 ## PR review preview
 
 A pull-request preview is a derived review projection, not canonical source and not Ghost state.
@@ -111,7 +144,7 @@ npm run validate:articles
 npm run validate:articles -- --ready
 ```
 
-Repository validation checks the complete Article corpus and rejects unclaimed Markdown, nested bundles, duplicate IDs/slugs, symlinks, invalid source/resource references, and compiler/evidence errors.
+Repository validation checks the complete Article corpus and rejects unclaimed Markdown, nested bundles, duplicate IDs/slugs, symlinks, invalid source/resource references, broken/non-canonical managed Article links, and compiler/evidence errors.
 
 ## Publication authorization
 
