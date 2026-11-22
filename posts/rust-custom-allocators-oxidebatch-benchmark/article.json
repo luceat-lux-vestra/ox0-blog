@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "articleId": "rust-custom-allocators-oxidebatch-benchmark",
+  "requiredLocales": [
+    "ko-KR",
+    "en"
+  ],
+  "variants": [
+    {
+      "variantId": "rust-custom-allocators-oxidebatch-benchmark-ko",
+      "locale": "ko-KR",
+      "source": "ko-KR.md",
+      "title": "Rust에서 커스텀 Allocator는 정말 더 빠를까? — OxideBatch 실전 벤치마크",
+      "excerpt": "system, jemalloc, mimalloc, snmalloc, tcmalloc을 동일한 ARM64 환경과 100만-row Rust 배치 workload에서 비교했다. 속도와 RSS를 동시에 이긴 allocator는 없었고, system과 snmalloc만 서로 다른 trade-off로 남았다.",
+      "slug": "rust-custom-allocators-oxidebatch-benchmark",
+      "publication": {
+        "tags": [
+          "Rust",
+          "Performance",
+          "Engineering"
+        ],
+        "featureImage": null,
+        "featureImageAlt": null,
+        "featured": false,
+        "visibility": "public",
+        "canonicalUrl": null
+      }
+    },
+    {
+      "variantId": "rust-custom-allocators-oxidebatch-benchmark-en",
+      "locale": "en",
+      "source": "en.md",
+      "title": "Are Custom Rust Allocators Actually Faster? — An OxideBatch Workload Benchmark",
+      "excerpt": "I compared system, jemalloc, mimalloc, snmalloc, and tcmalloc on the same ARM64 host and one-million-row Rust batch workload. No allocator improved both elapsed time and RSS; system and snmalloc survived as different trade-offs.",
+      "slug": "rust-custom-allocators-oxidebatch-benchmark-en",
+      "publication": {
+        "tags": [
+          "Rust",
+          "Performance",
+          "Engineering"
+        ],
+        "featureImage": null,
+        "featureImageAlt": null,
+        "featured": false,
+        "visibility": "public",
+        "canonicalUrl": null
+      }
+    }
+  ],
+  "translationCheckpoint": {
+    "version": 1,
+    "fingerprintVersion": 1,
+    "accepted": {
+      "ko-KR": "sha256:bd65921049991d608b5f05f2f5e536ef7f1d17089edd9bf8b402d878b892cce2",
+      "en": "sha256:4d6a9e1c7fb0f83883c7a93e8ccadbf8bbad4f8eecb831a09dda54a2aa4f41f2"
+    },
+    "review": {
+      "kind": "agent",
+      "contractVersion": 1
+    }
+  },
+  "readiness": {
+    "epoch": 1,
+    "checkpoint": {
+      "version": 2,
+      "sourceFingerprintVersion": 1,
+      "sourceFingerprint": "sha256:031bef8a7831c8ebaa1dbb41c846875697d77ea0c3a240c68a0077237bebede2",
+      "claimProofFingerprintVersion": 1,
+      "claimProofFingerprint": "sha256:7bfc777c24815803a2c9ab37ab425f33c614d236dca3705d978ca20e8bea3804",
+      "priorReviewedEpoch": 0,
+      "reviewedEpoch": 1,
+      "resolvedInvalidationIds": [
+        "675eb410-c929-40e1-a74d-c5e39caf4673"
+      ],
+      "review": {
+        "kind": "agent",
+        "contractVersion": 1
+      }
+    },
+    "invalidations": []
+  }
+}
