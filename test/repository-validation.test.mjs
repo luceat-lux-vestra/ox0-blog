@@ -62,3 +62,17 @@ test('repository validation rejects one-file Markdown outside an Article manifes
     /posts\/ Markdown must belong to an Article manifest: posts\/legacy\.md/
   );
 });
+
+
+test('repository validation rejects broken managed Article links from canonical Markdown', async () => {
+  const root = await fixture();
+  await writeFile(
+    path.join(root, 'posts', 'article', 'en.md'),
+    '# Article\n\n[Missing](/missing/)\n',
+    'utf8'
+  );
+  await assert.rejects(
+    validateRepository(root),
+    /broken managed Article link: \/missing\//
+  );
+});
