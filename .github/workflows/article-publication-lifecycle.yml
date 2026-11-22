@@ -27,7 +27,7 @@ jobs:
       github.event_name == 'pull_request_target' &&
       github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 20
     environment: ox0-blog
     env:
@@ -60,10 +60,10 @@ jobs:
           test "$(git -C candidate rev-parse HEAD)" = "$HEAD_SHA"
           git -C candidate cat-file -e "$BASE_SHA^{commit}"
 
-      - name: Set up Node.js 24
+      - name: Set up current Node.js LTS
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version: 'lts/*'
           cache: npm
           cache-dependency-path: tooling/package-lock.json
 
@@ -172,7 +172,7 @@ jobs:
     permissions:
       contents: read
     if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 20
     environment: ox0-blog
     env:
@@ -234,11 +234,11 @@ jobs:
             echo 'No current Article manifests require publication.'
           fi
 
-      - name: Set up Node.js 24
+      - name: Set up current Node.js LTS
         if: steps.discover.outputs.has_articles == 'true'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version: 'lts/*'
           cache: npm
 
       - name: Install locked dependencies

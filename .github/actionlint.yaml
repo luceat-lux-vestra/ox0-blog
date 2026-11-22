@@ -1,0 +1,7 @@
+# GitHub-hosted ubuntu-26.04-arm is GA, but actionlint v1.7.12's
+# built-in runner-label table predates it. This compatibility entry preserves
+# runner-label validation for every other value and should be removed after
+# upstream actionlint ships Ubuntu 26.04 support (rhysd/actionlint#724/#744).
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04-arm

@@ -13,7 +13,7 @@ concurrency:
 jobs:
   validate:
     name: Validate source
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 10
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -25,10 +25,10 @@ jobs:
           ref: ${{ env.EXPECTED_SHA }}
       - name: Verify exact checkout
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
-      - name: Set up Node.js 24
+      - name: Set up current Node.js LTS
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version: 'lts/*'
           cache: npm
       - name: Install locked dependencies
         run: npm ci --ignore-scripts
@@ -40,7 +40,7 @@ jobs:
     name: PR Article Preview
     needs: validate
     if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && needs.validate.result == 'success'
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 10
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
@@ -65,10 +65,10 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           git cat-file -e "$BASE_SHA^{commit}"
 
-      - name: Set up Node.js 24
+      - name: Set up current Node.js LTS
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version: 'lts/*'
           cache: npm
 
       - name: Install locked dependencies
@@ -150,7 +150,7 @@ jobs:
 
   security:
     name: Workflow Security
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 10
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -205,7 +205,7 @@ jobs:
 
   dependency-review:
     name: Dependency Review
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 10
     steps:
       - name: Review dependency changes
@@ -216,7 +216,7 @@ jobs:
 
   codeql-runtime:
     name: CodeQL Runtime
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 12
     permissions:
       contents: read
@@ -332,7 +332,7 @@ jobs:
     name: Merge Gate
     if: always()
     needs: [validate, security, dependency-review, preview, codeql-runtime]
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 5
     steps:
       - name: Verify direct PR DAG

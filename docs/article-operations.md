@@ -164,7 +164,7 @@ The workflow fails closed unless:
 - fresh current `main` still equals that source before checkout and immediately before operation;
 - exact `source_sha` is checked out and verified;
 - the manifest is an unaliased `posts/.../article.json` path;
-- Node 24 locked install, tests, repository validation, and selected Article validation pass before operation.
+- a locked install under the canonical `package.json#engines.node` runtime contract, tests, repository validation, and selected Article validation pass before operation.
 
 ### `plan-draft`
 

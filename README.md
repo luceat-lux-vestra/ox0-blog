@@ -36,7 +36,7 @@ Every Markdown file under `posts/` must be owned by an Article manifest. The for
 
 ## Validation
 
-Node.js 24 is canonical.
+`package.json#engines.node` is the canonical Node.js runtime contract.
 
 ```bash
 npm ci --ignore-scripts
